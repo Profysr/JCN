@@ -19,16 +19,24 @@ class WorkspaceConsumer(AsyncWebsocketConsumer):
             await self.close()
             return
 
+        self.user_group_name = f"user_{user.id}"
+
         await self.channel_layer.group_add(self.room_group_name, self.channel_name)
+        await self.channel_layer.group_add(self.user_group_name, self.channel_name)
         await self.accept()
 
     async def disconnect(self, close_code):
         await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
+        if hasattr(self, "user_group_name"):
+            await self.channel_layer.group_discard(self.user_group_name, self.channel_name)
 
     async def receive(self, text_data):
         pass
 
     async def workspace_event(self, event):
+        await self.send(text_data=json.dumps(event["data"]))
+
+    async def user_notification(self, event):
         await self.send(text_data=json.dumps(event["data"]))
 
     @database_sync_to_async

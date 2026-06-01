@@ -1,94 +1,227 @@
-import { useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useState, useMemo } from "react";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { DragDropContext } from "@hello-pangea/dnd";
 import { useProject } from "@/hooks/useProjects";
-import { useTasks, useMoveTask } from "@/hooks/useTasks";
+import { useTasks, useMoveTask, useUpdateTask } from "@/hooks/useTasks";
+import { useLabels, useCreateLabel } from "@/hooks/useLabels";
+import { useMembers } from "@/hooks/useMembers";
+import { useProjectFields } from "@/hooks/useCustomFields";
+import { useSavedViews, useCreateSavedView, useDeleteSavedView } from "@/hooks/useSavedViews";
+import { useSprints } from "@/hooks/useSprints";
 import { useWorkspaceSocket } from "@/hooks/useWorkspaceSocket";
 import KanbanColumn from "@/components/tasks/KanbanColumn";
 import CreateTaskModal from "@/components/tasks/CreateTaskModal";
 import TaskDetailPanel from "@/components/tasks/TaskDetailPanel";
+import FilterBar from "@/components/tasks/FilterBar";
+import ListView from "@/components/tasks/ListView";
+import SprintPanel from "@/components/projects/SprintPanel";
 import { Button } from "@/components/ui/button";
-import { Plus, ArrowLeft } from "lucide-react";
+import { Plus, ArrowLeft, LayoutGrid, List, Zap } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+const EMPTY_FILTERS = { search: "", priorities: [], assignees: [], labels: [] };
 
 export default function KanbanPage() {
   const { workspaceSlug, projectId } = useParams();
   const navigate = useNavigate();
-  const { data: project } = useProject(workspaceSlug, projectId);
-  const { data: tasks = [] } = useTasks(workspaceSlug, projectId);
-  const moveTask = useMoveTask(workspaceSlug, projectId);
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const [createModal, setCreateModal] = useState({ open: false, statusId: null });
-  const [selectedTaskId, setSelectedTaskId] = useState(null);
+  const { data: project }   = useProject(workspaceSlug, projectId);
+  const { data: allTasks = [] } = useTasks(workspaceSlug, projectId);
+  const { data: labels = [] }   = useLabels(workspaceSlug, projectId);
+  const { data: members = [] }  = useMembers(workspaceSlug);
+  const { data: fields = [] }   = useProjectFields(workspaceSlug, projectId);
+  const { data: savedViews = [] } = useSavedViews(workspaceSlug, projectId);
+  const { data: sprints = [] }  = useSprints(workspaceSlug, projectId);
+
+  const moveTask    = useMoveTask(workspaceSlug, projectId);
+  const updateTask  = useUpdateTask(workspaceSlug, projectId);
+  const createLabel = useCreateLabel(workspaceSlug, projectId);
+  const createView  = useCreateSavedView(workspaceSlug, projectId);
+  const deleteView  = useDeleteSavedView(workspaceSlug, projectId);
+
+  const [createModal, setCreateModal]   = useState({ open: false, statusId: null });
+  const [selectedTaskId, setSelectedTaskId] = useState(() => searchParams.get("task") || null);
+  const [view, setView]     = useState("kanban"); // "kanban" | "list" | "sprint"
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [activeSprint, setActiveSprint] = useState(() => sprints.find(s => s.status === "active") || null);
 
   useWorkspaceSocket(workspaceSlug);
 
+  const openTask  = (taskId) => { setSelectedTaskId(taskId); setSearchParams({ task: taskId }, { replace: true }); };
+  const closeTask = () => { setSelectedTaskId(null); setSearchParams({}, { replace: true }); };
+
+  // Sprint mode: filter tasks by selected sprint
+  const tasks = useMemo(() => {
+    if (view === "sprint" && activeSprint) {
+      return allTasks.filter(t => t.sprint_detail?.id === activeSprint.id);
+    }
+    return allTasks;
+  }, [allTasks, view, activeSprint]);
+
+  const backlogTasks = useMemo(() =>
+    view === "sprint" ? allTasks.filter(t => !t.sprint_detail) : [],
+    [allTasks, view]
+  );
+
+  const filteredTasks = useMemo(() => {
+    let result = tasks;
+    if (filters.search)           result = result.filter(t => t.title.toLowerCase().includes(filters.search.toLowerCase()));
+    if (filters.priorities.length) result = result.filter(t => filters.priorities.includes(t.priority));
+    if (filters.assignees.length)  result = result.filter(t => filters.assignees.includes(t.assignee?.id));
+    if (filters.labels.length)     result = result.filter(t => t.labels?.some(l => filters.labels.includes(l.id)));
+    return result;
+  }, [tasks, filters]);
+
   const handleDragEnd = (result) => {
     if (!result.destination) return;
-    const { draggableId, destination } = result;
-    moveTask.mutate({
-      taskId: draggableId,
-      status_id: destination.droppableId,
-      order: destination.index,
-    });
+    moveTask.mutate({ taskId: result.draggableId, status_id: result.destination.droppableId, order: result.destination.index });
   };
 
   const tasksByStatus = (statusId) =>
-    tasks
-      .filter((t) => t.status_detail?.id === statusId)
-      .sort((a, b) => a.order - b.order);
+    filteredTasks.filter(t => t.status_detail?.id === statusId).sort((a, b) => a.order - b.order);
+
+  const addTaskToSprint = (task) => {
+    if (!activeSprint) return;
+    updateTask.mutate({ taskId: task.id, sprint_id: activeSprint.id });
+  };
 
   return (
     <div className="flex h-full overflow-hidden">
       <div className="flex flex-col flex-1 min-w-0">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0">
+        <div className="flex items-center justify-between px-6 py-3.5 border-b flex-shrink-0 bg-card/50">
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate(`/w/${workspaceSlug}/projects`)}
-              className="text-muted-foreground hover:text-foreground"
+              className="text-muted-foreground hover:text-foreground p-1 rounded-md hover:bg-accent transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
             </button>
             <div>
-              <h1 className="font-semibold">{project?.name}</h1>
+              <h1 className="font-bold text-base leading-tight">{project?.name}</h1>
               {project?.description && (
-                <p className="text-xs text-muted-foreground">{project.description}</p>
+                <p className="text-xs text-muted-foreground leading-tight mt-0.5">{project.description}</p>
               )}
             </div>
           </div>
-          <Button
-            size="sm"
-            onClick={() => setCreateModal({ open: true, statusId: project?.statuses?.[0]?.id })}
-          >
-            <Plus className="w-3.5 h-3.5 mr-1.5" /> Add Task
-          </Button>
-        </div>
-
-        {/* Board */}
-        <div className="flex-1 overflow-x-auto p-6">
-          <DragDropContext onDragEnd={handleDragEnd}>
-            <div className="flex gap-5 h-full">
-              {project?.statuses?.map((col) => (
-                <KanbanColumn
-                  key={col.id}
-                  column={col}
-                  tasks={tasksByStatus(col.id)}
-                  onAddTask={(statusId) => setCreateModal({ open: true, statusId })}
-                  onTaskClick={(task) => setSelectedTaskId(task.id)}
-                  selectedTaskId={selectedTaskId}
-                />
+          <div className="flex items-center gap-2">
+            {/* Segmented view toggle */}
+            <div className="flex items-center bg-muted rounded-lg p-0.5 gap-0.5">
+              {[
+                { id: "kanban", icon: LayoutGrid, label: "Board"  },
+                { id: "list",   icon: List,       label: "List"   },
+                { id: "sprint", icon: Zap,        label: "Sprint" },
+              ].map(({ id, icon: Icon, label }) => (
+                <button
+                  key={id}
+                  onClick={() => setView(id)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150",
+                    view === id
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Icon className="w-3.5 h-3.5" /> {label}
+                </button>
               ))}
             </div>
-          </DragDropContext>
+            <Button size="sm" onClick={() => setCreateModal({ open: true, statusId: project?.statuses?.[0]?.id })}>
+              <Plus className="w-3.5 h-3.5 mr-1.5" /> Add Task
+            </Button>
+          </div>
         </div>
+
+        {/* Filter bar */}
+        <FilterBar
+          filters={filters}
+          onChange={setFilters}
+          members={members}
+          labels={labels}
+          savedViews={savedViews}
+          onSaveView={(data) => createView.mutate(data)}
+          onDeleteView={(id) => deleteView.mutate(id)}
+        />
+
+        {/* Board */}
+        {view === "kanban" && (
+          <div className="flex-1 overflow-x-auto p-6">
+            <DragDropContext onDragEnd={handleDragEnd}>
+              <div className="flex gap-5 h-full">
+                {project?.statuses?.map(col => (
+                  <KanbanColumn key={col.id} column={col} tasks={tasksByStatus(col.id)}
+                    onAddTask={statusId => setCreateModal({ open: true, statusId })}
+                    onTaskClick={task => openTask(task.id)} selectedTaskId={selectedTaskId} />
+                ))}
+              </div>
+            </DragDropContext>
+          </div>
+        )}
+
+        {view === "list" && (
+          <ListView tasks={filteredTasks} statuses={project?.statuses || []}
+            onTaskClick={task => openTask(task.id)} selectedTaskId={selectedTaskId} />
+        )}
+
+        {view === "sprint" && (
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Sprint tasks on kanban */}
+            <div className="flex-1 overflow-x-auto p-6">
+              <DragDropContext onDragEnd={handleDragEnd}>
+                <div className="flex gap-5 h-full">
+                  {project?.statuses?.map(col => (
+                    <KanbanColumn key={col.id} column={col} tasks={tasksByStatus(col.id)}
+                      onAddTask={statusId => setCreateModal({ open: true, statusId })}
+                      onTaskClick={task => openTask(task.id)} selectedTaskId={selectedTaskId} />
+                  ))}
+                </div>
+              </DragDropContext>
+            </div>
+            {/* Backlog — tasks not in sprint */}
+            {backlogTasks.length > 0 && (
+              <div className="border-t px-6 py-3 flex-shrink-0 max-h-52 overflow-y-auto">
+                <p className="text-xs font-medium text-muted-foreground mb-2">Backlog ({backlogTasks.length})</p>
+                <div className="space-y-1">
+                  {backlogTasks.map(task => (
+                    <div key={task.id} className="flex items-center gap-3 text-sm py-1 px-2 rounded hover:bg-accent group">
+                      <span className="flex-1 truncate">{task.title}</span>
+                      {activeSprint && (
+                        <button
+                          onClick={() => addTaskToSprint(task)}
+                          className="text-xs text-primary opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          + Add to sprint
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Sprint panel (right side in sprint mode) */}
+      {view === "sprint" && (
+        <SprintPanel
+          workspaceSlug={workspaceSlug}
+          projectId={projectId}
+          activeSprint={activeSprint}
+          onSelectSprint={setActiveSprint}
+        />
+      )}
 
       {/* Task Detail Panel */}
       {selectedTaskId && (
         <TaskDetailPanel
           taskId={selectedTaskId}
           projectStatuses={project?.statuses || []}
-          onClose={() => setSelectedTaskId(null)}
+          projectLabels={labels}
+          projectFields={fields}
+          onCreateLabel={(data, opts) => createLabel.mutate(data, opts)}
+          onClose={closeTask}
         />
       )}
 

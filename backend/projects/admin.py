@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Project, TaskStatus, Task, SubTask, TaskComment, TaskActivity
+from .models import Project, TaskStatus, Task, SubTask, TaskComment, TaskActivity, Label, ProjectField, TaskFieldValue, SavedView, Sprint
 
 
 @admin.register(Project)
@@ -35,3 +35,31 @@ class TaskCommentAdmin(admin.ModelAdmin):
 class TaskActivityAdmin(admin.ModelAdmin):
     list_display = ["task", "actor", "verb", "created_at"]
     list_filter = ["verb"]
+
+
+@admin.register(Label)
+class LabelAdmin(admin.ModelAdmin):
+    list_display = ["name", "project", "color"]
+    search_fields = ["name"]
+
+
+@admin.register(ProjectField)
+class ProjectFieldAdmin(admin.ModelAdmin):
+    list_display = ["name", "project", "type", "order"]
+    list_filter = ["type"]
+
+
+@admin.register(TaskFieldValue)
+class TaskFieldValueAdmin(admin.ModelAdmin):
+    list_display = ["task", "field", "value"]
+
+
+@admin.register(SavedView)
+class SavedViewAdmin(admin.ModelAdmin):
+    list_display = ["name", "project", "user", "created_at"]
+
+
+@admin.register(Sprint)
+class SprintAdmin(admin.ModelAdmin):
+    list_display = ["name", "project", "status", "start_date", "end_date"]
+    list_filter = ["status"]

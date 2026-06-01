@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.utils.text import slugify
-from .models import Workspace, WorkspaceMember, WorkspaceInvite
+from .models import Workspace, WorkspaceMember, WorkspaceInvite, Notification
 from accounts.serializers import UserSerializer
 
 class WorkspaceSerializer(serializers.ModelSerializer):
@@ -69,3 +69,12 @@ class WorkspaceInviteSerializer(serializers.ModelSerializer):
         validated_data["workspace"] = self.context["workspace"]
         validated_data["invited_by"] = self.context["request"].user
         return super().create(validated_data)
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    actor = UserSerializer(read_only=True)
+
+    class Meta:
+        model = Notification
+        fields = ["id", "actor", "verb", "meta", "read", "created_at"]
+        read_only_fields = ["id", "actor", "verb", "meta", "created_at"]

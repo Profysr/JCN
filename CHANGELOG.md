@@ -84,4 +84,139 @@
 ---
 
 ## v0.4.0 — Members, Settings & Workspace Management (Week 4)
+> Status: COMPLETE ✅
+
+### Backend
+- `WorkspaceInviteListView` — GET pending invites for a workspace (admin only)
+- `WorkspaceInviteCancelView` — DELETE invite by token (admin only)
+- `InviteDetailView` — public endpoint, returns invite info for the accept page (no auth required)
+- `WorkspaceInviteSerializer` now returns `token` field so frontend can build invite links
+- Fixed `validate_email(self, value)` signature in `WorkspaceInviteSerializer`
+
+### Frontend
+- `MembersPage` — active member list with role badges, crown for owner, role dropdown + remove for admins
+- Pending invites section — shows email, role, invited-by; "Copy link" copies `/invites/<token>` URL; Cancel button
+- `SettingsPage` — rename workspace form + Danger Zone (owner-only delete with name-confirmation guard)
+- `AcceptInvitePage` — public route at `/invites/:token`, handles all auth states:
+  - Not logged in → invite preview + "Sign in to accept" (preserves `?next=` for post-login redirect)
+  - Correct user logged in → auto-accepts, redirects to workspace after 2 s
+  - Wrong user logged in → shows which email the invite is for
+  - Invalid / expired token → error state
+- `LoginPage` reads `?next=` param and redirects there after login
+- `AppLayout.handleLogout` calls `qc.clear()` before navigating — fixes stale cache shown to next user
+
+---
+
+## v0.5.0 — Task Filtering, Labels & List View (Week 5)
+> Status: COMPLETE ✅
+
+### Backend
+- `Label` model — name + hex color, scoped per project (`unique_together` on project + name)
+- `labels` M2M field on `Task`
+- `LabelSerializer` + `LabelListCreateView` + `LabelDetailView`
+- `TaskSerializer` updated: `labels` (read, nested) + `label_ids` (write, list of UUIDs); custom `create`/`update` handle M2M sync
+- `prefetch_related("labels")` added to task list and detail queries
+
+### Frontend
+- `useLabels`, `useCreateLabel`, `useDeleteLabel` hooks
+- `FilterBar` — search input, priority chips, assignee avatar toggles, label chips; "Clear filters" when active
+- `ListView` — table view with columns: Title, Status, Priority, Assignee, Due Date, Labels
+- `KanbanPage` — Board/List view toggle; FilterBar; client-side `filteredTasks` via `useMemo`
+- `TaskCard` — shows colored label chips above the footer row
+- `TaskDetailPanel` — Labels section: click label chip to remove; "+ Add label" picker with toggle existing / create new (name + 8 color swatches)
+
+---
+
+## v0.6.0 — In-App Notifications (Week 6)
 > Status: IN PROGRESS 🔨
+
+### Backend
+- `Notification` model in `workspaces` app — recipient/actor FKs, verb choices (task_assigned, task_commented), workspace FK, meta JSONField, read bool
+- `NotificationSerializer` + `NotificationListView` (GET last 50) + `NotificationMarkReadView` (POST — single by id or bulk)
+- `WorkspaceConsumer` now joins `user_{user_id}` group on connect + leaves on disconnect + handles `user_notification` message type
+- `notify()` helper in `projects/views.py` — creates Notification + pushes `notification.created` via WS to recipient
+- Notifications triggered on: task creation with assignee, task assignee change, new comment (notifies assignee + creator, skips self-notify)
+
+### Frontend
+- `useNotifications` + `useMarkNotificationRead` hooks
+- `NotificationBell` — bell icon in sidebar user panel with red unread badge; dropdown showing actor, verb, task title, relative timestamp; click → navigate to task (opens detail panel via `?task=` URL param); "Mark all read" button
+- `KanbanPage` — reads `?task=` query param on load to auto-open task detail panel (supports direct navigation from notifications)
+- `useWorkspaceSocket` — handles `notification.created` events, prepends to notification cache in real-time
+
+---
+
+## v0.7.0 — Command Palette + Global Search (Week 7)
+> Status: IN PROGRESS 🔨
+
+### Backend
+- `TaskSearchSerializer` + `ProjectSearchSerializer` — lightweight search response shapes
+- `GlobalSearchView` — `GET /api/search/?q=...`; searches tasks (by title) and projects (by name) across all workspaces the user belongs to; returns top 8 tasks + 5 projects; minimum 2-char query
+
+### Frontend
+- `useSearch(query)` hook — TanStack Query with `placeholderData` (no flicker between results), enabled at 2+ chars
+- `CommandPalette` — Cmd+K / Ctrl+K global shortcut; full-screen backdrop; sections: Navigation (quick links when no query) / Tasks / Projects (search results); full keyboard nav (↑↓ to move, ↵ to open, Esc to close); loading spinner; empty state; footer keyboard hints
+- Search bar in AppLayout sidebar — always-visible trigger that shows ⌘K hint, discoverable for new users
+- Task results navigate to `/w/{slug}/projects/{id}?task={taskId}` — opens task detail panel directly
+- Project results navigate to project board
+
+---
+
+## v0.8.0 — Custom Fields + Saved Views (Week 8)
+> Status: COMPLETE ✅
+
+### Backend
+- `ProjectField` model — name, type (text/number/select/url/date), options list, order; scoped per project
+- `TaskFieldValue` model — upsert-on-save; one value per task-field pair
+- `SavedView` model — named filter preset per project per user; stores full filter JSON
+- `ProjectFieldListCreateView`, `ProjectFieldDetailView`, `TaskFieldValueView` (upsert endpoint)
+- `SavedViewListCreateView`, `SavedViewDetailView` (user-scoped)
+
+### Frontend
+- `useCustomFields`, `useSavedViews` hooks
+- `TaskDetailPanel` — Custom Fields section: each field rendered by type (text/number/select/url/date); blur-to-save
+- `FilterBar` — "Save view" button when filters are active; saved view chips to restore; delete saved view
+- `KanbanPage` — passes `projectFields` to TaskDetailPanel; wires saved view create/delete
+
+---
+
+## v1.0.0 — UI/UX Polish Pass (Pre-release)
+> Status: COMPLETE ✅
+
+### Design System
+- Inter + JetBrains Mono fonts via Google Fonts; applied via Tailwind `fontFamily` and `font-feature-settings`; `-webkit-font-smoothing: antialiased`
+- Refined color palette: Indigo primary (`239 84% 67%`), slate-based neutrals, sidebar gets its own `--sidebar-bg` token (`220 20% 98%`)
+- Custom CSS easing variables: `--ease-out: cubic-bezier(0.23, 1, 0.32, 1)`, `--ease-in-out`
+- Custom keyframe animations: `panelSlideIn`, `scaleIn`, `fadeIn`, `slideUp` — all exposed as Tailwind utility classes
+- `shadow-card` / `shadow-card-hover` custom shadow scale in Tailwind config
+- `popover` color token added to Tailwind
+
+### Component Improvements
+- **Button**: `active:scale-[0.97]` press feedback on every button (Emil Kowalski principle)
+- **AppLayout sidebar**: Wider (w-64), `--sidebar-bg` background, workspace avatar uses solid primary color, search bar with card shadow, nav items use `rounded-lg`, user panel cleaner
+- **TaskDetailPanel**: `animate-panel-in` slide from right on open, `bg-card` base
+- **CommandPalette**: `animate-scale-in` + `animate-fade-in` backdrop on open
+- **KanbanColumn**: `ring-1 ring-primary/20` on drag-over state, `rounded-xl` droppable area
+- **TaskCard**: `rounded-xl`, `shadow-card` + `shadow-card-hover`, subtask progress bar replaces text counter, `rotate-[0.8deg]` on drag
+- **KanbanPage header**: Segmented control view toggle (Board / List / Sprint) with `bg-muted` pill container
+- **DashboardPage**: Stat cards with colored icon containers (indigo/violet/emerald), project cards with colored avatars + progress bars + task completion %
+- **ProjectsPage**: Project cards with colored avatars, progress bars, `shadow-card` + `shadow-card-hover`
+
+---
+
+## v0.9.0 — Sprints + Burndown + Roadmap (Week 9)
+> Status: COMPLETE ✅
+
+### Backend
+- `Sprint` model — name, goal, start/end dates, status (planning/active/completed), project FK
+- `Task.sprint` FK (nullable) — assign task to a sprint
+- `?sprint=<id>` / `?sprint=none` filter on task list endpoint
+- `SprintListCreateView`, `SprintDetailView` (PATCH to change status: planning→active→completed)
+- `SprintBurndownView` — builds ideal line + actual line from `TaskActivity` status_changed events; returns day-by-day JSON
+
+### Frontend
+- `useSprints`, `useSprintBurndown` hooks
+- `SprintPanel` — right-side panel in Sprint view: sprint list with status badges, start/complete buttons, create form with dates; burndown chart rendered below selected sprint
+- `BurndownChart` — pure SVG, no external lib; ideal dashed line + actual solid line with data points + legend
+- `KanbanPage` — 3rd view mode "Sprint": shows Kanban filtered to sprint tasks + backlog section (tasks not in any sprint) with "Add to sprint" button; SprintPanel on right
+- `RoadmapPage` — `/w/:ws/roadmap`; per-project Gantt rows showing sprints as colored horizontal bars with completion count; auto-scales X-axis to fit all sprint dates
+- Roadmap added to AppLayout nav

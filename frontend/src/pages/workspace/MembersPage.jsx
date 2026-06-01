@@ -6,14 +6,14 @@ import { useAuthStore } from "@/store/authStore";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { UserPlus, Shield, User, Eye, Trash2, Crown, Link, Clock, X } from "lucide-react";
+import { UserPlus, Shield, User, Eye, Trash2, Crown, Link, Clock, X, Send, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ROLES = ["admin", "member", "viewer"];
 const ROLE_CONFIG = {
-  admin:  { label: "Admin",  icon: Shield, className: "text-primary bg-primary/10" },
-  member: { label: "Member", icon: User,   className: "text-foreground bg-muted" },
-  viewer: { label: "Viewer", icon: Eye,    className: "text-muted-foreground bg-muted" },
+  admin:  { label: "Admin",  icon: Shield, className: "text-primary bg-primary/10 border-primary/20" },
+  member: { label: "Member", icon: User,   className: "text-foreground bg-secondary border-border" },
+  viewer: { label: "Viewer", icon: Eye,    className: "text-muted-foreground bg-secondary border-border" },
 };
 
 export default function MembersPage() {
@@ -41,135 +41,159 @@ export default function MembersPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["workspace-invites", workspaceSlug] }),
   });
 
-  const [inviteForm, setInviteForm] = useState({ email: "", role: "member" });
+  const [email, setEmail]           = useState("");
+  const [role, setRole]             = useState("member");
   const [inviteError, setInviteError]     = useState("");
   const [inviteSuccess, setInviteSuccess] = useState("");
   const [copiedToken, setCopiedToken]     = useState(null);
 
   const currentMember = members.find((m) => m.user?.email === user?.email);
-  const isAdmin = currentMember?.role === "admin";
+  const isAdmin = currentMember?.role === "admin" || workspace?.owner?.email === user?.email;
 
   const handleInvite = (e) => {
     e.preventDefault();
     setInviteError("");
     setInviteSuccess("");
-    inviteMember.mutate(inviteForm, {
-      onSuccess: (invite) => {
-        setInviteSuccess(`Invite created for ${inviteForm.email}`);
-        setInviteForm({ email: "", role: "member" });
+    inviteMember.mutate({ email, role }, {
+      onSuccess: () => {
+        setInviteSuccess(`Invite sent to ${email}`);
+        setEmail("");
         qc.invalidateQueries({ queryKey: ["workspace-invites", workspaceSlug] });
+        setTimeout(() => setInviteSuccess(""), 4000);
       },
       onError: (err) => {
         setInviteError(
           err.response?.data?.email?.[0] ||
           err.response?.data?.non_field_errors?.[0] ||
-          "Failed to create invite."
+          "Failed to send invite."
         );
       },
     });
   };
 
   const copyInviteLink = (token) => {
-    const link = `${window.location.origin}/invites/${token}`;
-    navigator.clipboard.writeText(link);
+    navigator.clipboard.writeText(`${window.location.origin}/invites/${token}`);
     setCopiedToken(token);
     setTimeout(() => setCopiedToken(null), 2000);
   };
 
   return (
-    <div className="p-8 max-w-3xl space-y-8">
+    <div className="p-8 max-w-3xl space-y-6">
+
+      {/* Page header */}
       <div>
-        <h1 className="text-2xl font-semibold">Members</h1>
-        <p className="text-muted-foreground text-sm mt-0.5">
-          {members.length} member{members.length !== 1 ? "s" : ""} in this workspace
+        <h1 className="text-2xl font-bold tracking-tight">Team Members</h1>
+        <p className="text-muted-foreground text-sm mt-1">
+          {members.length} member{members.length !== 1 ? "s" : ""} · {workspace?.name}
         </p>
       </div>
 
-      {/* Invite form */}
+      {/* ── Invite section (admin only) ── */}
       {isAdmin && (
-        <div className="rounded-xl border bg-card p-5">
-          <h2 className="text-sm font-medium mb-4 flex items-center gap-2">
-            <UserPlus className="w-4 h-4" /> Invite a member
-          </h2>
-          <form onSubmit={handleInvite} className="flex gap-3 items-end">
-            <div className="flex-1">
-              <label className="text-xs text-muted-foreground mb-1 block">Email address</label>
-              <Input
-                type="email"
-                placeholder="teammate@company.com"
-                value={inviteForm.email}
-                onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
-                required
-              />
+        <div className="rounded-lg border bg-card overflow-hidden">
+          {/* Header bar */}
+          <div className="flex items-center gap-2.5 px-4 py-3 bg-primary/5 border-b border-primary/15">
+            <div className="w-7 h-7 rounded-md bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
+              <UserPlus className="w-4 h-4" />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Role</label>
-              <select
-                className="h-9 rounded-md border bg-background px-3 text-sm outline-none focus:ring-1 focus:ring-ring"
-                value={inviteForm.role}
-                onChange={(e) => setInviteForm({ ...inviteForm, role: e.target.value })}
-              >
-                {ROLES.map((r) => <option key={r} value={r}>{ROLE_CONFIG[r].label}</option>)}
-              </select>
+              <p className="text-sm font-semibold">Invite people to {workspace?.name}</p>
+              <p className="text-xs text-muted-foreground">They'll receive a link to join this workspace.</p>
             </div>
-            <Button type="submit" disabled={inviteMember.isPending}>
-              {inviteMember.isPending ? "Sending…" : "Send Invite"}
-            </Button>
-          </form>
-          {inviteError   && <p className="text-sm text-destructive mt-2">{inviteError}</p>}
-          {inviteSuccess && <p className="text-sm text-green-600 mt-2">{inviteSuccess}</p>}
-        </div>
-      )}
-
-      {/* Pending invites */}
-      {pendingInvites.length > 0 && (
-        <div>
-          <h2 className="text-sm font-medium mb-3 flex items-center gap-2 text-muted-foreground">
-            <Clock className="w-3.5 h-3.5" /> Pending invites ({pendingInvites.length})
-          </h2>
-          <div className="rounded-xl border bg-card divide-y">
-            {pendingInvites.map((invite) => (
-              <div key={invite.id} className="flex items-center justify-between px-5 py-3">
-                <div>
-                  <p className="text-sm font-medium">{invite.email}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Invited as <span className="capitalize">{invite.role}</span>
-                    {invite.invited_by && ` · by ${invite.invited_by.full_name || invite.invited_by.email}`}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => copyInviteLink(invite.token)}
-                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground border rounded-md px-2.5 py-1.5 hover:bg-accent transition-colors"
-                    title="Copy invite link"
-                  >
-                    <Link className="w-3 h-3" />
-                    {copiedToken === invite.token ? "Copied!" : "Copy link"}
-                  </button>
-                  {isAdmin && (
-                    <button
-                      onClick={() => cancelInvite.mutate(invite.token)}
-                      className="text-muted-foreground hover:text-destructive p-1.5 rounded hover:bg-destructive/10 transition-colors"
-                      title="Cancel invite"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
           </div>
-          <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
-            <Link className="w-3 h-3" />
-            Copy the invite link and share it directly — the recipient clicks it to join.
-          </p>
+
+          {/* Form */}
+          <form onSubmit={handleInvite} className="p-4">
+            <div className="flex gap-2">
+              <Input
+                type="email"
+                placeholder="colleague@company.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="flex-1"
+              />
+              <select
+                className="h-9 rounded-md border border-input bg-background px-2.5 text-sm outline-none focus:ring-1 focus:ring-ring"
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+              >
+                {ROLES.map((r) => (
+                  <option key={r} value={r}>{ROLE_CONFIG[r].label}</option>
+                ))}
+              </select>
+              <Button type="submit" disabled={inviteMember.isPending} className="gap-1.5">
+                <Send className="w-3.5 h-3.5" />
+                {inviteMember.isPending ? "Sending…" : "Send Invite"}
+              </Button>
+            </div>
+
+            {inviteError && (
+              <p className="text-xs text-destructive mt-2 flex items-center gap-1.5">
+                <X className="w-3.5 h-3.5" /> {inviteError}
+              </p>
+            )}
+            {inviteSuccess && (
+              <p className="text-xs text-emerald-600 mt-2 flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5" /> {inviteSuccess}
+              </p>
+            )}
+          </form>
+
+          {/* Pending invites */}
+          {pendingInvites.length > 0 && (
+            <div className="border-t">
+              <div className="px-4 py-2.5 flex items-center gap-2 bg-muted/40">
+                <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+                <span className="text-xs font-medium text-muted-foreground">
+                  Pending ({pendingInvites.length})
+                </span>
+              </div>
+              <div className="divide-y">
+                {pendingInvites.map((invite) => (
+                  <div key={invite.id} className="flex items-center justify-between px-4 py-2.5">
+                    <div>
+                      <p className="text-sm font-medium">{invite.email}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        <span className="capitalize">{invite.role}</span>
+                        {invite.invited_by && ` · by ${invite.invited_by.full_name || invite.invited_by.email}`}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => copyInviteLink(invite.token)}
+                        className={cn(
+                          "flex items-center gap-1.5 text-xs border rounded px-2.5 py-1.5 transition-colors",
+                          copiedToken === invite.token
+                            ? "bg-emerald-50 text-emerald-600 border-emerald-200"
+                            : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                        )}
+                      >
+                        <Link className="w-3 h-3" />
+                        {copiedToken === invite.token ? "Copied!" : "Copy link"}
+                      </button>
+                      <button
+                        onClick={() => cancelInvite.mutate(invite.token)}
+                        className="p-1.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                        title="Cancel invite"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Active members */}
+      {/* ── Active members ── */}
       <div>
-        <h2 className="text-sm font-medium mb-3 text-muted-foreground">Active members</h2>
-        <div className="rounded-xl border bg-card overflow-hidden">
+        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">
+          Active Members
+        </h2>
+        <div className="rounded-lg border bg-card overflow-hidden">
           {isLoading ? (
             <div className="p-6 text-sm text-muted-foreground">Loading…</div>
           ) : (
@@ -181,39 +205,57 @@ export default function MembersPage() {
                 const isWorkspaceOwner = workspace?.owner?.email === member.user?.email;
 
                 return (
-                  <div key={member.id} className="flex items-center justify-between px-5 py-3.5">
+                  <div key={member.id} className="flex items-center justify-between px-4 py-3 hover:bg-accent/40 transition-colors">
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm flex-shrink-0">
+                      <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm flex-shrink-0">
                         {member.user?.full_name?.[0]?.toUpperCase() || member.user?.email?.[0]?.toUpperCase()}
                       </div>
                       <div>
                         <div className="flex items-center gap-1.5">
-                          <p className="text-sm font-medium">{member.user?.full_name || member.user?.email}</p>
-                          {isWorkspaceOwner && <Crown className="w-3.5 h-3.5 text-yellow-500" title="Workspace owner" />}
-                          {isSelf && <span className="text-xs text-muted-foreground">(you)</span>}
+                          <p className="text-sm font-medium leading-tight">
+                            {member.user?.full_name || member.user?.email}
+                          </p>
+                          {isWorkspaceOwner && (
+                            <Crown className="w-3.5 h-3.5 text-yellow-500 flex-shrink-0" title="Owner" />
+                          )}
+                          {isSelf && (
+                            <span className="text-xs text-muted-foreground">(you)</span>
+                          )}
                         </div>
-                        <p className="text-xs text-muted-foreground">{member.user?.email}</p>
+                        <p className="text-xs text-muted-foreground leading-tight mt-0.5">
+                          {member.user?.email}
+                        </p>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
                       {isAdmin && !isSelf && !isWorkspaceOwner ? (
                         <select
-                          className="text-xs border rounded-md px-2 py-1 bg-background outline-none focus:ring-1 focus:ring-ring"
+                          className="text-xs border rounded px-2 py-1 bg-background outline-none focus:ring-1 focus:ring-ring"
                           value={member.role}
                           onChange={(e) => updateRole.mutate({ memberId: member.id, role: e.target.value })}
                         >
-                          {ROLES.map((r) => <option key={r} value={r}>{ROLE_CONFIG[r].label}</option>)}
+                          {ROLES.map((r) => (
+                            <option key={r} value={r}>{ROLE_CONFIG[r].label}</option>
+                          ))}
                         </select>
                       ) : (
-                        <span className={cn("flex items-center gap-1 text-xs px-2 py-1 rounded-full font-medium", roleConf.className)}>
-                          <RoleIcon className="w-3 h-3" />{roleConf.label}
+                        <span className={cn(
+                          "flex items-center gap-1 text-xs px-2 py-0.5 rounded border font-medium",
+                          roleConf.className
+                        )}>
+                          <RoleIcon className="w-3 h-3" />
+                          {roleConf.label}
                         </span>
                       )}
                       {isAdmin && !isSelf && !isWorkspaceOwner && (
                         <button
-                          onClick={() => { if (confirm(`Remove ${member.user?.full_name || member.user?.email}?`)) removeMember.mutate(member.id); }}
-                          className="text-muted-foreground hover:text-destructive p-1 rounded hover:bg-destructive/10 transition-colors"
+                          onClick={() => {
+                            if (confirm(`Remove ${member.user?.full_name || member.user?.email}?`))
+                              removeMember.mutate(member.id);
+                          }}
+                          className="p-1.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                          title="Remove member"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -226,6 +268,7 @@ export default function MembersPage() {
           )}
         </div>
       </div>
+
     </div>
   );
 }

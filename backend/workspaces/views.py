@@ -3,8 +3,8 @@ from rest_framework.views import APIView
 from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
-from .models import Workspace, WorkspaceMember, WorkspaceInvite
-from .serializers import WorkspaceSerializer, WorkspaceMemberSerializer, WorkspaceInviteSerializer
+from .models import Workspace, WorkspaceMember, WorkspaceInvite, Notification
+from .serializers import WorkspaceSerializer, WorkspaceMemberSerializer, WorkspaceInviteSerializer, NotificationSerializer
 
 
 class WorkspaceListCreateView(APIView):
@@ -161,3 +161,25 @@ class AcceptInviteView(APIView):
         invite.status = WorkspaceInvite.Status.ACCEPTED
         invite.save()
         return Response(WorkspaceSerializer(invite.workspace, context={"request": request}).data)
+
+
+# ── Notifications ─────────────────────────────────────────────────────────────
+
+class NotificationListView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        notifs = Notification.objects.filter(recipient=request.user).select_related("actor")[:50]
+        return Response(NotificationSerializer(notifs, many=True).data)
+
+
+class NotificationMarkReadView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        notif_id = request.data.get("id")
+        if notif_id:
+            Notification.objects.filter(id=notif_id, recipient=request.user).update(read=True)
+        else:
+            Notification.objects.filter(recipient=request.user, read=False).update(read=True)
+        return Response({"status": "ok"})

@@ -3,12 +3,15 @@ import { useParams } from "react-router-dom";
 import { format } from "date-fns";
 import {
   X, Flag, Calendar, User, CheckSquare, MessageSquare,
-  ChevronDown, Trash2, Plus, Check, Activity,
+  ChevronDown, Trash2, Plus, Check, Activity, Tag,
 } from "lucide-react";
 import { useTaskDetail, useUpdateTaskDetail, useCreateComment, useDeleteComment, useCreateSubtask, useToggleSubtask, useDeleteSubtask } from "@/hooks/useTaskDetail";
+import { useUpsertFieldValue } from "@/hooks/useCustomFields";
 import { useAuthStore } from "@/store/authStore";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+
+const LABEL_COLORS = ["#6366f1","#ec4899","#f59e0b","#22c55e","#3b82f6","#ef4444","#8b5cf6","#14b8a6"];
 
 const PRIORITY_OPTIONS = [
   { value: "no_priority", label: "No Priority",  color: "text-muted-foreground" },
@@ -18,11 +21,12 @@ const PRIORITY_OPTIONS = [
   { value: "urgent",      label: "Urgent",        color: "text-red-500" },
 ];
 
-export default function TaskDetailPanel({ taskId, projectStatuses = [], onClose }) {
+export default function TaskDetailPanel({ taskId, projectStatuses = [], projectLabels = [], projectFields = [], onCreateLabel, onClose }) {
   const { workspaceSlug, projectId } = useParams();
   const { user } = useAuthStore();
   const { data: task, isLoading } = useTaskDetail(workspaceSlug, projectId, taskId);
   const update = useUpdateTaskDetail(workspaceSlug, projectId, taskId);
+  const upsertField = useUpsertFieldValue(workspaceSlug, projectId, taskId);
   const createComment = useCreateComment(workspaceSlug, projectId, taskId);
   const deleteComment = useDeleteComment(workspaceSlug, projectId, taskId);
   const createSubtask = useCreateSubtask(workspaceSlug, projectId, taskId);
@@ -41,7 +45,7 @@ export default function TaskDetailPanel({ taskId, projectStatuses = [], onClose 
 
   if (isLoading || !task) {
     return (
-      <div className="w-[480px] border-l flex items-center justify-center bg-background">
+      <div className="w-[480px] border-l flex items-center justify-center bg-card animate-panel-in">
         <div className="w-6 h-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
       </div>
     );
@@ -67,11 +71,16 @@ export default function TaskDetailPanel({ taskId, projectStatuses = [], onClose 
   };
 
   return (
-    <div className="w-[480px] flex-shrink-0 border-l flex flex-col bg-background overflow-hidden">
+    <div className="w-[480px] flex-shrink-0 border-l flex flex-col bg-card overflow-hidden animate-panel-in">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-3 border-b flex-shrink-0">
-        <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Task Detail</span>
-        <button onClick={onClose} className="text-muted-foreground hover:text-foreground rounded p-0.5 hover:bg-accent">
+      <div className="flex items-center justify-between px-5 py-3.5 border-b flex-shrink-0 bg-card/80 backdrop-blur-sm">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Detail</span>
+        </div>
+        <button
+          onClick={onClose}
+          className="text-muted-foreground hover:text-foreground rounded-md p-1.5 hover:bg-accent transition-colors"
+        >
           <X className="w-4 h-4" />
         </button>
       </div>
@@ -150,6 +159,65 @@ export default function TaskDetailPanel({ taskId, projectStatuses = [], onClose 
             <p className="text-xs font-medium text-muted-foreground mb-1.5">Description</p>
             <DescriptionEditor task={task} onSave={(desc) => update.mutate({ description: desc })} />
           </div>
+
+          {/* Labels */}
+          <div>
+            <div className="flex items-center gap-1.5 mb-2">
+              <Tag className="w-3.5 h-3.5 text-muted-foreground" />
+              <p className="text-xs font-medium text-muted-foreground">Labels</p>
+            </div>
+            <div className="flex flex-wrap gap-1.5 items-center">
+              {task.labels?.map((l) => (
+                <button
+                  key={l.id}
+                  onClick={() => {
+                    const newIds = (task.labels || []).filter((x) => x.id !== l.id).map((x) => x.id);
+                    update.mutate({ label_ids: newIds });
+                  }}
+                  className="group flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-colors"
+                  style={{ backgroundColor: l.color + "22", color: l.color }}
+                  title="Click to remove"
+                >
+                  {l.name}
+                  <X className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </button>
+              ))}
+              <LabelPicker
+                currentLabels={task.labels || []}
+                projectLabels={projectLabels}
+                onToggle={(label) => {
+                  const currentIds = (task.labels || []).map((l) => l.id);
+                  const newIds = currentIds.includes(label.id)
+                    ? currentIds.filter((id) => id !== label.id)
+                    : [...currentIds, label.id];
+                  update.mutate({ label_ids: newIds });
+                }}
+                onCreateLabel={onCreateLabel}
+              />
+            </div>
+          </div>
+
+          {/* Custom Fields */}
+          {projectFields.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-2">Custom Fields</p>
+              <div className="space-y-2">
+                {projectFields.map((field) => {
+                  const fv = task.field_values?.find(v => v.field.id === field.id);
+                  const val = fv?.value ?? "";
+                  const save = (newVal) => {
+                    if (newVal !== val) upsertField.mutate({ field_id: field.id, value: newVal });
+                  };
+                  return (
+                    <div key={field.id} className="rounded-md border px-3 py-2">
+                      <p className="text-xs text-muted-foreground mb-1">{field.name}</p>
+                      <CustomFieldInput field={field} value={val} onSave={save} />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Subtasks */}
           <div>
@@ -271,6 +339,125 @@ export default function TaskDetailPanel({ taskId, projectStatuses = [], onClose 
 
         </div>
       </div>
+    </div>
+  );
+}
+
+function CustomFieldInput({ field, value, onSave }) {
+  const [draft, setDraft] = useState(value);
+
+  const commit = () => onSave(draft);
+
+  if (field.type === "select") {
+    return (
+      <select
+        className="w-full bg-transparent text-sm outline-none"
+        value={value}
+        onChange={e => onSave(e.target.value)}
+      >
+        <option value="">— none —</option>
+        {(field.options || []).map(opt => <option key={opt} value={opt}>{opt}</option>)}
+      </select>
+    );
+  }
+
+  return (
+    <input
+      type={field.type === "number" ? "number" : field.type === "date" ? "date" : field.type === "url" ? "url" : "text"}
+      className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+      placeholder={`Enter ${field.name.toLowerCase()}…`}
+      value={draft}
+      onChange={e => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); commit(); } }}
+    />
+  );
+}
+
+function LabelPicker({ currentLabels, projectLabels, onToggle, onCreateLabel }) {
+  const [open, setOpen] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newColor, setNewColor] = useState(LABEL_COLORS[0]);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const currentIds = new Set(currentLabels.map((l) => l.id));
+
+  const handleCreate = (e) => {
+    e.preventDefault();
+    if (!newName.trim()) return;
+    onCreateLabel?.({ name: newName.trim(), color: newColor }, {
+      onSuccess: () => setNewName(""),
+    });
+  };
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1 text-xs text-muted-foreground border border-dashed rounded-full px-2 py-0.5 hover:text-foreground hover:border-foreground/40 transition-colors"
+      >
+        <Plus className="w-3 h-3" /> Add label
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-7 z-50 w-56 bg-card border rounded-lg shadow-lg p-2">
+          {projectLabels.length > 0 && (
+            <>
+              <div className="space-y-0.5 mb-2">
+                {projectLabels.map((l) => (
+                  <button
+                    key={l.id}
+                    onClick={() => onToggle(l)}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-accent text-sm transition-colors"
+                  >
+                    <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: l.color }} />
+                    <span className="flex-1 text-left">{l.name}</span>
+                    {currentIds.has(l.id) && <Check className="w-3.5 h-3.5 text-primary" />}
+                  </button>
+                ))}
+              </div>
+              <div className="border-t mb-2" />
+            </>
+          )}
+          <form onSubmit={handleCreate} className="space-y-2">
+            <input
+              className="w-full text-xs border rounded px-2 py-1.5 bg-background outline-none focus:ring-1 focus:ring-ring"
+              placeholder="New label name…"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              autoFocus
+            />
+            <div className="flex gap-1.5 flex-wrap">
+              {LABEL_COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setNewColor(c)}
+                  className={cn(
+                    "w-5 h-5 rounded-full transition-transform",
+                    newColor === c && "ring-2 ring-offset-1 ring-ring scale-110"
+                  )}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </div>
+            {newName.trim() && (
+              <button
+                type="submit"
+                className="w-full text-xs bg-primary text-primary-foreground rounded py-1.5 font-medium hover:bg-primary/90 transition-colors"
+              >
+                Create "{newName.trim()}"
+              </button>
+            )}
+          </form>
+        </div>
+      )}
     </div>
   );
 }

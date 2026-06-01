@@ -6,29 +6,55 @@ from .views import (
     SubTaskListCreateView, SubTaskDetailView,
     TaskCommentListCreateView, TaskCommentDetailView,
     TaskActivityListView,
+    LabelListCreateView, LabelDetailView,
+    ProjectFieldListCreateView, ProjectFieldDetailView, TaskFieldValueView,
+    SavedViewListCreateView, SavedViewDetailView,
+    SprintListCreateView, SprintDetailView, SprintBurndownView,
 )
+
+_ws = "workspaces/<slug:workspace_slug>"
+_pr = f"{_ws}/projects/<uuid:project_id>"
+_tk = f"{_pr}/tasks/<uuid:task_id>"
 
 urlpatterns = [
     # Projects
-    path("workspaces/<slug:workspace_slug>/projects/", ProjectListCreateView.as_view()),
-    path("workspaces/<slug:workspace_slug>/projects/<uuid:project_id>/", ProjectDetailView.as_view()),
+    path(f"{_ws}/projects/",           ProjectListCreateView.as_view()),
+    path(f"{_pr}/",                    ProjectDetailView.as_view()),
 
     # Kanban columns
-    path("workspaces/<slug:workspace_slug>/projects/<uuid:project_id>/statuses/", TaskStatusListCreateView.as_view()),
+    path(f"{_pr}/statuses/",           TaskStatusListCreateView.as_view()),
 
     # Tasks
-    path("workspaces/<slug:workspace_slug>/projects/<uuid:project_id>/tasks/", TaskListCreateView.as_view()),
-    path("workspaces/<slug:workspace_slug>/projects/<uuid:project_id>/tasks/<uuid:task_id>/", TaskDetailView.as_view()),
-    path("workspaces/<slug:workspace_slug>/projects/<uuid:project_id>/tasks/<uuid:task_id>/move/", TaskMoveView.as_view()),
+    path(f"{_pr}/tasks/",              TaskListCreateView.as_view()),
+    path(f"{_tk}/",                    TaskDetailView.as_view()),
+    path(f"{_tk}/move/",               TaskMoveView.as_view()),
 
     # Subtasks
-    path("workspaces/<slug:workspace_slug>/projects/<uuid:project_id>/tasks/<uuid:task_id>/subtasks/", SubTaskListCreateView.as_view()),
-    path("workspaces/<slug:workspace_slug>/projects/<uuid:project_id>/tasks/<uuid:task_id>/subtasks/<uuid:subtask_id>/", SubTaskDetailView.as_view()),
+    path(f"{_tk}/subtasks/",                              SubTaskListCreateView.as_view()),
+    path(f"{_tk}/subtasks/<uuid:subtask_id>/",            SubTaskDetailView.as_view()),
 
     # Comments
-    path("workspaces/<slug:workspace_slug>/projects/<uuid:project_id>/tasks/<uuid:task_id>/comments/", TaskCommentListCreateView.as_view()),
-    path("workspaces/<slug:workspace_slug>/projects/<uuid:project_id>/tasks/<uuid:task_id>/comments/<uuid:comment_id>/", TaskCommentDetailView.as_view()),
+    path(f"{_tk}/comments/",                              TaskCommentListCreateView.as_view()),
+    path(f"{_tk}/comments/<uuid:comment_id>/",            TaskCommentDetailView.as_view()),
 
     # Activity log
-    path("workspaces/<slug:workspace_slug>/projects/<uuid:project_id>/tasks/<uuid:task_id>/activity/", TaskActivityListView.as_view()),
+    path(f"{_tk}/activity/",                              TaskActivityListView.as_view()),
+
+    # Labels
+    path(f"{_pr}/labels/",                                LabelListCreateView.as_view()),
+    path(f"{_pr}/labels/<uuid:label_id>/",                LabelDetailView.as_view()),
+
+    # Custom fields (v0.8.0)
+    path(f"{_pr}/fields/",                                ProjectFieldListCreateView.as_view()),
+    path(f"{_pr}/fields/<uuid:field_id>/",                ProjectFieldDetailView.as_view()),
+    path(f"{_tk}/field-values/",                          TaskFieldValueView.as_view()),
+
+    # Saved views (v0.8.0)
+    path(f"{_pr}/saved-views/",                           SavedViewListCreateView.as_view()),
+    path(f"{_pr}/saved-views/<uuid:view_id>/",            SavedViewDetailView.as_view()),
+
+    # Sprints (v0.9.0)
+    path(f"{_pr}/sprints/",                               SprintListCreateView.as_view()),
+    path(f"{_pr}/sprints/<uuid:sprint_id>/",              SprintDetailView.as_view()),
+    path(f"{_pr}/sprints/<uuid:sprint_id>/burndown/",     SprintBurndownView.as_view()),
 ]

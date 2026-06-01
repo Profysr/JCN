@@ -4,6 +4,7 @@ from .views import (
     WorkspaceMemberListView, WorkspaceMemberDetailView,
     InviteMemberView, WorkspaceInviteListView, WorkspaceInviteCancelView,
     InviteDetailView, AcceptInviteView,
+    NotificationListView, NotificationMarkReadView,
 )
 
 urlpatterns = [
@@ -23,4 +24,8 @@ urlpatterns = [
     # Public invite accept flow
     path("invites/<uuid:token>/", InviteDetailView.as_view()),
     path("invites/<uuid:token>/accept/", AcceptInviteView.as_view()),
+
+    # Notifications
+    path("notifications/", NotificationListView.as_view()),
+    path("notifications/mark-read/", NotificationMarkReadView.as_view()),
 ]

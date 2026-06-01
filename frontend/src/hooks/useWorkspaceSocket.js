@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { notificationsKey } from "@/hooks/useNotifications";
 
 export function useWorkspaceSocket(workspaceSlug) {
   const qc = useQueryClient();
@@ -54,6 +55,15 @@ export function useWorkspaceSocket(workspaceSlug) {
             comments: old.comments?.filter((c) => c.id !== payload.comment_id) || [],
             comment_count: Math.max(0, (old.comment_count || 1) - 1),
           };
+        });
+      }
+
+      // ── Notification events (user-scoped, piggybacked on workspace WS) ──
+      if (type === "notification.created") {
+        qc.setQueryData(notificationsKey, (old) => {
+          if (!old) return [payload];
+          const exists = old.some((n) => n.id === payload.id);
+          return exists ? old : [payload, ...old];
         });
       }
     };

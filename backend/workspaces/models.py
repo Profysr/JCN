@@ -59,3 +59,24 @@ class WorkspaceInvite(models.Model):
 
     def __str__(self):
         return f"Invite: {self.email} to {self.workspace.name}"
+
+
+class Notification(models.Model):
+    class Verb(models.TextChoices):
+        TASK_ASSIGNED  = "task_assigned",  "assigned you a task"
+        TASK_COMMENTED = "task_commented", "commented on your task"
+
+    id        = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    recipient = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notifications")
+    actor     = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="sent_notifications")
+    verb      = models.CharField(max_length=30, choices=Verb.choices)
+    workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE, related_name="notifications")
+    meta      = models.JSONField(default=dict)  # task_id, task_title, project_id, workspace_slug
+    read      = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.actor} → {self.recipient}: {self.verb}"
