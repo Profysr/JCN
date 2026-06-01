@@ -179,6 +179,90 @@
 
 ---
 
+## v1.1.0 — Bulk Actions (Week 11)
+> Status: COMPLETE ✅
+
+### Backend
+- `TaskBulkUpdateView` — `POST /tasks/bulk/` — updates status/priority/assignee or deletes multiple tasks; broadcasts `tasks.bulk_updated` / `tasks.bulk_deleted` WS events
+
+### Frontend
+- `BulkActionBar` — floating bottom bar (slides up) when tasks are selected: Status / Priority / Assign dropdowns + Delete button
+- `useBulkUpdateTasks` hook
+- Checkbox on TaskCard (top-left, appears on hover; solid when bulk-selected)
+- Checkbox column in ListView
+- `selectedIds` Set state in KanbanPage wired to both Board and List views
+- Export to CSV button in KanbanPage header (`GET /tasks/export/`)
+
+---
+
+## v1.2.0 — File Attachments (Week 11)
+> Status: COMPLETE ✅
+
+### Backend
+- `TaskAttachment` model — file, original_name, file_size, mime_type, uploaded_by FK
+- `TaskAttachmentListCreateView` — GET list + POST upload (20 MB limit, multipart)
+- `TaskAttachmentDeleteView` — DELETE by id, also removes the file from disk
+- `TaskDetailSerializer` now includes `attachments` array
+- `docker-compose.yml` — `media_data` named volume mounted at `/app/media`
+
+### Frontend
+- `TaskAttachmentsSection` — drop zone (drag-and-drop + click-to-browse), file grid with image previews, file-type icons, download + delete per file
+- `useAttachments`, `useUploadAttachment`, `useDeleteAttachment` hooks
+
+---
+
+## v1.3.0 — @Mentions in Comments (Week 11)
+> Status: COMPLETE ✅
+
+### Backend
+- `task_mentioned` verb added to `Notification.Verb`
+- `TaskCommentListCreateView.post` now parses `@word` patterns, matches against workspace member names/email prefixes, and calls `notify()` for each match
+
+### Frontend
+- `MentionTextarea` — textarea with live `@` dropdown showing workspace members; ↑↓ navigate, Enter/Tab insert, Esc dismiss
+- Wired into the comment form in `TaskDetailPanel`
+
+---
+
+## v1.4.0 — Task Dependencies (Week 11)
+> Status: COMPLETE ✅
+
+### Backend
+- `TaskDependency` model — `blocker` FK + `blocked` FK, unique_together
+- `TaskDependencyListCreateView` — GET returns `{blocked_by, blocking}`; POST creates a dep by type (`blocked_by` | `blocks`)
+- `TaskDependencyDeleteView` — DELETE dep by id
+- `TaskDetailSerializer` — includes `blocked_by` and `blocking` arrays
+
+### Frontend
+- `TaskDependenciesSection` — two sections (Blocked by / Blocking), each with task search picker + chip list with remove button
+- `useDependencies`, `useAddDependency`, `useRemoveDependency` hooks
+
+---
+
+## v1.5.0 — Analytics Dashboard (Week 11)
+> Status: COMPLETE ✅
+
+### Backend
+- `WorkspaceAnalyticsView` — `GET /analytics/` — returns overview stats, tasks_by_status, tasks_by_priority, workload by member, completion trend (last 30 days)
+
+### Frontend
+- `AnalyticsPage` — 4 overview stat cards + Tasks by Status horizontal bars + Tasks by Priority bars + Workload bars + Activity sparkline (pure SVG)
+- `useAnalytics` hook with 60s stale time
+- Analytics added to sidebar nav (BarChart2 icon)
+
+---
+
+## v1.7.0 — CSV Export (Week 11)
+> Status: COMPLETE ✅
+
+### Backend
+- `TaskExportView` — `GET /tasks/export/` — streams CSV with ID, Title, Status, Priority, Assignee, Due Date, Sprint, Labels, Created
+
+### Frontend
+- Export icon button in KanbanPage header — opens CSV download in new tab
+
+---
+
 ## v1.0.0 — UI/UX Polish Pass (Pre-release)
 > Status: COMPLETE ✅
 

@@ -16,8 +16,11 @@ import FilterBar from "@/components/tasks/FilterBar";
 import ListView from "@/components/tasks/ListView";
 import SprintPanel from "@/components/projects/SprintPanel";
 import { Button } from "@/components/ui/button";
-import { Plus, ArrowLeft, LayoutGrid, List, Zap } from "lucide-react";
+import { Plus, ArrowLeft, LayoutGrid, List, Zap, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
+import BulkActionBar from "@/components/tasks/BulkActionBar";
+import { useBulkUpdateTasks } from "@/hooks/useBulkActions";
+import api from "@/lib/api";
 
 const EMPTY_FILTERS = { search: "", priorities: [], assignees: [], labels: [] };
 
@@ -45,6 +48,36 @@ export default function KanbanPage() {
   const [view, setView]     = useState("kanban"); // "kanban" | "list" | "sprint"
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [activeSprint, setActiveSprint] = useState(() => sprints.find(s => s.status === "active") || null);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+
+  const bulkUpdate = useBulkUpdateTasks(workspaceSlug, projectId);
+
+  const toggleSelect = (taskId) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(taskId) ? next.delete(taskId) : next.add(taskId);
+      return next;
+    });
+  };
+
+  const handleExport = async () => {
+    try {
+      const resp = await api.get(
+        `/api/workspaces/${workspaceSlug}/projects/${projectId}/tasks/export/`,
+        { responseType: "blob" },
+      );
+      const url  = URL.createObjectURL(new Blob([resp.data], { type: "text/csv" }));
+      const link = document.createElement("a");
+      link.href     = url;
+      link.download = `${project?.name || "tasks"}-tasks.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch {
+      // silently ignore — network errors show in console
+    }
+  };
 
   useWorkspaceSocket(workspaceSlug);
 
@@ -127,6 +160,13 @@ export default function KanbanPage() {
                 </button>
               ))}
             </div>
+            <button
+              onClick={handleExport}
+              className="p-1.5 rounded-md border text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              title="Export to CSV"
+            >
+              <Download className="w-3.5 h-3.5" />
+            </button>
             <Button size="sm" onClick={() => setCreateModal({ open: true, statusId: project?.statuses?.[0]?.id })}>
               <Plus className="w-3.5 h-3.5 mr-1.5" /> Add Task
             </Button>
@@ -152,7 +192,8 @@ export default function KanbanPage() {
                 {project?.statuses?.map(col => (
                   <KanbanColumn key={col.id} column={col} tasks={tasksByStatus(col.id)}
                     onAddTask={statusId => setCreateModal({ open: true, statusId })}
-                    onTaskClick={task => openTask(task.id)} selectedTaskId={selectedTaskId} />
+                    onTaskClick={task => openTask(task.id)} selectedTaskId={selectedTaskId}
+                    selectedIds={selectedIds} onToggleSelect={toggleSelect} />
                 ))}
               </div>
             </DragDropContext>
@@ -161,7 +202,8 @@ export default function KanbanPage() {
 
         {view === "list" && (
           <ListView tasks={filteredTasks} statuses={project?.statuses || []}
-            onTaskClick={task => openTask(task.id)} selectedTaskId={selectedTaskId} />
+            onTaskClick={task => openTask(task.id)} selectedTaskId={selectedTaskId}
+            selectedIds={selectedIds} onToggleSelect={toggleSelect} />
         )}
 
         {view === "sprint" && (
@@ -173,7 +215,8 @@ export default function KanbanPage() {
                   {project?.statuses?.map(col => (
                     <KanbanColumn key={col.id} column={col} tasks={tasksByStatus(col.id)}
                       onAddTask={statusId => setCreateModal({ open: true, statusId })}
-                      onTaskClick={task => openTask(task.id)} selectedTaskId={selectedTaskId} />
+                      onTaskClick={task => openTask(task.id)} selectedTaskId={selectedTaskId}
+                      selectedIds={selectedIds} onToggleSelect={toggleSelect} />
                   ))}
                 </div>
               </DragDropContext>
@@ -212,6 +255,16 @@ export default function KanbanPage() {
           onSelectSprint={setActiveSprint}
         />
       )}
+
+      {/* Bulk action bar */}
+      <BulkActionBar
+        count={selectedIds.size}
+        statuses={project?.statuses || []}
+        members={members}
+        onUpdate={(updates) => bulkUpdate.mutate({ task_ids: [...selectedIds], action: "update", updates })}
+        onDelete={() => { bulkUpdate.mutate({ task_ids: [...selectedIds], action: "delete" }); setSelectedIds(new Set()); }}
+        onClear={() => setSelectedIds(new Set())}
+      />
 
       {/* Task Detail Panel */}
       {selectedTaskId && (

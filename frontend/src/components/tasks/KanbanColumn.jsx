@@ -2,7 +2,7 @@ import { Droppable } from "@hello-pangea/dnd";
 import { Plus } from "lucide-react";
 import TaskCard from "./TaskCard";
 
-export default function KanbanColumn({ column, tasks, onAddTask, onTaskClick, selectedTaskId }) {
+export default function KanbanColumn({ column, tasks, onAddTask, onTaskClick, selectedTaskId, selectedIds = new Set(), onToggleSelect }) {
   return (
     <div className="flex flex-col w-[272px] flex-shrink-0">
       {/* Column header */}
@@ -44,6 +44,8 @@ export default function KanbanColumn({ column, tasks, onAddTask, onTaskClick, se
                 index={index}
                 onClick={onTaskClick}
                 isSelected={task.id === selectedTaskId}
+                isBulkSelected={selectedIds.has(task.id)}
+                onToggleSelect={onToggleSelect}
               />
             ))}
             {provided.placeholder}

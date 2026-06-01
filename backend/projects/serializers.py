@@ -2,6 +2,7 @@ from rest_framework import serializers
 from .models import (
     Project, TaskStatus, Task, SubTask, TaskComment, TaskActivity, Label,
     ProjectField, TaskFieldValue, SavedView, Sprint,
+    TaskAttachment, TaskDependency,
 )
 from accounts.serializers import UserSerializer
 
@@ -139,14 +140,59 @@ class TaskSerializer(serializers.ModelSerializer):
         return instance
 
 
+class TaskAttachmentSerializer(serializers.ModelSerializer):
+    uploaded_by  = UserSerializer(read_only=True)
+    url          = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = TaskAttachment
+        fields = ["id", "original_name", "file_size", "mime_type", "url", "uploaded_by", "created_at"]
+
+    def get_url(self, obj):
+        request = self.context.get("request")
+        if request:
+            return request.build_absolute_uri(obj.file.url)
+        return obj.file.url
+
+
+class MinimalTaskSerializer(serializers.ModelSerializer):
+    status_detail = TaskStatusSerializer(source="status", read_only=True)
+
+    class Meta:
+        model  = Task
+        fields = ["id", "title", "priority", "status_detail"]
+
+
+class TaskDependencySerializer(serializers.ModelSerializer):
+    task = MinimalTaskSerializer(read_only=True)
+
+    class Meta:
+        model  = TaskDependency
+        fields = ["id", "task"]
+
+
 class TaskDetailSerializer(TaskSerializer):
-    subtasks     = SubTaskSerializer(many=True, read_only=True)
-    comments     = TaskCommentSerializer(many=True, read_only=True)
-    activities   = TaskActivitySerializer(many=True, read_only=True)
-    field_values = TaskFieldValueSerializer(many=True, read_only=True)
+    subtasks      = SubTaskSerializer(many=True, read_only=True)
+    comments      = TaskCommentSerializer(many=True, read_only=True)
+    activities    = TaskActivitySerializer(many=True, read_only=True)
+    field_values  = TaskFieldValueSerializer(many=True, read_only=True)
+    attachments   = TaskAttachmentSerializer(many=True, read_only=True)
+    blocked_by    = serializers.SerializerMethodField()
+    blocking      = serializers.SerializerMethodField()
 
     class Meta(TaskSerializer.Meta):
-        fields = TaskSerializer.Meta.fields + ["subtasks", "comments", "activities", "field_values"]
+        fields = TaskSerializer.Meta.fields + [
+            "subtasks", "comments", "activities", "field_values",
+            "attachments", "blocked_by", "blocking",
+        ]
+
+    def get_blocked_by(self, obj):
+        deps = obj.blocked_by_deps.select_related("blocker__status")
+        return [{"id": str(d.id), "task": MinimalTaskSerializer(d.blocker).data} for d in deps]
+
+    def get_blocking(self, obj):
+        deps = obj.blocking_deps.select_related("blocked__status")
+        return [{"id": str(d.id), "task": MinimalTaskSerializer(d.blocked).data} for d in deps]
 
 
 class TaskSearchSerializer(serializers.ModelSerializer):

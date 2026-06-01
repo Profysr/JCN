@@ -10,7 +10,7 @@ const PRIORITY_CONFIG = {
   no_priority: { icon: Minus,       dot: "bg-muted-foreground/30", label: "" },
 };
 
-export default function TaskCard({ task, index, onClick, isSelected }) {
+export default function TaskCard({ task, index, onClick, isSelected, isBulkSelected, onToggleSelect }) {
   const priority = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.no_priority;
 
   const subtaskPct = task.subtask_count > 0
@@ -26,15 +26,35 @@ export default function TaskCard({ task, index, onClick, isSelected }) {
           {...provided.dragHandleProps}
           onClick={() => onClick?.(task)}
           className={cn(
-            "bg-card border border-border rounded-md p-2.5 cursor-pointer select-none",
+            "bg-card border border-border rounded-md p-2.5 cursor-pointer select-none relative group",
             "transition-colors duration-100",
             "hover:border-primary/40 hover:bg-white",
             snapshot.isDragging && "shadow-lg border-primary/30 rotate-[0.5deg] opacity-95",
-            isSelected && "border-primary bg-primary/5"
+            isSelected && "border-primary bg-primary/5",
+            isBulkSelected && "border-primary bg-primary/8 ring-1 ring-primary/30"
           )}
         >
+          {/* Bulk-select checkbox (hover or selected) */}
+          {onToggleSelect && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onToggleSelect(task.id); }}
+              className={cn(
+                "absolute top-2 left-2 w-4 h-4 rounded border flex items-center justify-center transition-all z-10",
+                isBulkSelected
+                  ? "bg-primary border-primary opacity-100"
+                  : "bg-card border-border opacity-0 group-hover:opacity-100"
+              )}
+            >
+              {isBulkSelected && (
+                <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 10 8" fill="none">
+                  <path d="M1 4l3 3 5-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              )}
+            </button>
+          )}
+
           {/* Priority dot + Labels row */}
-          <div className="flex items-center gap-1.5 mb-2">
+          <div className={cn("flex items-center gap-1.5 mb-2", onToggleSelect && "pl-5")}>
             <span
               className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", priority.dot)}
               title={priority.label}

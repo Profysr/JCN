@@ -65,6 +65,7 @@ class Notification(models.Model):
     class Verb(models.TextChoices):
         TASK_ASSIGNED  = "task_assigned",  "assigned you a task"
         TASK_COMMENTED = "task_commented", "commented on your task"
+        TASK_MENTIONED = "task_mentioned", "mentioned you in a comment"
 
     id        = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     recipient = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notifications")

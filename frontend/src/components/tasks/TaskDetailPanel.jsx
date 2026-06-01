@@ -3,13 +3,17 @@ import { useParams } from "react-router-dom";
 import { format } from "date-fns";
 import {
   X, Flag, Calendar, User, CheckSquare, MessageSquare,
-  ChevronDown, Trash2, Plus, Check, Activity, Tag,
+  ChevronDown, Trash2, Plus, Check, Activity, Tag, Paperclip, Link2,
 } from "lucide-react";
 import { useTaskDetail, useUpdateTaskDetail, useCreateComment, useDeleteComment, useCreateSubtask, useToggleSubtask, useDeleteSubtask } from "@/hooks/useTaskDetail";
 import { useUpsertFieldValue } from "@/hooks/useCustomFields";
+import { useMembers } from "@/hooks/useMembers";
 import { useAuthStore } from "@/store/authStore";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import MentionTextarea from "@/components/tasks/MentionTextarea";
+import TaskAttachmentsSection from "@/components/tasks/TaskAttachmentsSection";
+import TaskDependenciesSection from "@/components/tasks/TaskDependenciesSection";
 
 const LABEL_COLORS = ["#6366f1","#ec4899","#f59e0b","#22c55e","#3b82f6","#ef4444","#8b5cf6","#14b8a6"];
 
@@ -24,6 +28,7 @@ const PRIORITY_OPTIONS = [
 export default function TaskDetailPanel({ taskId, projectStatuses = [], projectLabels = [], projectFields = [], onCreateLabel, onClose }) {
   const { workspaceSlug, projectId } = useParams();
   const { user } = useAuthStore();
+  const { data: members = [] } = useMembers(workspaceSlug);
   const { data: task, isLoading } = useTaskDetail(workspaceSlug, projectId, taskId);
   const update = useUpdateTaskDetail(workspaceSlug, projectId, taskId);
   const upsertField = useUpsertFieldValue(workspaceSlug, projectId, taskId);
@@ -297,19 +302,33 @@ export default function TaskDetailPanel({ taskId, projectStatuses = [], projectL
               ))}
             </div>
             <form onSubmit={handleCommentSubmit} className="flex gap-2 items-end">
-              <textarea
-                className="flex-1 text-sm border rounded-md bg-transparent outline-none p-2 placeholder:text-muted-foreground focus:border-primary resize-none"
-                placeholder="Write a comment…"
-                rows={2}
-                value={commentBody}
-                onChange={(e) => setCommentBody(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleCommentSubmit(e); } }}
-              />
+              <div className="flex-1">
+                <MentionTextarea
+                  value={commentBody}
+                  onChange={setCommentBody}
+                  onSubmit={handleCommentSubmit}
+                  members={members}
+                />
+              </div>
               <Button type="submit" size="sm" disabled={!commentBody.trim() || createComment.isPending}>
                 Send
               </Button>
             </form>
           </div>
+
+          {/* Attachments */}
+          <TaskAttachmentsSection
+            workspaceSlug={workspaceSlug}
+            projectId={projectId}
+            taskId={taskId}
+          />
+
+          {/* Dependencies */}
+          <TaskDependenciesSection
+            workspaceSlug={workspaceSlug}
+            projectId={projectId}
+            taskId={taskId}
+          />
 
           {/* Activity */}
           {task.activities?.length > 0 && (

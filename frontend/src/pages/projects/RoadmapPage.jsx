@@ -58,20 +58,33 @@ function ProjectRoadmapRow({ project, workspaceSlug, colorBase }) {
   const updateSprint = useUpdateSprint(workspaceSlug, project.id);
   const containerRef = useRef(null);
 
+  // Sticky date range — only ever EXPANDS, never shrinks.
+  // This prevents the timeline from jumping when a sprint is dragged to a shorter range.
+  const rangeRef = useRef(null);
+
   const datedSprints = sprints.filter(s => s.start_date && s.end_date);
   if (datedSprints.length === 0 && sprints.length === 0) return null;
 
-  // Compute date range from all sprints, or default to current month±1
   const today = new Date();
-  const allDates = datedSprints.flatMap(s => [toDate(s.start_date), toDate(s.end_date)]);
-  const minDate = allDates.length
-    ? new Date(Math.min(...allDates.map(d => d.getTime())))
-    : new Date(today.getFullYear(), today.getMonth() - 1, 1);
-  const maxDate = allDates.length
-    ? new Date(Math.max(...allDates.map(d => d.getTime())))
-    : new Date(today.getFullYear(), today.getMonth() + 2, 0);
-  minDate.setDate(1);
-  maxDate.setDate(maxDate.getDate() + 14);
+
+  if (datedSprints.length > 0) {
+    const allDates = datedSprints.flatMap(s => [toDate(s.start_date), toDate(s.end_date)]);
+    const rawMin = new Date(Math.min(...allDates.map(d => d.getTime())));
+    const rawMax = new Date(Math.max(...allDates.map(d => d.getTime())));
+    // Pad 1 month before the first sprint and 2 months after the last sprint
+    const paddedMin = new Date(rawMin.getFullYear(), rawMin.getMonth() - 1, 1);
+    const paddedMax = new Date(rawMax.getFullYear(), rawMax.getMonth() + 2, 0);
+
+    if (!rangeRef.current) {
+      rangeRef.current = { minDate: paddedMin, maxDate: paddedMax };
+    } else {
+      if (paddedMin < rangeRef.current.minDate) rangeRef.current.minDate = paddedMin;
+      if (paddedMax > rangeRef.current.maxDate) rangeRef.current.maxDate = paddedMax;
+    }
+  }
+
+  const minDate = rangeRef.current?.minDate ?? new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  const maxDate = rangeRef.current?.maxDate ?? new Date(today.getFullYear(), today.getMonth() + 3, 0);
   const totalDays = Math.max(daysBetween(minDate, maxDate), 1);
 
   // Month header segments

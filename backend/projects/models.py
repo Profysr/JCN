@@ -197,6 +197,38 @@ class Sprint(models.Model):
         return f"{self.project.name} / {self.name}"
 
 
+class TaskAttachment(models.Model):
+    """File attached to a task (v1.2.0)."""
+    id            = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    task          = models.ForeignKey(Task, on_delete=models.CASCADE, related_name="attachments")
+    file          = models.FileField(upload_to="task_attachments/%Y/%m/")
+    original_name = models.CharField(max_length=255)
+    file_size     = models.PositiveIntegerField()          # bytes
+    mime_type     = models.CharField(max_length=100, blank=True)
+    uploaded_by   = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
+    created_at    = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.original_name} on {self.task.title}"
+
+
+class TaskDependency(models.Model):
+    """Task blocking relationship — blocker must finish before blocked can start (v1.4.0)."""
+    id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    blocker    = models.ForeignKey(Task, on_delete=models.CASCADE, related_name="blocking_deps")
+    blocked    = models.ForeignKey(Task, on_delete=models.CASCADE, related_name="blocked_by_deps")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ["blocker", "blocked"]
+
+    def __str__(self):
+        return f"{self.blocker.title} blocks {self.blocked.title}"
+
+
 class TaskActivity(models.Model):
     """Immutable audit log — one row per event on a task."""
     class Verb(models.TextChoices):

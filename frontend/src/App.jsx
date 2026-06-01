@@ -12,6 +12,7 @@ import KanbanPage from "@/pages/projects/KanbanPage";
 import MembersPage from "@/pages/workspace/MembersPage";
 import SettingsPage from "@/pages/workspace/SettingsPage";
 import RoadmapPage from "@/pages/projects/RoadmapPage";
+import AnalyticsPage from "@/pages/workspace/AnalyticsPage";
 import AcceptInvitePage from "@/pages/invite/AcceptInvitePage";
 import CommandPalette from "@/components/CommandPalette";
 
@@ -47,6 +48,7 @@ export default function App() {
             <Route path="projects" element={<ProjectsPage />} />
             <Route path="projects/:projectId" element={<KanbanPage />} />
             <Route path="roadmap" element={<RoadmapPage />} />
+            <Route path="analytics" element={<AnalyticsPage />} />
             <Route path="members" element={<MembersPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>

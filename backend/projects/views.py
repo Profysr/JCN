@@ -1,18 +1,30 @@
 from rest_framework import permissions, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.parsers import MultiPartParser, FormParser
 from django.shortcuts import get_object_or_404
+from django.http import HttpResponse
+from django.db.models import Count
+from django.db.models.functions import TruncDate
+from django.utils import timezone
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from workspaces.models import Workspace, WorkspaceMember, Notification
 import datetime
-from .models import Project, TaskStatus, Task, SubTask, TaskComment, TaskActivity, Label, ProjectField, TaskFieldValue, SavedView, Sprint
+import csv
+import re
+from .models import (
+    Project, TaskStatus, Task, SubTask, TaskComment, TaskActivity, Label,
+    ProjectField, TaskFieldValue, SavedView, Sprint,
+    TaskAttachment, TaskDependency,
+)
 from .serializers import (
     ProjectSerializer, TaskStatusSerializer,
     TaskSerializer, TaskDetailSerializer,
     SubTaskSerializer, TaskCommentSerializer, TaskActivitySerializer,
     LabelSerializer, TaskSearchSerializer, ProjectSearchSerializer,
     ProjectFieldSerializer, TaskFieldValueSerializer, SavedViewSerializer, SprintSerializer,
+    TaskAttachmentSerializer, MinimalTaskSerializer,
 )
 
 
@@ -315,15 +327,32 @@ class TaskCommentListCreateView(APIView):
         return Response(TaskCommentSerializer(task.comments.select_related("author").all(), many=True, context={"request": request}).data)
 
     def post(self, request, workspace_slug, project_id, task_id):
-        task = self.get_task(workspace_slug, project_id, task_id, request.user)
+        workspace = get_workspace_for_user(workspace_slug, request.user)
+        project = get_object_or_404(Project, id=project_id, workspace=workspace)
+        task = get_object_or_404(Task, id=task_id, project=project)
         serializer = TaskCommentSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         comment = serializer.save(task=task)
         log_activity(task, request.user, TaskActivity.Verb.COMMENTED)
-        # Notify assignee and task creator (skip commenter, skip duplicates)
+        # Notify assignee and task creator
         recipients = {u for u in [task.assignee, task.created_by] if u and u != request.user}
         for recipient in recipients:
-            notify(recipient, request.user, Notification.Verb.TASK_COMMENTED, project.workspace, task)
+            notify(recipient, request.user, Notification.Verb.TASK_COMMENTED, workspace, task)
+        # Parse @mentions and notify mentioned users
+        mentions = re.findall(r'@(\w+)', comment.body)
+        if mentions:
+            from accounts.models import User as UserModel
+            workspace_users = UserModel.objects.filter(
+                workspace_memberships__workspace=workspace
+            ).exclude(id=request.user.id)
+            for mention in set(mentions):
+                for user in workspace_users:
+                    name_parts = (user.full_name or "").lower().split()
+                    email_prefix = user.email.split("@")[0].lower()
+                    if mention.lower() in name_parts or mention.lower() == email_prefix:
+                        if user not in recipients:
+                            notify(user, request.user, Notification.Verb.TASK_MENTIONED, workspace, task)
+                            recipients.add(user)
         data = TaskCommentSerializer(comment, context={"request": request}).data
         broadcast(workspace_slug, "comment.created", {
             "task_id": str(task.id),
@@ -644,3 +673,244 @@ class SprintBurndownView(APIView):
             "total": total, "completed": completed, "remaining": total - completed,
             "days": days, "ideal": ideal, "actual": actual,
         })
+
+
+# ── Bulk Actions (v1.1.0) ─────────────────────────────────────────────────────
+
+class TaskBulkUpdateView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, workspace_slug, project_id):
+        workspace = get_workspace_for_user(workspace_slug, request.user)
+        project = get_object_or_404(Project, id=project_id, workspace=workspace)
+        task_ids = request.data.get("task_ids", [])
+        action   = request.data.get("action", "update")
+        updates  = request.data.get("updates", {})
+
+        if not task_ids:
+            return Response({"error": "task_ids required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        tasks = Task.objects.filter(id__in=task_ids, project=project)
+
+        if action == "delete":
+            count = tasks.count()
+            tasks.delete()
+            broadcast(workspace_slug, "tasks.bulk_deleted", {"task_ids": task_ids, "project_id": str(project_id)})
+            return Response({"deleted": count})
+
+        if action == "update":
+            update_kwargs = {}
+            if "status_id" in updates and updates["status_id"]:
+                update_kwargs["status_id"] = updates["status_id"]
+            if "priority" in updates and updates["priority"]:
+                update_kwargs["priority"] = updates["priority"]
+            if "assignee_id" in updates:
+                update_kwargs["assignee_id"] = updates["assignee_id"] or None
+            if update_kwargs:
+                tasks.update(**update_kwargs)
+            updated = TaskSerializer(tasks.select_related("status", "assignee"), many=True).data
+            broadcast(workspace_slug, "tasks.bulk_updated", {"tasks": updated, "project_id": str(project_id)})
+            return Response({"updated": len(updated), "tasks": updated})
+
+        return Response({"error": "Invalid action"}, status=status.HTTP_400_BAD_REQUEST)
+
+
+# ── File Attachments (v1.2.0) ─────────────────────────────────────────────────
+
+class TaskAttachmentListCreateView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes     = [MultiPartParser, FormParser]
+
+    def _get_task(self, workspace_slug, project_id, task_id, user):
+        workspace = get_workspace_for_user(workspace_slug, user)
+        project   = get_object_or_404(Project, id=project_id, workspace=workspace)
+        return get_object_or_404(Task, id=task_id, project=project)
+
+    def get(self, request, workspace_slug, project_id, task_id):
+        task = self._get_task(workspace_slug, project_id, task_id, request.user)
+        return Response(TaskAttachmentSerializer(
+            task.attachments.select_related("uploaded_by").all(),
+            many=True, context={"request": request},
+        ).data)
+
+    def post(self, request, workspace_slug, project_id, task_id):
+        task = self._get_task(workspace_slug, project_id, task_id, request.user)
+        file = request.FILES.get("file")
+        if not file:
+            return Response({"error": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
+        if file.size > 20 * 1024 * 1024:  # 20 MB limit
+            return Response({"error": "File exceeds 20 MB limit"}, status=status.HTTP_400_BAD_REQUEST)
+        attachment = TaskAttachment.objects.create(
+            task=task, file=file,
+            original_name=file.name,
+            file_size=file.size,
+            mime_type=file.content_type or "",
+            uploaded_by=request.user,
+        )
+        return Response(
+            TaskAttachmentSerializer(attachment, context={"request": request}).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class TaskAttachmentDeleteView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def delete(self, request, workspace_slug, project_id, task_id, attachment_id):
+        workspace  = get_workspace_for_user(workspace_slug, request.user)
+        project    = get_object_or_404(Project, id=project_id, workspace=workspace)
+        task       = get_object_or_404(Task, id=task_id, project=project)
+        attachment = get_object_or_404(TaskAttachment, id=attachment_id, task=task)
+        attachment.file.delete(save=False)
+        attachment.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ── Task Dependencies (v1.4.0) ────────────────────────────────────────────────
+
+class TaskDependencyListCreateView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _get_task(self, workspace_slug, project_id, task_id, user):
+        workspace = get_workspace_for_user(workspace_slug, user)
+        project   = get_object_or_404(Project, id=project_id, workspace=workspace)
+        return get_object_or_404(Task, id=task_id, project=project), project
+
+    def get(self, request, workspace_slug, project_id, task_id):
+        task, _ = self._get_task(workspace_slug, project_id, task_id, request.user)
+        blocked_by = [
+            {"id": str(d.id), "task": MinimalTaskSerializer(d.blocker).data}
+            for d in task.blocked_by_deps.select_related("blocker__status").all()
+        ]
+        blocking = [
+            {"id": str(d.id), "task": MinimalTaskSerializer(d.blocked).data}
+            for d in task.blocking_deps.select_related("blocked__status").all()
+        ]
+        return Response({"blocked_by": blocked_by, "blocking": blocking})
+
+    def post(self, request, workspace_slug, project_id, task_id):
+        task, project = self._get_task(workspace_slug, project_id, task_id, request.user)
+        dep_task_id = request.data.get("task_id")
+        dep_type    = request.data.get("type", "blocked_by")  # "blocked_by" | "blocks"
+
+        if not dep_task_id:
+            return Response({"error": "task_id required"}, status=status.HTTP_400_BAD_REQUEST)
+        dep_task = get_object_or_404(Task, id=dep_task_id, project=project)
+        if dep_task.id == task.id:
+            return Response({"error": "A task cannot block itself"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if dep_type == "blocked_by":
+            dep, created = TaskDependency.objects.get_or_create(blocker=dep_task, blocked=task)
+        else:
+            dep, created = TaskDependency.objects.get_or_create(blocker=task, blocked=dep_task)
+
+        return Response({"id": str(dep.id), "created": created}, status=status.HTTP_201_CREATED)
+
+
+class TaskDependencyDeleteView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def delete(self, request, workspace_slug, project_id, task_id, dep_id):
+        workspace = get_workspace_for_user(workspace_slug, request.user)
+        project   = get_object_or_404(Project, id=project_id, workspace=workspace)
+        task      = get_object_or_404(Task, id=task_id, project=project)
+        dep       = get_object_or_404(
+            TaskDependency, id=dep_id
+        )
+        if dep.blocker.project != project or dep.blocked.project != project:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        dep.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ── Analytics (v1.5.0) ───────────────────────────────────────────────────────
+
+class WorkspaceAnalyticsView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, workspace_slug):
+        workspace = get_workspace_for_user(workspace_slug, request.user)
+        all_tasks = Task.objects.filter(project__workspace=workspace)
+
+        tasks_by_status = list(
+            all_tasks.values("status__name", "status__color")
+            .annotate(count=Count("id"))
+            .order_by("-count")
+        )
+        tasks_by_priority = list(
+            all_tasks.values("priority").annotate(count=Count("id")).order_by("-count")
+        )
+
+        members = workspace.members.select_related("user").all()
+        workload = sorted([
+            {
+                "name": m.user.full_name or m.user.email.split("@")[0],
+                "email": m.user.email,
+                "assigned": all_tasks.filter(assignee=m.user).count(),
+            }
+            for m in members
+        ], key=lambda x: x["assigned"], reverse=True)
+
+        thirty_days_ago = timezone.now() - datetime.timedelta(days=30)
+        trend_qs = (
+            TaskActivity.objects
+            .filter(
+                task__project__workspace=workspace,
+                verb=TaskActivity.Verb.STATUS,
+                created_at__gte=thirty_days_ago,
+            )
+            .annotate(day=TruncDate("created_at"))
+            .values("day")
+            .annotate(count=Count("id"))
+            .order_by("day")
+        )
+
+        return Response({
+            "overview": {
+                "projects": workspace.projects.count(),
+                "tasks": all_tasks.count(),
+                "members": members.count(),
+                "open_tasks": all_tasks.filter(status__order__lt=3).count(),
+            },
+            "tasks_by_status":   tasks_by_status,
+            "tasks_by_priority": tasks_by_priority,
+            "workload": workload,
+            "completion_trend": [
+                {"date": str(item["day"]), "count": item["count"]}
+                for item in trend_qs
+            ],
+        })
+
+
+# ── CSV Export (v1.7.0) ───────────────────────────────────────────────────────
+
+class TaskExportView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, workspace_slug, project_id):
+        workspace = get_workspace_for_user(workspace_slug, request.user)
+        project   = get_object_or_404(Project, id=project_id, workspace=workspace)
+        tasks     = Task.objects.filter(project=project).select_related(
+            "status", "assignee", "sprint", "created_by"
+        ).prefetch_related("labels")
+
+        response = HttpResponse(content_type="text/csv")
+        safe_name = project.name.replace(" ", "_")
+        response["Content-Disposition"] = f'attachment; filename="{safe_name}-tasks.csv"'
+
+        writer = csv.writer(response)
+        writer.writerow(["ID", "Title", "Status", "Priority", "Assignee", "Due Date", "Sprint", "Labels", "Created"])
+        for task in tasks:
+            writer.writerow([
+                str(task.id)[:8],
+                task.title,
+                task.status.name if task.status else "",
+                task.get_priority_display(),
+                task.assignee.full_name if task.assignee else "",
+                str(task.due_date) if task.due_date else "",
+                task.sprint.name if task.sprint else "",
+                ", ".join(l.name for l in task.labels.all()),
+                task.created_at.strftime("%Y-%m-%d"),
+            ])
+        return response
+

@@ -5,7 +5,7 @@ import api from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, FolderKanban, Users, Settings, LogOut,
-  ChevronDown, Search, Map,
+  ChevronDown, Search, Map, BarChart2,
 } from "lucide-react";
 import NotificationBell from "@/components/layout/NotificationBell";
 
@@ -30,8 +30,9 @@ export default function AppLayout({ onOpenPalette }) {
   const navLinks = [
     { to: `/w/${workspaceSlug}`,          icon: LayoutDashboard, label: "Dashboard", end: true },
     { to: `/w/${workspaceSlug}/projects`, icon: FolderKanban,    label: "Projects" },
-    { to: `/w/${workspaceSlug}/roadmap`,  icon: Map,             label: "Roadmap" },
-    { to: `/w/${workspaceSlug}/members`,  icon: Users,           label: "Members" },
+    { to: `/w/${workspaceSlug}/roadmap`,    icon: Map,      label: "Roadmap" },
+    { to: `/w/${workspaceSlug}/analytics`, icon: BarChart2, label: "Analytics" },
+    { to: `/w/${workspaceSlug}/members`,  icon: Users,    label: "Members" },
     { to: `/w/${workspaceSlug}/settings`, icon: Settings,        label: "Settings" },
   ];
 
@@ -42,7 +43,7 @@ export default function AppLayout({ onOpenPalette }) {
     <div className="flex h-screen overflow-hidden bg-background">
       {/* Sidebar */}
       <aside
-        className="w-64 flex-shrink-0 border-r flex flex-col overflow-hidden"
+        className="w-64 flex-shrink-0 border-r flex flex-col"
         style={{ background: "hsl(var(--sidebar-bg))" }}
       >
         {/* Workspace switcher */}

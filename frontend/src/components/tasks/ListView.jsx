@@ -11,12 +11,13 @@ const PRIORITY_CONFIG = {
 
 const COL_HEADER = "px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap";
 
-export default function ListView({ tasks, statuses, onTaskClick, selectedTaskId }) {
+export default function ListView({ tasks, statuses, onTaskClick, selectedTaskId, selectedIds = new Set(), onToggleSelect }) {
   return (
     <div className="flex-1 overflow-auto">
       <table className="w-full text-sm border-collapse">
         <thead className="sticky top-0 z-10">
           <tr className="border-b bg-secondary">
+            {onToggleSelect && <th className="w-8 pl-3 py-2" />}
             <th className={cn(COL_HEADER, "w-[40%] pl-4")}>Title</th>
             <th className={COL_HEADER}>Status</th>
             <th className={COL_HEADER}>Priority</th>
@@ -37,7 +38,8 @@ export default function ListView({ tasks, statuses, onTaskClick, selectedTaskId 
             const priorityCfg = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.no_priority;
             const PriorityIcon = priorityCfg.icon;
             const col = statuses.find((s) => s.id === task.status_detail?.id);
-            const isSelected = selectedTaskId === task.id;
+            const isSelected    = selectedTaskId === task.id;
+            const isBulkSelected = selectedIds.has(task.id);
 
             return (
               <tr
@@ -45,11 +47,33 @@ export default function ListView({ tasks, statuses, onTaskClick, selectedTaskId 
                 onClick={() => onTaskClick(task)}
                 className={cn(
                   "cursor-pointer transition-colors duration-75",
-                  isSelected
+                  isBulkSelected
+                    ? "bg-primary/8"
+                    : isSelected
                     ? "bg-primary/5 border-l-2 border-l-primary"
                     : "hover:bg-accent/60 bg-card"
                 )}
               >
+                {/* Checkbox */}
+                {onToggleSelect && (
+                  <td className="pl-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={() => onToggleSelect(task.id)}
+                      className={cn(
+                        "w-4 h-4 rounded border flex items-center justify-center transition-all",
+                        isBulkSelected
+                          ? "bg-primary border-primary"
+                          : "border-border hover:border-primary bg-background"
+                      )}
+                    >
+                      {isBulkSelected && (
+                        <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 10 8" fill="none">
+                          <path d="M1 4l3 3 5-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      )}
+                    </button>
+                  </td>
+                )}
                 {/* Title */}
                 <td className="pl-4 pr-3 py-2.5">
                   <div className="flex items-center gap-2">

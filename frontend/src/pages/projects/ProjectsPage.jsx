@@ -78,17 +78,23 @@ export default function ProjectsPage() {
                   {project.description}
                 </p>
               )}
-              <div className="mt-4 space-y-1.5">
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>{project.task_count} tasks</span>
-                  <span className="font-medium">{pct}%</span>
-                </div>
-                <div className="h-1 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-primary rounded-full transition-all"
-                    style={{ width: `${pct}%` }}
-                  />
-                </div>
+              <div className="mt-4">
+                {project.task_count > 0 ? (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>{project.task_count} tasks</span>
+                      <span className="font-medium">{pct}%</span>
+                    </div>
+                    <div className="h-1 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-primary rounded-full transition-all"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">No tasks yet</p>
+                )}
               </div>
             </button>
           );
