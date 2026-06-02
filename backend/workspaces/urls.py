@@ -5,6 +5,7 @@ from .views import (
     InviteMemberView, WorkspaceInviteListView, WorkspaceInviteCancelView,
     InviteDetailView, AcceptInviteView,
     NotificationListView, NotificationMarkReadView,
+    OnboardingStateView, WorkspaceTemplateListView, WorkspaceTemplateApplyView,
 )
 
 urlpatterns = [
@@ -28,4 +29,9 @@ urlpatterns = [
     # Notifications
     path("notifications/", NotificationListView.as_view()),
     path("notifications/mark-read/", NotificationMarkReadView.as_view()),
+
+    # Onboarding (v2.3.0)
+    path("workspaces/<slug:slug>/onboarding/",          OnboardingStateView.as_view()),
+    path("workspaces/<slug:slug>/templates/",           WorkspaceTemplateListView.as_view()),
+    path("workspaces/<slug:slug>/templates/apply/",     WorkspaceTemplateApplyView.as_view()),
 ]

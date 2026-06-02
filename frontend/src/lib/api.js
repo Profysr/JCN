@@ -28,8 +28,9 @@ api.interceptors.response.use(
           original.headers.Authorization = `Bearer ${data.access}`;
           return api(original);
         } catch {
-          localStorage.removeItem("access_token");
-          localStorage.removeItem("refresh_token");
+          // Wipe all token storage variants before forcing re-login
+          ["access_token", "refresh_token", "accessToken", "refreshToken", "auth"]
+            .forEach((k) => localStorage.removeItem(k));
           window.location.href = "/login";
         }
       }

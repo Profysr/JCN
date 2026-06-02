@@ -3,6 +3,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.shortcuts import get_object_or_404
+from django.db import models as django_models
 from django.http import HttpResponse
 from django.db.models import Count
 from django.db.models.functions import TruncDate
@@ -17,6 +18,8 @@ from .models import (
     Project, TaskStatus, Task, SubTask, TaskComment, TaskActivity, Label,
     ProjectField, TaskFieldValue, SavedView, Sprint,
     TaskAttachment, TaskDependency,
+    ProjectMember, GuestToken,
+    Board,
 )
 from .serializers import (
     ProjectSerializer, TaskStatusSerializer,
@@ -25,7 +28,49 @@ from .serializers import (
     LabelSerializer, TaskSearchSerializer, ProjectSearchSerializer,
     ProjectFieldSerializer, TaskFieldValueSerializer, SavedViewSerializer, SprintSerializer,
     TaskAttachmentSerializer, MinimalTaskSerializer,
+    ProjectMemberSerializer, GuestTokenSerializer,
+    BoardSerializer,
 )
+from .permissions import has_project_permission, get_effective_role, log_audit
+
+# ── Board templates (v2.2.0) ─────────────────────────────────────────────────
+BOARD_TEMPLATES = [
+    {
+        "key": "software_dev",
+        "name": "Software Development",
+        "description": "Agile workflow for engineering teams",
+        "board_type": "kanban",
+        "config": {},
+    },
+    {
+        "key": "marketing",
+        "name": "Marketing Campaign",
+        "description": "Track campaigns from idea to launch",
+        "board_type": "kanban",
+        "config": {},
+    },
+    {
+        "key": "product_launch",
+        "name": "Product Launch",
+        "description": "Coordinate cross-functional launch activities",
+        "board_type": "kanban",
+        "config": {},
+    },
+    {
+        "key": "bug_tracker",
+        "name": "Bug Tracker",
+        "description": "Capture, prioritise and resolve bugs",
+        "board_type": "list",
+        "config": {},
+    },
+    {
+        "key": "customer_requests",
+        "name": "Customer Requests",
+        "description": "Manage incoming feature requests and feedback",
+        "board_type": "list",
+        "config": {},
+    },
+]
 
 
 def get_workspace_for_user(slug, user):
@@ -83,7 +128,18 @@ class ProjectListCreateView(APIView):
 
     def get(self, request, workspace_slug):
         workspace = get_workspace_for_user(workspace_slug, request.user)
-        projects = workspace.projects.all()
+        is_admin = WorkspaceMember.objects.filter(
+            workspace=workspace, user=request.user, role=WorkspaceMember.Role.ADMIN
+        ).exists()
+
+        if is_admin:
+            projects = workspace.projects.all()
+        else:
+            # Exclude private projects the user is not explicitly a member of
+            public_qs  = workspace.projects.filter(is_private=False)
+            private_qs = workspace.projects.filter(is_private=True, project_members__user=request.user)
+            projects = (public_qs | private_qs).distinct()
+
         return Response(ProjectSerializer(projects, many=True, context={"request": request}).data)
 
     def post(self, request, workspace_slug):
@@ -942,4 +998,252 @@ class TaskExportView(APIView):
                 task.created_at.strftime("%Y-%m-%d"),
             ])
         return response
+
+
+# ── v2.1.0 — Project Members & Permissions ────────────────────────────────────
+
+def _require_project_admin(request, workspace_slug, project_id):
+    """Return (workspace, project) or raise 403/404."""
+    workspace = get_workspace_for_user(workspace_slug, request.user)
+    project   = get_object_or_404(Project, id=project_id, workspace=workspace)
+    if not has_project_permission(request.user, project, "admin"):
+        from rest_framework.exceptions import PermissionDenied
+        raise PermissionDenied("Project admin role required.")
+    return workspace, project
+
+
+class ProjectMemberListCreateView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, workspace_slug, project_id):
+        workspace = get_workspace_for_user(workspace_slug, request.user)
+        project   = get_object_or_404(Project, id=project_id, workspace=workspace)
+        if not has_project_permission(request.user, project, "view"):
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        members = project.project_members.select_related("user")
+        return Response(ProjectMemberSerializer(members, many=True).data)
+
+    def post(self, request, workspace_slug, project_id):
+        workspace, project = _require_project_admin(request, workspace_slug, project_id)
+        serializer = ProjectMemberSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        member = serializer.save(project=project, added_by=request.user)
+        log_audit(
+            actor=request.user, workspace=workspace,
+            action="project_member.added", resource_type="project_member",
+            resource_id=member.id, after={"user": str(member.user_id), "role": member.role},
+        )
+        return Response(ProjectMemberSerializer(member).data, status=status.HTTP_201_CREATED)
+
+
+class ProjectMemberDetailView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _get_member(self, workspace_slug, project_id, member_id, request):
+        workspace, project = _require_project_admin(request, workspace_slug, project_id)
+        member = get_object_or_404(ProjectMember, id=member_id, project=project)
+        return workspace, project, member
+
+    def patch(self, request, workspace_slug, project_id, member_id):
+        workspace, project, member = self._get_member(workspace_slug, project_id, member_id, request)
+        before_role = member.role
+        new_role = request.data.get("role")
+        if new_role not in [r.value for r in ProjectMember.Role]:
+            return Response({"role": "Invalid role."}, status=status.HTTP_400_BAD_REQUEST)
+        member.role = new_role
+        member.save(update_fields=["role"])
+        log_audit(
+            actor=request.user, workspace=workspace,
+            action="project_member.role_changed", resource_type="project_member",
+            resource_id=member.id,
+            before={"role": before_role}, after={"role": new_role},
+        )
+        return Response(ProjectMemberSerializer(member).data)
+
+    def delete(self, request, workspace_slug, project_id, member_id):
+        workspace, project, member = self._get_member(workspace_slug, project_id, member_id, request)
+        log_audit(
+            actor=request.user, workspace=workspace,
+            action="project_member.removed", resource_type="project_member",
+            resource_id=member.id,
+            before={"user": str(member.user_id), "role": member.role},
+        )
+        member.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class GuestTokenListCreateView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, workspace_slug, project_id):
+        workspace, project = _require_project_admin(request, workspace_slug, project_id)
+        tokens = project.guest_tokens.filter(is_active=True)
+        return Response(GuestTokenSerializer(tokens, many=True).data)
+
+    def post(self, request, workspace_slug, project_id):
+        workspace, project = _require_project_admin(request, workspace_slug, project_id)
+        serializer = GuestTokenSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        token = serializer.save(project=project, created_by=request.user)
+        log_audit(
+            actor=request.user, workspace=workspace,
+            action="guest_token.created", resource_type="guest_token",
+            resource_id=token.id,
+            after={"label": token.label, "expires_at": str(token.expires_at)},
+        )
+        return Response(GuestTokenSerializer(token).data, status=status.HTTP_201_CREATED)
+
+
+class GuestTokenDeleteView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def delete(self, request, workspace_slug, project_id, token_id):
+        workspace, project = _require_project_admin(request, workspace_slug, project_id)
+        token = get_object_or_404(GuestToken, id=token_id, project=project)
+        log_audit(
+            actor=request.user, workspace=workspace,
+            action="guest_token.revoked", resource_type="guest_token",
+            resource_id=token.id,
+        )
+        token.is_active = False
+        token.save(update_fields=["is_active"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ProjectPermissionsView(APIView):
+    """Return the current user's effective role for a project — used by frontend hooks."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, workspace_slug, project_id):
+        workspace = get_workspace_for_user(workspace_slug, request.user)
+        project   = get_object_or_404(Project, id=project_id, workspace=workspace)
+        role = get_effective_role(request.user, project)
+        if role is None:
+            return Response({"detail": "Not a member."}, status=status.HTTP_403_FORBIDDEN)
+        return Response({
+            "role": role,
+            "can_view":   has_project_permission(request.user, project, "view"),
+            "can_edit":   has_project_permission(request.user, project, "edit"),
+            "can_delete": has_project_permission(request.user, project, "delete"),
+            "can_admin":  has_project_permission(request.user, project, "admin"),
+        })
+
+
+# ── v2.2.0 — Multi-Board Architecture ────────────────────────────────────────
+
+class BoardListCreateView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, workspace_slug, project_id):
+        workspace = get_workspace_for_user(workspace_slug, request.user)
+        project   = get_object_or_404(Project, id=project_id, workspace=workspace)
+        boards    = project.boards.filter(is_archived=False)
+        return Response(BoardSerializer(boards, many=True).data)
+
+    def post(self, request, workspace_slug, project_id):
+        workspace = get_workspace_for_user(workspace_slug, request.user)
+        project   = get_object_or_404(Project, id=project_id, workspace=workspace)
+        if not has_project_permission(request.user, project, "edit"):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("Editor role required to create boards.")
+
+        # Apply template config if requested
+        template_key = request.data.get("template_key")
+        extra = {}
+        if template_key:
+            tmpl = next((t for t in BOARD_TEMPLATES if t["key"] == template_key), None)
+            if tmpl:
+                extra = {
+                    "name":        request.data.get("name", tmpl["name"]),
+                    "description": tmpl["description"],
+                    "board_type":  tmpl["board_type"],
+                    "config":      tmpl["config"],
+                }
+
+        data = {**request.data, **extra}
+        serializer = BoardSerializer(data=data)
+        serializer.is_valid(raise_exception=True)
+
+        # Determine order
+        last_order = project.boards.aggregate(m=django_models.Max("order"))["m"] or 0
+        board = serializer.save(project=project, created_by=request.user, order=last_order + 1)
+        return Response(BoardSerializer(board).data, status=status.HTTP_201_CREATED)
+
+
+class BoardDetailView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _get_board(self, workspace_slug, project_id, board_id, user):
+        workspace = get_workspace_for_user(workspace_slug, user)
+        project   = get_object_or_404(Project, id=project_id, workspace=workspace)
+        board     = get_object_or_404(Board, id=board_id, project=project)
+        return workspace, project, board
+
+    def patch(self, request, workspace_slug, project_id, board_id):
+        workspace, project, board = self._get_board(workspace_slug, project_id, board_id, request.user)
+        if not has_project_permission(request.user, project, "edit"):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("Editor role required.")
+
+        # Enforce single default
+        if request.data.get("is_default"):
+            project.boards.filter(is_default=True).update(is_default=False)
+
+        serializer = BoardSerializer(board, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+    def delete(self, request, workspace_slug, project_id, board_id):
+        workspace, project, board = self._get_board(workspace_slug, project_id, board_id, request.user)
+        if not has_project_permission(request.user, project, "admin"):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("Admin role required to delete boards.")
+        if board.is_default:
+            return Response({"detail": "Cannot delete the default board."}, status=status.HTTP_400_BAD_REQUEST)
+        board.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class BoardArchiveView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, workspace_slug, project_id, board_id):
+        workspace = get_workspace_for_user(workspace_slug, request.user)
+        project   = get_object_or_404(Project, id=project_id, workspace=workspace)
+        board     = get_object_or_404(Board, id=board_id, project=project)
+        if not has_project_permission(request.user, project, "admin"):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("Admin role required.")
+        if board.is_default:
+            return Response({"detail": "Cannot archive the default board."}, status=status.HTTP_400_BAD_REQUEST)
+        board.is_archived = not board.is_archived
+        board.save(update_fields=["is_archived"])
+        return Response(BoardSerializer(board).data)
+
+
+class BoardTemplatesView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, workspace_slug, project_id):
+        # Just validate membership
+        get_workspace_for_user(workspace_slug, request.user)
+        return Response(BOARD_TEMPLATES)
+
+
+class BoardReorderView(APIView):
+    """Accept [{id, order}] list and bulk-update order field."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, workspace_slug, project_id):
+        workspace = get_workspace_for_user(workspace_slug, request.user)
+        project   = get_object_or_404(Project, id=project_id, workspace=workspace)
+        if not has_project_permission(request.user, project, "edit"):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("Editor role required.")
+        for item in request.data:
+            Board.objects.filter(id=item["id"], project=project).update(order=item["order"])
+        boards = project.boards.filter(is_archived=False)
+        return Response(BoardSerializer(boards, many=True).data)
+
 

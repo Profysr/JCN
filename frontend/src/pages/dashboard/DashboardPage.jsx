@@ -5,6 +5,7 @@ import { useProjects } from "@/hooks/useProjects";
 import api from "@/lib/api";
 import { FolderKanban, Users, CheckSquare, Plus, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import GettingStartedChecklist from "@/components/dashboard/GettingStartedChecklist";
 
 const PROJECT_COLORS = [
   "#6366f1", "#ec4899", "#f59e0b", "#22c55e",
@@ -66,6 +67,11 @@ export default function DashboardPage() {
         <p className="text-muted-foreground mt-1 text-sm">
           Here's what's happening in your workspace.
         </p>
+      </div>
+
+      {/* Getting Started checklist */}
+      <div className="mb-8">
+        <GettingStartedChecklist />
       </div>
 
       {/* Stats */}

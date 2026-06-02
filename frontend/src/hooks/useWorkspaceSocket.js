@@ -19,11 +19,31 @@ export function useWorkspaceSocket(workspaceSlug) {
       const { type, payload } = JSON.parse(e.data);
 
       // ── Task events ────────────────────────────────────────────
-      if (type === "task.created" || type === "task.updated" || type === "task.moved") {
+      if (type === "task.created") {
+        qc.setQueryData(["tasks", workspaceSlug, payload.project_id], (old) => {
+          if (!old) return [payload];
+          return old.find((t) => t.id === payload.id) ? old : [...old, payload];
+        });
+      }
+
+      if (type === "task.updated") {
         qc.setQueryData(["tasks", workspaceSlug, payload.project_id], (old) => {
           if (!old) return old;
-          const exists = old.find((t) => t.id === payload.id);
-          return exists ? old.map((t) => (t.id === payload.id ? payload : t)) : [...old, payload];
+          return old.map((t) => (t.id === payload.id ? payload : t));
+        });
+      }
+
+      if (type === "task.moved") {
+        // Merge server data but KEEP the optimistic `order` value already in the cache.
+        // The server recalculates order server-side; our DnD position is already visually
+        // correct. Using the server order would re-sort columns and cause a visible flicker.
+        qc.setQueryData(["tasks", workspaceSlug, payload.project_id], (old) => {
+          if (!old) return old;
+          return old.map((t) =>
+            t.id === payload.id
+              ? { ...payload, order: t.order }   // preserve optimistic order
+              : t
+          );
         });
       }
 

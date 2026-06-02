@@ -3,7 +3,7 @@ from rest_framework.views import APIView
 from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
-from .models import Workspace, WorkspaceMember, WorkspaceInvite, Notification
+from .models import Workspace, WorkspaceMember, WorkspaceInvite, Notification, OnboardingState
 from .serializers import WorkspaceSerializer, WorkspaceMemberSerializer, WorkspaceInviteSerializer, NotificationSerializer
 
 
@@ -16,6 +16,12 @@ class WorkspaceListCreateView(APIView):
         return Response(serializer.data)
 
     def post(self, request):
+        if not request.user.can_create_workspace:
+            return Response(
+                {"detail": "Your account cannot create workspaces. "
+                           "Contact the workspace admin to get an invite."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         serializer = WorkspaceSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         serializer.save()
@@ -160,6 +166,11 @@ class AcceptInviteView(APIView):
         )
         invite.status = WorkspaceInvite.Status.ACCEPTED
         invite.save()
+        # Users who join via invite cannot create their own workspaces —
+        # they are consumers of an existing workspace, not workspace owners.
+        if request.user.can_create_workspace:
+            request.user.can_create_workspace = False
+            request.user.save(update_fields=["can_create_workspace"])
         return Response(WorkspaceSerializer(invite.workspace, context={"request": request}).data)
 
 
@@ -183,3 +194,181 @@ class NotificationMarkReadView(APIView):
         else:
             Notification.objects.filter(recipient=request.user, read=False).update(read=True)
         return Response({"status": "ok"})
+
+
+# ── v2.3.0 — Onboarding ───────────────────────────────────────────────────────
+
+WORKSPACE_TEMPLATES = [
+    {
+        "key": "software",
+        "name": "Software Team",
+        "description": "Sprint-based engineering workflow with bug tracking and feature planning.",
+        "icon": "💻",
+        "projects": [
+            {"name": "Sprint Board", "board_type": "scrum"},
+            {"name": "Bug Tracker",  "board_type": "list"},
+        ],
+    },
+    {
+        "key": "startup",
+        "name": "Startup",
+        "description": "Move fast across product, engineering and growth with a unified board.",
+        "icon": "🚀",
+        "projects": [
+            {"name": "Roadmap",     "board_type": "timeline"},
+            {"name": "Sprint",      "board_type": "scrum"},
+        ],
+    },
+    {
+        "key": "design",
+        "name": "Design Studio",
+        "description": "Creative project tracking from brief to delivery.",
+        "icon": "🎨",
+        "projects": [
+            {"name": "Active Projects", "board_type": "kanban"},
+            {"name": "Client Requests", "board_type": "list"},
+        ],
+    },
+    {
+        "key": "marketing",
+        "name": "Marketing Agency",
+        "description": "Campaign pipeline, content calendar and asset management.",
+        "icon": "📢",
+        "projects": [
+            {"name": "Campaigns",       "board_type": "kanban"},
+            {"name": "Content Calendar","board_type": "calendar"},
+        ],
+    },
+    {
+        "key": "education",
+        "name": "Education",
+        "description": "Course planning, assignments and student project tracking.",
+        "icon": "🎓",
+        "projects": [
+            {"name": "Curriculum",  "board_type": "list"},
+            {"name": "Projects",    "board_type": "kanban"},
+        ],
+    },
+    {
+        "key": "operations",
+        "name": "Operations",
+        "description": "Process management, SOPs and cross-team coordination.",
+        "icon": "⚙️",
+        "projects": [
+            {"name": "Processes",   "board_type": "list"},
+            {"name": "OKRs",        "board_type": "kanban"},
+        ],
+    },
+]
+
+
+class OnboardingStateView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _get_workspace(self, slug, user):
+        return get_object_or_404(Workspace, slug=slug, members__user=user)
+
+    def _checklist(self, workspace):
+        from projects.models import Project, Task
+        has_project  = Project.objects.filter(workspace=workspace).exists()
+        has_task     = Task.objects.filter(project__workspace=workspace).exists()
+        has_member   = WorkspaceMember.objects.filter(workspace=workspace).count() > 1
+        return {
+            "create_project":    has_project,
+            "add_task":          has_task,
+            "invite_teammate":   has_member,
+            "connect_github":    False,  # future
+            "setup_automation":  False,  # future
+        }
+
+    def _user_dismissed(self, state, user_id):
+        """Per-user dismissal stored in a JSON list of user UUID strings."""
+        return str(user_id) in (state.dismissed_by_users or [])
+
+    def _build_response(self, state, workspace, request):
+        user_id = str(request.user.id)
+        user_is_admin = WorkspaceMember.objects.filter(
+            workspace=workspace, user=request.user, role=WorkspaceMember.Role.ADMIN
+        ).exists()
+        return {
+            "wizard_completed":    state.wizard_completed,
+            "team_type":           state.team_type,
+            # Per-user dismissal — each user can dismiss independently
+            "checklist_dismissed": self._user_dismissed(state, user_id),
+            "checklist":           self._checklist(workspace),
+            # Only admins should see the setup checklist
+            "user_is_admin":       user_is_admin,
+        }
+
+    def get(self, request, slug):
+        workspace = self._get_workspace(slug, request.user)
+        state, _ = OnboardingState.objects.get_or_create(workspace=workspace)
+        return Response(self._build_response(state, workspace, request))
+
+    def patch(self, request, slug):
+        workspace = self._get_workspace(slug, request.user)
+        state, _ = OnboardingState.objects.get_or_create(workspace=workspace)
+
+        for field in ("wizard_completed", "team_type"):
+            if field in request.data:
+                setattr(state, field, request.data[field])
+
+        # Per-user dismiss: add current user's ID to the dismissed list
+        if request.data.get("checklist_dismissed") is True:
+            dismissed = list(state.dismissed_by_users or [])
+            uid = str(request.user.id)
+            if uid not in dismissed:
+                dismissed.append(uid)
+            state.dismissed_by_users = dismissed
+
+        state.save()
+        return Response(self._build_response(state, workspace, request))
+
+
+class WorkspaceTemplateListView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, slug):
+        get_object_or_404(Workspace, slug=slug, members__user=request.user)
+        return Response(WORKSPACE_TEMPLATES)
+
+
+class WorkspaceTemplateApplyView(APIView):
+    """Apply a template: create pre-configured projects + boards."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, slug):
+        from projects.models import Project, TaskStatus, Board
+        workspace = get_object_or_404(Workspace, slug=slug, members__user=request.user)
+        key = request.data.get("template_key")
+        tmpl = next((t for t in WORKSPACE_TEMPLATES if t["key"] == key), None)
+        if not tmpl:
+            return Response({"detail": "Template not found."}, status=status.HTTP_400_BAD_REQUEST)
+
+        created_projects = []
+        for proj_conf in tmpl["projects"]:
+            project = Project.objects.create(
+                workspace=workspace,
+                name=proj_conf["name"],
+                created_by=request.user,
+            )
+            TaskStatus.objects.bulk_create([
+                TaskStatus(project=project, **s) for s in [
+                    {"name": "Backlog",     "color": "#94a3b8", "order": 0, "is_done": False},
+                    {"name": "In Progress", "color": "#6366f1", "order": 1, "is_done": False},
+                    {"name": "In Review",   "color": "#f59e0b", "order": 2, "is_done": False},
+                    {"name": "Done",        "color": "#22c55e", "order": 3, "is_done": True},
+                ]
+            ])
+            Board.objects.create(
+                project=project,
+                name="Main Board",
+                board_type=proj_conf.get("board_type", "kanban"),
+                is_default=True,
+                visibility="public",
+                created_by=request.user,
+                order=0,
+            )
+            created_projects.append({"id": str(project.id), "name": project.name})
+
+        return Response({"created_projects": created_projects}, status=status.HTTP_201_CREATED)

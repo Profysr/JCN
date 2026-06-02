@@ -81,3 +81,20 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"{self.actor} → {self.recipient}: {self.verb}"
+
+
+# ── v2.3.0 — Onboarding ───────────────────────────────────────────────────────
+
+class OnboardingState(models.Model):
+    """Tracks wizard + checklist progress per workspace."""
+    workspace        = models.OneToOneField(Workspace, on_delete=models.CASCADE, related_name="onboarding")
+    wizard_completed    = models.BooleanField(default=False)
+    team_type           = models.CharField(max_length=50, blank=True)
+    checklist_dismissed = models.BooleanField(default=False)   # legacy, kept for migration compat
+    # Per-user dismissal: list of user UUID strings who have dismissed the checklist
+    dismissed_by_users  = models.JSONField(default=list, blank=True)
+    created_at       = models.DateTimeField(auto_now_add=True)
+    updated_at       = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Onboarding: {self.workspace.name}"

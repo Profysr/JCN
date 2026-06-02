@@ -192,6 +192,52 @@
 
 ---
 
+## v0.9.0 — Sprints + Burndown + Roadmap (Week 9)
+> Status: COMPLETE ✅
+
+### Backend
+- `Sprint` model — name, goal, start/end dates, status (planning/active/completed), project FK
+- `Task.sprint` FK (nullable) — assign task to a sprint
+- `?sprint=<id>` / `?sprint=none` filter on task list endpoint
+- `SprintListCreateView`, `SprintDetailView` (PATCH to change status: planning→active→completed)
+- `SprintBurndownView` — builds ideal line + actual line from `TaskActivity` status_changed events; returns day-by-day JSON
+
+### Frontend
+- `useSprints`, `useSprintBurndown` hooks
+- `SprintPanel` — right-side panel in Sprint view: sprint list with status badges, start/complete buttons, create form with dates; burndown chart rendered below selected sprint
+- `BurndownChart` — pure SVG, no external lib; ideal dashed line + actual solid line with data points + legend
+- `KanbanPage` — 3rd view mode "Sprint": shows Kanban filtered to sprint tasks + backlog section (tasks not in any sprint) with "Add to sprint" button; SprintPanel on right
+- `RoadmapPage` — `/w/:ws/roadmap`; per-project Gantt rows showing sprints as colored horizontal bars with completion count; auto-scales X-axis to fit all sprint dates
+- Roadmap added to AppLayout nav
+
+---
+
+## v1.0.0 — UI/UX Polish Pass (Pre-release)
+> Status: COMPLETE ✅
+
+### Design System
+- Inter + JetBrains Mono fonts via Google Fonts; applied via Tailwind `fontFamily` and `font-feature-settings`; `-webkit-font-smoothing: antialiased`
+- Refined color palette: Indigo primary (`239 84% 67%`), slate-based neutrals, sidebar gets its own `--sidebar-bg` token (`220 20% 98%`)
+- Custom CSS easing variables: `--ease-out: cubic-bezier(0.23, 1, 0.32, 1)`, `--ease-in-out`
+- Custom keyframe animations: `panelSlideIn`, `scaleIn`, `fadeIn`, `slideUp` — all exposed as Tailwind utility classes
+- `shadow-card` / `shadow-card-hover` custom shadow scale in Tailwind config
+- `popover` color token added to Tailwind
+
+### Component Improvements
+- **Button**: `active:scale-[0.97]` press feedback on every button (Emil Kowalski principle)
+- **AppLayout sidebar**: Wider (w-64), `--sidebar-bg` background, workspace avatar uses solid primary color, search bar with card shadow, nav items use `rounded-lg`, user panel cleaner
+- **TaskDetailPanel**: `animate-panel-in` slide from right on open, `bg-card` base
+- **CommandPalette**: `animate-scale-in` + `animate-fade-in` backdrop on open
+- **KanbanColumn**: `ring-1 ring-primary/20` on drag-over state, `rounded-xl` droppable area
+- **TaskCard**: `rounded-xl`, `shadow-card` + `shadow-card-hover`, subtask progress bar replaces text counter, `rotate-[0.8deg]` on drag
+- **KanbanPage header**: Segmented control view toggle (Board / List / Sprint) with `bg-muted` pill container
+- **DashboardPage**: Stat cards with colored icon containers (indigo/violet/emerald), project cards with colored avatars + progress bars + task completion %
+- **ProjectsPage**: Project cards with colored avatars, progress bars, `shadow-card` + `shadow-card-hover`
+
+---
+
+---
+
 ## v1.1.0 — Bulk Actions (Week 11)
 > Status: COMPLETE ✅
 
@@ -276,50 +322,6 @@
 
 ---
 
-## v1.0.0 — UI/UX Polish Pass (Pre-release)
-> Status: COMPLETE ✅
-
-### Design System
-- Inter + JetBrains Mono fonts via Google Fonts; applied via Tailwind `fontFamily` and `font-feature-settings`; `-webkit-font-smoothing: antialiased`
-- Refined color palette: Indigo primary (`239 84% 67%`), slate-based neutrals, sidebar gets its own `--sidebar-bg` token (`220 20% 98%`)
-- Custom CSS easing variables: `--ease-out: cubic-bezier(0.23, 1, 0.32, 1)`, `--ease-in-out`
-- Custom keyframe animations: `panelSlideIn`, `scaleIn`, `fadeIn`, `slideUp` — all exposed as Tailwind utility classes
-- `shadow-card` / `shadow-card-hover` custom shadow scale in Tailwind config
-- `popover` color token added to Tailwind
-
-### Component Improvements
-- **Button**: `active:scale-[0.97]` press feedback on every button (Emil Kowalski principle)
-- **AppLayout sidebar**: Wider (w-64), `--sidebar-bg` background, workspace avatar uses solid primary color, search bar with card shadow, nav items use `rounded-lg`, user panel cleaner
-- **TaskDetailPanel**: `animate-panel-in` slide from right on open, `bg-card` base
-- **CommandPalette**: `animate-scale-in` + `animate-fade-in` backdrop on open
-- **KanbanColumn**: `ring-1 ring-primary/20` on drag-over state, `rounded-xl` droppable area
-- **TaskCard**: `rounded-xl`, `shadow-card` + `shadow-card-hover`, subtask progress bar replaces text counter, `rotate-[0.8deg]` on drag
-- **KanbanPage header**: Segmented control view toggle (Board / List / Sprint) with `bg-muted` pill container
-- **DashboardPage**: Stat cards with colored icon containers (indigo/violet/emerald), project cards with colored avatars + progress bars + task completion %
-- **ProjectsPage**: Project cards with colored avatars, progress bars, `shadow-card` + `shadow-card-hover`
-
----
-
-## v0.9.0 — Sprints + Burndown + Roadmap (Week 9)
-> Status: COMPLETE ✅
-
-### Backend
-- `Sprint` model — name, goal, start/end dates, status (planning/active/completed), project FK
-- `Task.sprint` FK (nullable) — assign task to a sprint
-- `?sprint=<id>` / `?sprint=none` filter on task list endpoint
-- `SprintListCreateView`, `SprintDetailView` (PATCH to change status: planning→active→completed)
-- `SprintBurndownView` — builds ideal line + actual line from `TaskActivity` status_changed events; returns day-by-day JSON
-
-### Frontend
-- `useSprints`, `useSprintBurndown` hooks
-- `SprintPanel` — right-side panel in Sprint view: sprint list with status badges, start/complete buttons, create form with dates; burndown chart rendered below selected sprint
-- `BurndownChart` — pure SVG, no external lib; ideal dashed line + actual solid line with data points + legend
-- `KanbanPage` — 3rd view mode "Sprint": shows Kanban filtered to sprint tasks + backlog section (tasks not in any sprint) with "Add to sprint" button; SprintPanel on right
-- `RoadmapPage` — `/w/:ws/roadmap`; per-project Gantt rows showing sprints as colored horizontal bars with completion count; auto-scales X-axis to fit all sprint dates
-- Roadmap added to AppLayout nav
-
----
-
 # 6-Month Product Roadmap — JCN v2.0 → v5.0
 > **Every version below is: IN PROGRESS 🔨**
 >
@@ -344,7 +346,7 @@
 ---
 
 ## v2.0.0 — Design System 2.0 (Week 1)
-> Status: IN PROGRESS 🔨
+> Status: COMPLETE ✅
 > **Intent:** The app should feel like it took 3 years to build. Every pixel earns its place.
 
 ### Design Tokens
@@ -377,7 +379,7 @@
 ---
 
 ## v2.1.0 — Access Control & Permissions Matrix (Week 2)
-> Status: IN PROGRESS 🔨
+> Status: COMPLETE ✅
 > **Intent:** Proper permissions that don't require a PhD to configure.
 
 ### Backend
@@ -398,7 +400,7 @@
 ---
 
 ## v2.2.0 — Multi-Board Architecture (Week 3)
-> Status: IN PROGRESS 🔨
+> Status: COMPLETE ✅
 > **Intent:** One project, multiple perspectives. A "project" is a container; boards are the views.
 
 ### Backend
@@ -419,7 +421,7 @@
 ---
 
 ## v2.3.0 — Onboarding & Workspace Setup Wizard (Week 4)
-> Status: IN PROGRESS 🔨
+> Status: COMPLETE ✅
 > **Intent:** New user → first value in under 5 minutes. No tutorial videos.
 
 ### Backend

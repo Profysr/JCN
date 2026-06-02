@@ -3,8 +3,12 @@ import { useParams } from "react-router-dom";
 import { format } from "date-fns";
 import {
   X, Flag, Calendar, User, CheckSquare, MessageSquare,
-  ChevronDown, Trash2, Plus, Check, Activity, Tag, Paperclip, Link2, Layers,
+  ChevronDown, Trash2, Plus, Check, Activity, Tag, Link2, Layers, Copy,
 } from "lucide-react";
+import { Avatar } from "@/components/ui/avatar";
+import { Tooltip } from "@/components/ui/tooltip";
+import { useDeleteTask } from "@/hooks/useTasks";
+import { useToast } from "@/components/ui/toast";
 import { TASK_TYPES, getTaskType } from "@/lib/taskTypes";
 import { useTaskDetail, useUpdateTaskDetail, useCreateComment, useDeleteComment, useCreateSubtask, useToggleSubtask, useDeleteSubtask } from "@/hooks/useTaskDetail";
 import { useUpsertFieldValue } from "@/hooks/useCustomFields";
@@ -26,7 +30,7 @@ const PRIORITY_OPTIONS = [
   { value: "urgent",      label: "Urgent",        color: "text-red-500" },
 ];
 
-export default function TaskDetailPanel({ taskId, projectStatuses = [], projectLabels = [], projectFields = [], onCreateLabel, onClose }) {
+export default function TaskDetailPanel({ taskId, projectStatuses = [], projectLabels = [], projectFields = [], onCreateLabel, onClose, canEdit = true }) {
   const { workspaceSlug, projectId } = useParams();
   const { user } = useAuthStore();
   const { data: members = [] } = useMembers(workspaceSlug);
@@ -38,6 +42,8 @@ export default function TaskDetailPanel({ taskId, projectStatuses = [], projectL
   const createSubtask = useCreateSubtask(workspaceSlug, projectId, taskId);
   const toggleSubtask = useToggleSubtask(workspaceSlug, projectId, taskId);
   const deleteSubtask = useDeleteSubtask(workspaceSlug, projectId, taskId);
+  const deleteTask = useDeleteTask(workspaceSlug, projectId);
+  const { toast } = useToast();
 
   const [commentBody, setCommentBody] = useState("");
   const [newSubtask, setNewSubtask] = useState("");
@@ -79,16 +85,48 @@ export default function TaskDetailPanel({ taskId, projectStatuses = [], projectL
   return (
     <div className="w-[480px] flex-shrink-0 border-l flex flex-col bg-card overflow-hidden animate-panel-in">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-3.5 border-b flex-shrink-0 bg-card/80 backdrop-blur-sm">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Detail</span>
+      <div className="flex items-center justify-between px-4 py-2.5 border-b flex-shrink-0 bg-card">
+        <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Task detail</span>
+        <div className="flex items-center gap-1">
+          {/* Copy link */}
+          <Tooltip content="Copy link">
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(window.location.href);
+                toast.success("Link copied");
+              }}
+              className="p-1.5 rounded-md bg-accent/60 text-foreground/70 hover:text-foreground hover:bg-accent transition-colors active:scale-[0.97]"
+            >
+              <Copy className="w-3.5 h-3.5" />
+            </button>
+          </Tooltip>
+
+          {/* Delete task — editors and above only */}
+          {canEdit && (
+            <Tooltip content="Delete task">
+              <button
+                onClick={() => {
+                  if (window.confirm("Delete this task? This cannot be undone.")) {
+                    deleteTask.mutate(taskId, { onSuccess: onClose });
+                  }
+                }}
+                className="p-1.5 rounded-md bg-accent/60 text-foreground/70 hover:text-destructive hover:bg-destructive/10 transition-colors active:scale-[0.97]"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </Tooltip>
+          )}
+
+          {/* Close */}
+          <Tooltip content="Close panel">
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-md bg-accent/60 text-foreground/70 hover:text-foreground hover:bg-accent transition-colors active:scale-[0.97]"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </Tooltip>
         </div>
-        <button
-          onClick={onClose}
-          className="text-muted-foreground hover:text-foreground rounded-md p-1.5 hover:bg-accent transition-colors"
-        >
-          <X className="w-4 h-4" />
-        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -96,7 +134,7 @@ export default function TaskDetailPanel({ taskId, projectStatuses = [], projectL
 
           {/* Title */}
           <div>
-            {editingTitle ? (
+            {editingTitle && canEdit ? (
               <textarea
                 ref={titleRef}
                 className="w-full text-lg font-semibold resize-none bg-transparent border-b border-primary outline-none pb-1"
@@ -108,8 +146,10 @@ export default function TaskDetailPanel({ taskId, projectStatuses = [], projectL
               />
             ) : (
               <h2
-                className="text-lg font-semibold cursor-text hover:bg-accent/50 rounded px-1 -mx-1 py-0.5"
-                onClick={() => { setTitleDraft(task.title); setEditingTitle(true); }}
+                className={cn("text-lg font-semibold rounded px-1 -mx-1 py-0.5",
+                  canEdit && "cursor-text hover:bg-accent/50"
+                )}
+                onClick={() => canEdit && (setTitleDraft(task.title), setEditingTitle(true))}
               >
                 {task.title}
               </h2>
@@ -121,9 +161,10 @@ export default function TaskDetailPanel({ taskId, projectStatuses = [], projectL
             {/* Status */}
             <MetaField label="Status" icon={<ChevronDown className="w-3.5 h-3.5" />}>
               <select
-                className="w-full bg-transparent outline-none text-sm"
+                className="w-full bg-card outline-none text-sm cursor-pointer disabled:cursor-default disabled:opacity-70"
                 value={task.status_detail?.id || ""}
                 onChange={(e) => update.mutate({ status_id: e.target.value })}
+                disabled={!canEdit}
               >
                 {projectStatuses.map((s) => (
                   <option key={s.id} value={s.id}>{s.name}</option>
@@ -134,9 +175,10 @@ export default function TaskDetailPanel({ taskId, projectStatuses = [], projectL
             {/* Priority */}
             <MetaField label="Priority" icon={<Flag className={cn("w-3.5 h-3.5", priority.color)} />}>
               <select
-                className="w-full bg-transparent outline-none text-sm"
+                className="w-full bg-card outline-none text-sm cursor-pointer disabled:cursor-default disabled:opacity-70"
                 value={task.priority}
                 onChange={(e) => update.mutate({ priority: e.target.value })}
+                disabled={!canEdit}
               >
                 {PRIORITY_OPTIONS.map((p) => (
                   <option key={p.value} value={p.value}>{p.label}</option>
@@ -147,9 +189,10 @@ export default function TaskDetailPanel({ taskId, projectStatuses = [], projectL
             {/* Type */}
             <MetaField label="Type" icon={<Layers className="w-3.5 h-3.5" />}>
               <select
-                className="w-full bg-transparent outline-none text-sm"
+                className="w-full bg-card outline-none text-sm cursor-pointer disabled:cursor-default disabled:opacity-70"
                 value={task.task_type || "task"}
                 onChange={(e) => update.mutate({ task_type: e.target.value })}
+                disabled={!canEdit}
               >
                 {TASK_TYPES.map((t) => (
                   <option key={t.value} value={t.value}>{t.label}</option>
@@ -160,9 +203,10 @@ export default function TaskDetailPanel({ taskId, projectStatuses = [], projectL
             {/* Assignee */}
             <MetaField label="Assignee" icon={<User className="w-3.5 h-3.5" />}>
               <select
-                className="w-full bg-transparent outline-none text-sm"
+                className="w-full bg-card outline-none text-sm cursor-pointer disabled:cursor-default disabled:opacity-70"
                 value={task.assignee?.id || ""}
                 onChange={(e) => update.mutate({ assignee_id: e.target.value || null })}
+                disabled={!canEdit}
               >
                 <option value="">Unassigned</option>
                 {members.map((m) => (
@@ -177,9 +221,10 @@ export default function TaskDetailPanel({ taskId, projectStatuses = [], projectL
             <MetaField label="Due Date" icon={<Calendar className="w-3.5 h-3.5" />}>
               <input
                 type="date"
-                className="w-full bg-transparent outline-none text-sm"
+                className="w-full bg-card outline-none text-sm cursor-pointer disabled:cursor-default disabled:opacity-70"
                 value={task.due_date || ""}
                 onChange={(e) => update.mutate({ due_date: e.target.value || null })}
+                disabled={!canEdit}
               />
             </MetaField>
 
@@ -192,7 +237,7 @@ export default function TaskDetailPanel({ taskId, projectStatuses = [], projectL
           {/* Description */}
           <div>
             <p className="text-xs font-medium text-muted-foreground mb-1.5">Description</p>
-            <DescriptionEditor task={task} onSave={(desc) => update.mutate({ description: desc })} />
+            <DescriptionEditor task={task} onSave={(desc) => update.mutate({ description: desc })} canEdit={canEdit} />
           </div>
 
           {/* Labels */}
@@ -217,18 +262,20 @@ export default function TaskDetailPanel({ taskId, projectStatuses = [], projectL
                   <X className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </button>
               ))}
-              <LabelPicker
-                currentLabels={task.labels || []}
-                projectLabels={projectLabels}
-                onToggle={(label) => {
-                  const currentIds = (task.labels || []).map((l) => l.id);
-                  const newIds = currentIds.includes(label.id)
-                    ? currentIds.filter((id) => id !== label.id)
-                    : [...currentIds, label.id];
-                  update.mutate({ label_ids: newIds });
-                }}
-                onCreateLabel={onCreateLabel}
-              />
+              {canEdit && (
+                <LabelPicker
+                  currentLabels={task.labels || []}
+                  projectLabels={projectLabels}
+                  onToggle={(label) => {
+                    const currentIds = (task.labels || []).map((l) => l.id);
+                    const newIds = currentIds.includes(label.id)
+                      ? currentIds.filter((id) => id !== label.id)
+                      : [...currentIds, label.id];
+                    update.mutate({ label_ids: newIds });
+                  }}
+                  onCreateLabel={onCreateLabel}
+                />
+              )}
             </div>
           </div>
 
@@ -266,10 +313,12 @@ export default function TaskDetailPanel({ taskId, projectStatuses = [], projectL
               {task.subtasks?.map((sub) => (
                 <div key={sub.id} className="flex items-center gap-2 group">
                   <button
-                    onClick={() => toggleSubtask.mutate({ subtaskId: sub.id, is_done: !sub.is_done })}
+                    onClick={() => canEdit && toggleSubtask.mutate({ subtaskId: sub.id, is_done: !sub.is_done })}
+                    disabled={!canEdit}
                     className={cn(
                       "w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors",
-                      sub.is_done ? "bg-primary border-primary" : "border-border hover:border-primary"
+                      sub.is_done ? "bg-primary border-primary" : "border-border",
+                      canEdit && "hover:border-primary"
                     )}
                   >
                     {sub.is_done && <Check className="w-2.5 h-2.5 text-white" />}
@@ -277,26 +326,30 @@ export default function TaskDetailPanel({ taskId, projectStatuses = [], projectL
                   <span className={cn("text-sm flex-1", sub.is_done && "line-through text-muted-foreground")}>
                     {sub.title}
                   </span>
-                  <button
-                    onClick={() => deleteSubtask.mutate(sub.id)}
-                    className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  {canEdit && (
+                    <button
+                      onClick={() => deleteSubtask.mutate(sub.id)}
+                      className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
-            <form onSubmit={handleSubtaskAdd} className="flex gap-2">
-              <input
-                className="flex-1 text-sm border-b border-border bg-transparent outline-none py-0.5 placeholder:text-muted-foreground focus:border-primary"
-                placeholder="Add subtask…"
-                value={newSubtask}
-                onChange={(e) => setNewSubtask(e.target.value)}
-              />
-              {newSubtask && (
-                <button type="submit" className="text-primary text-xs font-medium">Add</button>
-              )}
-            </form>
+            {canEdit && (
+              <form onSubmit={handleSubtaskAdd} className="flex gap-2">
+                <input
+                  className="flex-1 text-sm border-b border-border bg-transparent outline-none py-0.5 placeholder:text-muted-foreground focus:border-primary"
+                  placeholder="Add subtask…"
+                  value={newSubtask}
+                  onChange={(e) => setNewSubtask(e.target.value)}
+                />
+                {newSubtask && (
+                  <button type="submit" className="text-primary text-xs font-medium">Add</button>
+                )}
+              </form>
+            )}
           </div>
 
           {/* Comments */}
@@ -310,9 +363,11 @@ export default function TaskDetailPanel({ taskId, projectStatuses = [], projectL
             <div className="space-y-3 mb-3">
               {task.comments?.map((c) => (
                 <div key={c.id} className="flex gap-2.5 group">
-                  <div className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold flex-shrink-0">
-                    {c.author?.full_name?.[0]?.toUpperCase() || "U"}
-                  </div>
+                  <Avatar
+                    name={c.author?.display_name || c.author?.full_name || c.author?.email}
+                    size="sm"
+                    className="flex-shrink-0 mt-0.5"
+                  />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-baseline gap-2">
                       <span className="text-xs font-medium">{c.author?.full_name || c.author?.email}</span>
@@ -370,9 +425,11 @@ export default function TaskDetailPanel({ taskId, projectStatuses = [], projectL
               <div className="space-y-2">
                 {task.activities.map((a) => (
                   <div key={a.id} className="flex items-start gap-2 text-xs text-muted-foreground">
-                    <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center font-bold flex-shrink-0 mt-0.5">
-                      {a.actor?.full_name?.[0]?.toUpperCase() || "?"}
-                    </div>
+                    <Avatar
+                      name={a.actor?.display_name || a.actor?.full_name || a.actor?.email || "?"}
+                      size="xs"
+                      className="flex-shrink-0 mt-0.5"
+                    />
                     <span>
                       <span className="font-medium text-foreground">{a.actor?.full_name || "Someone"}</span>
                       {" "}{a.verb.replace(/_/g, " ")}
@@ -455,7 +512,7 @@ function LabelPicker({ currentLabels, projectLabels, onToggle, onCreateLabel }) 
       </button>
 
       {open && (
-        <div className="absolute left-0 top-7 z-50 w-56 bg-card border rounded-lg shadow-lg p-2">
+        <div className="absolute left-0 top-7 z-50 w-56 bg-popover border rounded-xl shadow-popover p-2">
           {projectLabels.length > 0 && (
             <>
               <div className="space-y-0.5 mb-2">
@@ -523,7 +580,7 @@ function MetaField({ label, icon, children }) {
   );
 }
 
-function DescriptionEditor({ task, onSave }) {
+function DescriptionEditor({ task, onSave, canEdit = true }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(task.description || "");
   const ref = useRef(null);
@@ -538,10 +595,13 @@ function DescriptionEditor({ task, onSave }) {
   if (!editing) {
     return (
       <div
-        onClick={() => { setDraft(task.description || ""); setEditing(true); }}
-        className="text-sm text-muted-foreground cursor-text hover:bg-accent/50 rounded px-1 -mx-1 py-1 min-h-[36px]"
+        onClick={() => canEdit && (setDraft(task.description || ""), setEditing(true))}
+        className={cn(
+          "text-sm text-muted-foreground rounded px-1 -mx-1 py-1 min-h-[36px]",
+          canEdit && "cursor-text hover:bg-accent/50"
+        )}
       >
-        {task.description || <span className="italic">Add a description…</span>}
+        {task.description || <span className="italic">{canEdit ? "Add a description…" : "No description."}</span>}
       </div>
     );
   }

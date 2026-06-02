@@ -12,6 +12,7 @@ class Project(models.Model):
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
+    is_private = models.BooleanField(default=False)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="created_projects")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -167,10 +168,46 @@ class TaskFieldValue(models.Model):
         return f"{self.task.title} / {self.field.name}: {self.value}"
 
 
+class Board(models.Model):
+    """A named view over a project's tasks (v2.2.0). Tasks belong to Project; boards are lenses."""
+    class BoardType(models.TextChoices):
+        KANBAN   = "kanban",   "Kanban"
+        SCRUM    = "scrum",    "Scrum"
+        LIST     = "list",     "List"
+        TIMELINE = "timeline", "Timeline"
+        CALENDAR = "calendar", "Calendar"
+
+    class Visibility(models.TextChoices):
+        PUBLIC  = "public",  "Workspace Public"
+        PRIVATE = "private", "Private (only you)"
+        SECRET  = "secret",  "Secret (invite only)"
+
+    id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project     = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="boards")
+    name        = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    board_type  = models.CharField(max_length=20, choices=BoardType.choices, default=BoardType.KANBAN)
+    is_default  = models.BooleanField(default=False)
+    visibility  = models.CharField(max_length=20, choices=Visibility.choices, default=Visibility.PUBLIC)
+    config      = models.JSONField(default=dict)   # {wip_limits, swimlane_by, column_order}
+    order       = models.PositiveIntegerField(default=0)
+    is_archived = models.BooleanField(default=False)
+    created_by  = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="created_boards")
+    created_at  = models.DateTimeField(auto_now_add=True)
+    updated_at  = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["order", "created_at"]
+
+    def __str__(self):
+        return f"{self.project.name} / {self.name}"
+
+
 class SavedView(models.Model):
-    """Named filter preset per project per user (v0.8.0)."""
+    """Named filter preset per project per user (v0.8.0). Optionally scoped to a board (v2.2.0)."""
     id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     project    = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="saved_views")
+    board      = models.ForeignKey("Board", on_delete=models.CASCADE, null=True, blank=True, related_name="saved_views")
     user       = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="saved_views")
     name       = models.CharField(max_length=100)
     filters    = models.JSONField(default=dict)  # {search, priorities, assignees, labels}
@@ -262,3 +299,71 @@ class TaskActivity(models.Model):
 
     def __str__(self):
         return f"{self.actor} {self.verb} on {self.task}"
+
+
+# ── v2.1.0 — Access Control ───────────────────────────────────────────────────
+
+class ProjectMember(models.Model):
+    """Project-level role override — takes precedence over (or further restricts) workspace role."""
+    class Role(models.TextChoices):
+        ADMIN  = "admin",  "Admin"
+        EDITOR = "editor", "Editor"
+        VIEWER = "viewer", "Viewer"
+        GUEST  = "guest",  "Guest"
+
+    id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project    = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="project_members")
+    user       = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="project_memberships")
+    role       = models.CharField(max_length=20, choices=Role.choices, default=Role.VIEWER)
+    added_by   = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="added_project_members")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ["project", "user"]
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"{self.user.email} → {self.project.name} ({self.role})"
+
+
+class GuestToken(models.Model):
+    """Time-limited read-only shareable link to a project."""
+    EXPIRY_CHOICES = [(7, "7 days"), (14, "14 days"), (30, "30 days")]
+
+    id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project    = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="guest_tokens")
+    token      = models.UUIDField(default=uuid.uuid4, unique=True)
+    label      = models.CharField(max_length=100, blank=True)
+    expires_at = models.DateTimeField()
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="created_guest_tokens")
+    is_active  = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def is_expired(self):
+        from django.utils import timezone
+        return timezone.now() > self.expires_at
+
+    def __str__(self):
+        return f"GuestToken for {self.project.name} (expires {self.expires_at.date()})"
+
+
+class AuditEvent(models.Model):
+    """Immutable log of permission-related changes."""
+    id            = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace     = models.ForeignKey("workspaces.Workspace", on_delete=models.CASCADE, related_name="audit_events")
+    actor         = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="audit_events")
+    action        = models.CharField(max_length=64)   # e.g. "project_member.added"
+    resource_type = models.CharField(max_length=64)   # e.g. "project_member"
+    resource_id   = models.CharField(max_length=100)
+    before        = models.JSONField(default=dict)
+    after         = models.JSONField(default=dict)
+    created_at    = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.actor} — {self.action} at {self.created_at}"

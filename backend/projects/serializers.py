@@ -1,8 +1,12 @@
 from rest_framework import serializers
+from django.utils import timezone
+import datetime
 from .models import (
     Project, TaskStatus, Task, SubTask, TaskComment, TaskActivity, Label,
     ProjectField, TaskFieldValue, SavedView, Sprint,
     TaskAttachment, TaskDependency,
+    ProjectMember, GuestToken,
+    Board,
 )
 from accounts.serializers import UserSerializer
 
@@ -42,10 +46,22 @@ class TaskFieldValueSerializer(serializers.ModelSerializer):
         return obj
 
 
+class BoardSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = Board
+        fields = [
+            "id", "name", "description", "board_type", "is_default",
+            "visibility", "config", "order", "is_archived", "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+
 class SavedViewSerializer(serializers.ModelSerializer):
+    board_id = serializers.UUIDField(allow_null=True, required=False)
+
     class Meta:
         model = SavedView
-        fields = ["id", "name", "filters", "created_at"]
+        fields = ["id", "name", "filters", "board_id", "created_at"]
         read_only_fields = ["id", "created_at"]
 
 
@@ -219,28 +235,75 @@ class ProjectSearchSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "workspace_slug", "workspace_name"]
 
 
+class ProjectMemberSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+    user_id = serializers.UUIDField(write_only=True)
+
+    class Meta:
+        model  = ProjectMember
+        fields = ["id", "user", "user_id", "role", "created_at"]
+        read_only_fields = ["id", "created_at"]
+
+    def validate_user_id(self, value):
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        try:
+            return User.objects.get(pk=value)
+        except User.DoesNotExist:
+            raise serializers.ValidationError("User not found.")
+
+    def create(self, validated_data):
+        user = validated_data.pop("user_id")
+        return ProjectMember.objects.create(user=user, **validated_data)
+
+
+class GuestTokenSerializer(serializers.ModelSerializer):
+    is_expired = serializers.SerializerMethodField()
+    days = serializers.IntegerField(write_only=True, default=30)
+
+    class Meta:
+        model  = GuestToken
+        fields = ["id", "token", "label", "expires_at", "is_active", "is_expired", "created_at", "days"]
+        read_only_fields = ["id", "token", "expires_at", "is_expired", "created_at"]
+
+    def get_is_expired(self, obj):
+        return obj.is_expired()
+
+    def create(self, validated_data):
+        days = validated_data.pop("days", 30)
+        validated_data["expires_at"] = timezone.now() + datetime.timedelta(days=days)
+        return GuestToken.objects.create(**validated_data)
+
+
 class ProjectSerializer(serializers.ModelSerializer):
     created_by      = UserSerializer(read_only=True)
     statuses        = TaskStatusSerializer(many=True, read_only=True)
     task_count      = serializers.SerializerMethodField()
     done_task_count = serializers.SerializerMethodField()
+    my_role         = serializers.SerializerMethodField()
 
     class Meta:
         model = Project
-        fields = ["id", "name", "description", "status", "created_by", "statuses",
-                  "task_count", "done_task_count", "created_at", "updated_at"]
+        fields = ["id", "name", "description", "status", "is_private", "created_by", "statuses",
+                  "task_count", "done_task_count", "my_role", "created_at", "updated_at"]
         read_only_fields = ["id", "created_by", "statuses", "created_at", "updated_at"]
 
     def get_task_count(self, obj):
         return obj.tasks.count()
 
     def get_done_task_count(self, obj):
-        # Use is_done flag; fall back to last status by order for legacy projects
         done_statuses = obj.statuses.filter(is_done=True)
         if done_statuses.exists():
             return obj.tasks.filter(status__in=done_statuses).count()
         last = obj.statuses.order_by("-order").first()
         return obj.tasks.filter(status=last).count() if last else 0
+
+    def get_my_role(self, obj):
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return None
+        from .permissions import get_effective_role
+        return get_effective_role(request.user, obj)
 
     def create(self, validated_data):
         request   = self.context["request"]
@@ -254,4 +317,14 @@ class ProjectSerializer(serializers.ModelSerializer):
                 {"name": "Done",        "color": "#22c55e", "order": 3, "is_done": True},
             ]
         ])
+        # Auto-create default board (v2.2.0)
+        Board.objects.create(
+            project=project,
+            name="Main Board",
+            board_type=Board.BoardType.KANBAN,
+            is_default=True,
+            visibility=Board.Visibility.PUBLIC,
+            created_by=request.user,
+            order=0,
+        )
         return project

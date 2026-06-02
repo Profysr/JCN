@@ -14,6 +14,7 @@ import SettingsPage from "@/pages/workspace/SettingsPage";
 import RoadmapPage from "@/pages/projects/RoadmapPage";
 import AnalyticsPage from "@/pages/workspace/AnalyticsPage";
 import AcceptInvitePage from "@/pages/invite/AcceptInvitePage";
+import SetupWizard from "@/pages/workspace/SetupWizard";
 import CommandPalette from "@/components/CommandPalette";
 
 export default function App() {
@@ -42,6 +43,7 @@ export default function App() {
         <Route element={<ProtectedRoute />}>
           <Route path="/onboarding" element={<OnboardingPage />} />
           <Route path="/" element={<WorkspaceRedirect />} />
+          <Route path="/w/:workspaceSlug/setup" element={<SetupWizard />} />
 
           <Route path="/w/:workspaceSlug" element={<AppLayout onOpenPalette={() => setPaletteOpen(true)} />}>
             <Route index element={<DashboardPage />} />

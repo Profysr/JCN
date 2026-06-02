@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 
 export default function RegisterPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const register = useAuthStore((s) => s.register);
   const [form, setForm] = useState({ full_name: "", email: "", password1: "", password2: "" });
   const [errors, setErrors] = useState({});
@@ -23,7 +24,11 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       await register(form.email, form.password1, form.password2, form.full_name);
-      navigate("/onboarding");
+      // If there's a ?next= param (e.g. an invite link), go there.
+      // Otherwise go to "/" which WorkspaceRedirect handles — it'll send to
+      // /onboarding only if the user has no workspace yet.
+      const next = searchParams.get("next");
+      navigate(next || "/", { replace: true });
     } catch (err) {
       const data = err.response?.data || {};
       setErrors(data);

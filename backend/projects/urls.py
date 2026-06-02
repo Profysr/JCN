@@ -15,6 +15,11 @@ from .views import (
     TaskDependencyListCreateView, TaskDependencyDeleteView,
     WorkspaceAnalyticsView,
     TaskExportView,
+    ProjectMemberListCreateView, ProjectMemberDetailView,
+    GuestTokenListCreateView, GuestTokenDeleteView,
+    ProjectPermissionsView,
+    BoardListCreateView, BoardDetailView, BoardArchiveView,
+    BoardTemplatesView, BoardReorderView,
 )
 
 _ws = "workspaces/<slug:workspace_slug>"
@@ -76,4 +81,22 @@ urlpatterns = [
 
     # Analytics (v1.5.0)
     path(f"{_ws}/analytics/",                                 WorkspaceAnalyticsView.as_view()),
+
+    # Project Members & Permissions (v2.1.0)
+    path(f"{_pr}/members/",                                   ProjectMemberListCreateView.as_view()),
+    path(f"{_pr}/members/<uuid:member_id>/",                  ProjectMemberDetailView.as_view()),
+    path(f"{_pr}/guest-tokens/",                              GuestTokenListCreateView.as_view()),
+    path(f"{_pr}/guest-tokens/<uuid:token_id>/",              GuestTokenDeleteView.as_view()),
+    path(f"{_pr}/my-permissions/",                            ProjectPermissionsView.as_view()),
+
+]
+
+# Boards (v2.2.0)
+_bd = f"{_pr}/boards"
+urlpatterns += [
+    path(f"{_bd}/",                                           BoardListCreateView.as_view()),
+    path(f"{_bd}/reorder/",                                   BoardReorderView.as_view()),
+    path(f"{_bd}/templates/",                                 BoardTemplatesView.as_view()),
+    path(f"{_bd}/<uuid:board_id>/",                           BoardDetailView.as_view()),
+    path(f"{_bd}/<uuid:board_id>/archive/",                   BoardArchiveView.as_view()),
 ]

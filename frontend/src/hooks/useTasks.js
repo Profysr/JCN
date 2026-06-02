@@ -39,9 +39,11 @@ export const useMoveTask = (workspaceSlug, projectId) => {
   return useMutation({
     mutationFn: ({ taskId, status_id, order }) =>
       api.patch(`/api/workspaces/${workspaceSlug}/projects/${projectId}/tasks/${taskId}/move/`, { status_id, order }).then((r) => r.data),
-    // Optimistic update — update cache immediately, reconcile on settle
-    onMutate: async ({ taskId, status_id, order }) => {
-      await qc.cancelQueries({ queryKey: tasksKey(workspaceSlug, projectId) });
+    // Synchronous optimistic update — no await so @hello-pangea/dnd never sees the
+    // original position again and the one-frame "snap back" flicker is eliminated.
+    onMutate: ({ taskId, status_id, order }) => {
+      // Cancel in-flight refetches without awaiting (non-blocking)
+      qc.cancelQueries({ queryKey: tasksKey(workspaceSlug, projectId) });
       const prev = qc.getQueryData(tasksKey(workspaceSlug, projectId));
       qc.setQueryData(tasksKey(workspaceSlug, projectId), (old) =>
         old?.map((t) =>
@@ -53,7 +55,7 @@ export const useMoveTask = (workspaceSlug, projectId) => {
       return { prev };
     },
     onError: (_, __, ctx) => qc.setQueryData(tasksKey(workspaceSlug, projectId), ctx.prev),
-    // No onSettled invalidation — WebSocket broadcast updates the cache with real server data
+    // No onSettled invalidation — WebSocket broadcast reconciles the cache
   });
 };
 

@@ -2,6 +2,7 @@ import { Draggable } from "@hello-pangea/dnd";
 import { cn } from "@/lib/utils";
 import { AlertCircle, ArrowUp, ArrowDown, Minus, Calendar, MessageSquare, CheckSquare } from "lucide-react";
 import { getTaskType } from "@/lib/taskTypes";
+import { Avatar } from "@/components/ui/avatar";
 
 const PRIORITY_CONFIG = {
   urgent:      { icon: AlertCircle, dot: "bg-red-500",    label: "Urgent" },
@@ -11,7 +12,7 @@ const PRIORITY_CONFIG = {
   no_priority: { icon: Minus,       dot: "bg-muted-foreground/30", label: "" },
 };
 
-export default function TaskCard({ task, index, onClick, isSelected, isBulkSelected, onToggleSelect }) {
+export default function TaskCard({ task, index, onClick, isSelected, isBulkSelected, onToggleSelect, canEdit = true }) {
   const priority = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.no_priority;
   const typeConfig = getTaskType(task.task_type);
   const TypeIcon = typeConfig.icon;
@@ -21,7 +22,7 @@ export default function TaskCard({ task, index, onClick, isSelected, isBulkSelec
     : 0;
 
   return (
-    <Draggable draggableId={task.id} index={index}>
+    <Draggable draggableId={task.id} index={index} isDragDisabled={!canEdit}>
       {(provided, snapshot) => (
         <div
           ref={provided.innerRef}
@@ -31,10 +32,10 @@ export default function TaskCard({ task, index, onClick, isSelected, isBulkSelec
           className={cn(
             "bg-card border border-border rounded-md p-2.5 cursor-pointer select-none relative group",
             "transition-colors duration-100",
-            "hover:border-primary/40 hover:bg-white",
+            "hover:border-primary/40 hover:bg-accent/40",
             snapshot.isDragging && "shadow-lg border-primary/30 rotate-[0.5deg] opacity-95",
             isSelected && "border-primary bg-primary/5",
-            isBulkSelected && "border-primary bg-primary/8 ring-1 ring-primary/30"
+            isBulkSelected && "border-primary bg-primary/10 ring-1 ring-primary/30"
           )}
         >
           {/* Bulk-select checkbox (hover or selected) */}
@@ -42,10 +43,10 @@ export default function TaskCard({ task, index, onClick, isSelected, isBulkSelec
             <button
               onClick={(e) => { e.stopPropagation(); onToggleSelect(task.id); }}
               className={cn(
-                "absolute top-2 left-2 w-4 h-4 rounded border flex items-center justify-center transition-all z-10",
+                "absolute top-2 left-2 w-4 h-4 rounded border-2 flex items-center justify-center transition-all z-10",
                 isBulkSelected
-                  ? "bg-primary border-primary opacity-100"
-                  : "bg-card border-border opacity-0 group-hover:opacity-100"
+                  ? "bg-primary border-primary opacity-100 scale-100"
+                  : "bg-card/80 border-border/60 opacity-30 group-hover:opacity-100 group-hover:border-primary/60"
               )}
             >
               {isBulkSelected && (
@@ -56,15 +57,21 @@ export default function TaskCard({ task, index, onClick, isSelected, isBulkSelec
             </button>
           )}
 
-          {/* Type + Priority dot + Labels row */}
+          {/* Type badge (only for non-default types) + Priority dot + Labels */}
           <div className={cn("flex items-center gap-1.5 mb-2 flex-wrap", onToggleSelect && "pl-5")}>
-            <span
-              className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold leading-none flex-shrink-0", typeConfig.bg, typeConfig.color)}
-            >
-              <TypeIcon className="w-2.5 h-2.5" />
-              {task.task_type !== "task" && typeConfig.label}
-            </span>
-            <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", priority.dot)} />
+            {/* Only render type badge when it's not the plain "task" default */}
+            {task.task_type && task.task_type !== "task" && (
+              <span
+                className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold leading-none flex-shrink-0", typeConfig.bg, typeConfig.color)}
+              >
+                <TypeIcon className="w-2.5 h-2.5" />
+                {typeConfig.label}
+              </span>
+            )}
+            {/* Priority dot — only shown when priority is set */}
+            {task.priority && task.priority !== "no_priority" && (
+              <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", priority.dot)} />
+            )}
             {task.labels?.map((l) => (
               <span
                 key={l.id}
@@ -121,9 +128,11 @@ export default function TaskCard({ task, index, onClick, isSelected, isBulkSelec
                 </span>
               )}
               {task.assignee && (
-                <div className="w-5 h-5 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold">
-                  {task.assignee.display_name?.[0]?.toUpperCase()}
-                </div>
+                <Avatar
+                  name={task.assignee.display_name || task.assignee.full_name || task.assignee.email}
+                  src={task.assignee.avatar}
+                  size="xs"
+                />
               )}
             </div>
           </div>

@@ -1,0 +1,253 @@
+/* =============================================================================
+   JCN Design System — theme.css
+   Single source of truth for all design tokens.
+   Tailwind extends these; components consume them.
+   ============================================================================= */
+
+/* ── Spacing Scale ──────────────────────────────────────────────────────────── */
+:root {
+  --space-px: 1px;
+  --space-0-5: 2px;
+  --space-1: 4px;
+  --space-1-5: 6px;
+  --space-2: 8px;
+  --space-2-5: 10px;
+  --space-3: 12px;
+  --space-3-5: 14px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+  --space-9: 36px;
+  --space-10: 40px;
+  --space-11: 44px;
+  --space-12: 48px;
+  --space-14: 56px;
+  --space-16: 64px;
+
+  /* ── Typography Scale ─────────────────────────────────────────────────────── */
+  --text-xs: 0.75rem;
+  --text-xs-lh: 1rem;
+  --text-sm: 0.875rem;
+  --text-sm-lh: 1.25rem;
+  --text-base: 1rem;
+  --text-base-lh: 1.5rem;
+  --text-lg: 1.125rem;
+  --text-lg-lh: 1.75rem;
+  --text-xl: 1.25rem;
+  --text-xl-lh: 1.75rem;
+  --text-2xl: 1.5rem;
+  --text-2xl-lh: 2rem;
+  --text-3xl: 1.875rem;
+  --text-3xl-lh: 2.25rem;
+  --text-4xl: 2.25rem;
+  --text-4xl-lh: 2.5rem;
+
+  /* ── Radius Scale ─────────────────────────────────────────────────────────── */
+  --radius-none: 0px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-3xl: 24px;
+  --radius-full: 9999px;
+
+  /* ── Shadow Scale ─────────────────────────────────────────────────────────── */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.07);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.05);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.08), 0 8px 10px -6px rgb(0 0 0 / 0.04);
+  --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.18);
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.07), 0 1px 2px -1px rgb(0 0 0 / 0.07);
+  --shadow-card-hover: 0 4px 12px 0 rgb(0 0 0 / 0.10), 0 2px 4px -1px rgb(0 0 0 / 0.06);
+  --shadow-popover: 0 4px 16px -2px rgb(0 0 0 / 0.10), 0 2px 8px -2px rgb(0 0 0 / 0.06);
+
+  /* ── Easing Functions ─────────────────────────────────────────────────────── */
+  --ease-linear: linear;
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ── Duration ─────────────────────────────────────────────────────────────── */
+  --duration-fast: 100ms;
+  --duration-normal: 160ms;
+  --duration-slow: 220ms;
+  --duration-slower: 350ms;
+
+  /* ── Z-Index ──────────────────────────────────────────────────────────────── */
+  --z-dropdown: 100;
+  --z-modal: 200;
+  --z-toast: 300;
+  --z-tooltip: 400;
+}
+
+/* ── Theme: Light (default) ──────────────────────────────────────────────────── */
+:root {
+  --background: 220 16% 95%;
+  --foreground: 222 47% 11%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+  --primary: 239 84% 67%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 220 14% 93%;
+  --secondary-foreground: 222 47% 11%;
+  --muted: 220 14% 93%;
+  --muted-foreground: 220 9% 46%;
+  --accent: 220 14% 91%;
+  --accent-foreground: 222 47% 11%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --success: 160 84% 39%;
+  --success-foreground: 0 0% 100%;
+  --warning: 38 92% 50%;
+  --warning-foreground: 0 0% 100%;
+  --border: 220 13% 88%;
+  --input: 220 13% 88%;
+  --ring: 239 84% 67%;
+  --radius: 0.375rem;
+  --sidebar-bg: 220 20% 97%;
+}
+
+/* ── Theme: Dark ──────────────────────────────────────────────────────────────── */
+/* Softer dark — VS Code / Notion style, not pitch black */
+/* color-scheme: dark makes ALL native browser form controls (select, date, scrollbar)
+   render in dark mode automatically — fixes the white dropdown flash. */
+.dark {
+  color-scheme: dark;
+  --background: 220 14% 11%;
+  --foreground: 215 25% 90%;
+  --card: 220 14% 15%;
+  --card-foreground: 215 25% 90%;
+  --popover: 220 14% 16%;
+  --popover-foreground: 215 25% 90%;
+  --primary: 239 84% 67%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 220 12% 20%;
+  --secondary-foreground: 215 25% 90%;
+  --muted: 220 12% 20%;
+  --muted-foreground: 215 12% 56%;
+  --accent: 220 12% 20%;
+  --accent-foreground: 215 25% 90%;
+  --destructive: 0 63% 46%;
+  --destructive-foreground: 0 0% 100%;
+  --success: 160 55% 48%;
+  --success-foreground: 0 0% 100%;
+  --warning: 38 85% 58%;
+  --warning-foreground: 0 0% 100%;
+  --border: 220 12% 24%;
+  --input: 220 12% 22%;
+  --ring: 239 84% 67%;
+  --sidebar-bg: 220 14% 9%;
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.30), 0 1px 2px -1px rgb(0 0 0 / 0.20);
+  --shadow-card-hover: 0 4px 12px 0 rgb(0 0 0 / 0.40), 0 2px 4px -1px rgb(0 0 0 / 0.25);
+  --shadow-popover: 0 4px 16px -2px rgb(0 0 0 / 0.40), 0 2px 8px -2px rgb(0 0 0 / 0.25);
+}
+
+/* ── Theme: Midnight (true OLED black) ────────────────────────────────────────── */
+.midnight {
+  color-scheme: dark;
+  --background: 0 0% 0%;
+  --foreground: 210 40% 96%;
+  --card: 0 0% 4%;
+  --card-foreground: 210 40% 96%;
+  --popover: 0 0% 5%;
+  --popover-foreground: 210 40% 96%;
+  --primary: 239 84% 67%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 9%;
+  --secondary-foreground: 210 40% 96%;
+  --muted: 0 0% 9%;
+  --muted-foreground: 215 16% 55%;
+  --accent: 0 0% 9%;
+  --accent-foreground: 210 40% 96%;
+  --destructive: 0 63% 40%;
+  --destructive-foreground: 210 40% 96%;
+  --success: 160 60% 45%;
+  --success-foreground: 0 0% 100%;
+  --warning: 38 80% 55%;
+  --warning-foreground: 0 0% 100%;
+  --border: 0 0% 12%;
+  --input: 0 0% 12%;
+  --ring: 239 84% 67%;
+  --sidebar-bg: 0 0% 2%;
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.40), 0 1px 2px -1px rgb(0 0 0 / 0.40);
+  --shadow-card-hover: 0 4px 12px 0 rgb(0 0 0 / 0.55), 0 2px 4px -1px rgb(0 0 0 / 0.35);
+  --shadow-popover: 0 4px 16px -2px rgb(0 0 0 / 0.55), 0 2px 8px -2px rgb(0 0 0 / 0.35);
+}
+
+/* ── Accent Colors ────────────────────────────────────────────────────────────── */
+/* Each accent overrides --primary and --ring HSL values */
+
+/* Indigo (default — already set in :root) */
+.accent-indigo { --primary: 239 84% 67%; --ring: 239 84% 67%; }
+
+.accent-blue    { --primary: 217 91% 60%; --ring: 217 91% 60%; }
+.accent-violet  { --primary: 258 90% 66%; --ring: 258 90% 66%; }
+.accent-pink    { --primary: 330 81% 60%; --ring: 330 81% 60%; }
+.accent-rose    { --primary: 350 89% 60%; --ring: 350 89% 60%; }
+.accent-amber   { --primary: 38 92% 50%;  --ring: 38 92% 50%;  }
+.accent-emerald { --primary: 160 84% 39%; --ring: 160 84% 39%; }
+.accent-cyan    { --primary: 192 91% 36%; --ring: 192 91% 36%; }
+.accent-slate   { --primary: 215 16% 47%; --ring: 215 16% 47%; }
+
+/* Adjust accent lightness for dark/midnight modes to maintain contrast */
+.dark .accent-amber,    .midnight .accent-amber    { --primary: 38 92% 62%;  --ring: 38 92% 62%;  }
+.dark .accent-emerald,  .midnight .accent-emerald  { --primary: 160 60% 52%; --ring: 160 60% 52%; }
+.dark .accent-cyan,     .midnight .accent-cyan     { --primary: 192 80% 50%; --ring: 192 80% 50%; }
+.dark .accent-slate,    .midnight .accent-slate    { --primary: 215 20% 58%; --ring: 215 20% 58%; }
+
+/* ── Density Modes ────────────────────────────────────────────────────────────── */
+/* Density controls spacing of interactive elements without touching component classes */
+
+:root, .density-comfortable {
+  --nav-py: 8px;
+  --nav-px: 12px;
+  --task-card-py: 10px;
+  --task-card-px: 12px;
+  --row-height: 44px;
+  --list-row-py: 10px;
+  --input-py: 8px;
+  --section-gap: 24px;
+  --item-gap: 4px;
+}
+
+.density-compact {
+  --nav-py: 4px;
+  --nav-px: 10px;
+  --task-card-py: 6px;
+  --task-card-px: 10px;
+  --row-height: 32px;
+  --list-row-py: 6px;
+  --input-py: 5px;
+  --section-gap: 16px;
+  --item-gap: 2px;
+}
+
+.density-cozy {
+  --nav-py: 12px;
+  --nav-px: 14px;
+  --task-card-py: 14px;
+  --task-card-px: 14px;
+  --row-height: 56px;
+  --list-row-py: 14px;
+  --input-py: 11px;
+  --section-gap: 32px;
+  --item-gap: 6px;
+}
+
+/* ── prefers-reduced-motion: opacity-only fallbacks ───────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .animate-panel-in,
+  .animate-scale-in,
+  .animate-slide-up,
+  .animate-slide-down,
+  .animate-toast-in,
+  .animate-fade-in {
+    animation: fadeIn var(--duration-fast) ease-out both !important;
+  }
+}

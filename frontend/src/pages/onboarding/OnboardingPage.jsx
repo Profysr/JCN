@@ -14,8 +14,9 @@ export default function OnboardingPage() {
 
   const { mutate, isPending } = useMutation({
     mutationFn: (data) => api.post("/api/workspaces/", data).then((r) => r.data),
-    onSuccess: (workspace) => navigate(`/w/${workspace.slug}`),
-    onError: (err) => setError(err.response?.data?.name?.[0] || "Something went wrong."),
+    // Redirect to setup wizard instead of the workspace directly
+    onSuccess: (workspace) => navigate(`/w/${workspace.slug}/setup`),
+    onError:   (err) => setError(err.response?.data?.name?.[0] || "Something went wrong."),
   });
 
   return (
@@ -23,7 +24,9 @@ export default function OnboardingPage() {
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle className="text-2xl">Create your workspace</CardTitle>
-          <CardDescription>This is where your team will collaborate. You can change this later.</CardDescription>
+          <CardDescription>
+            This is where your team will collaborate. You can change this later.
+          </CardDescription>
         </CardHeader>
         <form onSubmit={(e) => { e.preventDefault(); mutate({ name }); }}>
           <CardContent className="space-y-4">
@@ -41,7 +44,7 @@ export default function OnboardingPage() {
           </CardContent>
           <CardFooter>
             <Button type="submit" className="w-full" disabled={isPending || !name.trim()}>
-              {isPending ? "Creating..." : "Create workspace"}
+              {isPending ? "Creating…" : "Create workspace →"}
             </Button>
           </CardFooter>
         </form>

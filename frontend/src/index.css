@@ -1,59 +1,9 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import './theme.css';
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-@layer base {
-  :root {
-    --background: 220 16% 95%;
-    --foreground: 222 47% 11%;
-    --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
-    --primary: 239 84% 67%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 220 14% 93%;
-    --secondary-foreground: 222 47% 11%;
-    --muted: 220 14% 93%;
-    --muted-foreground: 220 9% 46%;
-    --accent: 220 14% 91%;
-    --accent-foreground: 222 47% 11%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 220 13% 88%;
-    --input: 220 13% 88%;
-    --ring: 239 84% 67%;
-    --radius: 0.375rem;
-    --sidebar-bg: 220 20% 97%;
-    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-    --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
-  }
-
-  .dark {
-    --background: 222 47% 6%;
-    --foreground: 210 40% 96%;
-    --card: 222 47% 7.5%;
-    --card-foreground: 210 40% 96%;
-    --popover: 222 47% 7.5%;
-    --popover-foreground: 210 40% 96%;
-    --primary: 239 84% 67%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 220 32% 13%;
-    --secondary-foreground: 210 40% 96%;
-    --muted: 220 32% 13%;
-    --muted-foreground: 215 20% 60%;
-    --accent: 220 32% 13%;
-    --accent-foreground: 210 40% 96%;
-    --destructive: 0 63% 40%;
-    --destructive-foreground: 210 40% 96%;
-    --border: 220 32% 17%;
-    --input: 220 32% 17%;
-    --ring: 239 84% 67%;
-    --sidebar-bg: 222 47% 5%;
-  }
-}
 
 @layer base {
   * {
@@ -66,31 +16,63 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+  /* Force native selects to inherit the app's background/foreground so
+     they don't flash white in dark mode (backed up by color-scheme: dark). */
+  select {
+    background-color: hsl(var(--card));
+    color: hsl(var(--foreground));
+    border-color: hsl(var(--border));
+  }
+  /* Date & time inputs */
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"] {
+    color-scheme: inherit;
+  }
 }
 
 @layer utilities {
   .animate-panel-in {
-    animation: panelSlideIn 220ms var(--ease-out) both;
+    animation: panelSlideIn var(--duration-slow) var(--ease-out) both;
   }
   .animate-scale-in {
-    animation: scaleIn 160ms var(--ease-out) both;
+    animation: scaleIn var(--duration-normal) var(--ease-out) both;
   }
   .animate-fade-in {
-    animation: fadeIn 160ms ease-out both;
+    animation: fadeIn var(--duration-normal) ease-out both;
   }
   .animate-slide-up {
     animation: slideUp 200ms var(--ease-out) both;
   }
+  .animate-slide-down {
+    animation: slideDown 200ms var(--ease-out) both;
+  }
+  .animate-toast-in {
+    animation: toastSlideIn var(--duration-slow) var(--ease-out) both;
+  }
+  .animate-toast-out {
+    animation: toastSlideOut var(--duration-normal) var(--ease-in) both;
+  }
 }
 
+/*
+  All keyframes that need both a positional transform (translate) AND a scale/slide
+  animation use the CSS individual transform properties (scale, translate) instead of
+  the shorthand `transform: scale/translate()`. This prevents the animation from
+  overriding the element's positioning transform (e.g. -translate-x-1/2 on modals).
+*/
+
 @keyframes panelSlideIn {
-  from { transform: translateX(100%); }
-  to   { transform: translateX(0); }
+  /* Uses individual `translate` so it never clobbers other transforms */
+  from { translate: 100% 0; }
+  to   { translate: 0 0; }
 }
 
 @keyframes scaleIn {
-  from { transform: scale(0.95); opacity: 0; }
-  to   { transform: scale(1);    opacity: 1; }
+  /* Uses CSS `scale` property — does NOT touch `transform`, so -translate-x/y-1/2
+     on modals is preserved throughout the animation and after fill-mode holds. */
+  from { scale: 0.95; opacity: 0; }
+  to   { scale: 1;    opacity: 1; }
 }
 
 @keyframes fadeIn {
@@ -99,6 +81,28 @@
 }
 
 @keyframes slideUp {
-  from { transform: translateY(8px); opacity: 0; }
-  to   { transform: translateY(0);   opacity: 1; }
+  from { translate: 0 8px; opacity: 0; }
+  to   { translate: 0 0;   opacity: 1; }
 }
+
+@keyframes slideDown {
+  from { translate: 0 -8px; opacity: 0; }
+  to   { translate: 0 0;    opacity: 1; }
+}
+
+@keyframes toastSlideIn {
+  from { translate: 0 -100%; scale: 0.96; opacity: 0; }
+  to   { translate: 0 0;     scale: 1;    opacity: 1; }
+}
+
+@keyframes toastSlideOut {
+  from { translate: 0 0;     scale: 1;    opacity: 1; }
+  to   { translate: 0 -100%; scale: 0.96; opacity: 0; }
+}
+
+/* Stagger animation helpers */
+.stagger-1  { animation-delay: 30ms; }
+.stagger-2  { animation-delay: 60ms; }
+.stagger-3  { animation-delay: 90ms; }
+.stagger-4  { animation-delay: 120ms; }
+.stagger-5  { animation-delay: 150ms; }
