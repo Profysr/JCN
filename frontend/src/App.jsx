@@ -6,13 +6,13 @@ import LoginPage from "@/pages/auth/LoginPage";
 import RegisterPage from "@/pages/auth/RegisterPage";
 import OnboardingPage from "@/pages/onboarding/OnboardingPage";
 import WorkspaceRedirect from "@/pages/workspace/WorkspaceRedirect";
-import DashboardPage from "@/pages/dashboard/DashboardPage";
+// import DashboardPage from "@/pages/dashboard/DashboardPage";   // v3.3.0 — inlined into DashboardsPage
 import ProjectsPage from "@/pages/projects/ProjectsPage";
 import KanbanPage from "@/pages/projects/KanbanPage";
 import MembersPage from "@/pages/workspace/MembersPage";
 import SettingsPage from "@/pages/workspace/SettingsPage";
 import RoadmapPage from "@/pages/projects/RoadmapPage";
-import AnalyticsPage from "@/pages/workspace/AnalyticsPage";
+// import AnalyticsPage from "@/pages/workspace/AnalyticsPage";   // v3.3.0 — inlined into DashboardsPage
 import AcceptInvitePage from "@/pages/invite/AcceptInvitePage";
 import SetupWizard from "@/pages/workspace/SetupWizard";
 import CommandPalette from "@/components/CommandPalette";
@@ -26,6 +26,11 @@ import AutomationsPage from "@/pages/projects/AutomationsPage";
 import TimesheetsPage from "@/pages/workspace/TimesheetsPage";
 // v2.6.0 — public form (no auth)
 import PublicFormPage from "@/pages/forms/PublicFormPage";
+// v3.3.0
+import DashboardsPage from "@/pages/workspace/DashboardsPage";
+// v3.4.0
+import MyWorkPage from "@/pages/workspace/MyWorkPage";
+import PortfolioPage from "@/pages/workspace/PortfolioPage";
 
 export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -57,7 +62,8 @@ export default function App() {
           <Route path="/w/:workspaceSlug/setup" element={<SetupWizard />} />
 
           <Route path="/w/:workspaceSlug" element={<AppLayout onOpenPalette={() => setPaletteOpen(true)} />}>
-            <Route index element={<DashboardPage />} />
+            {/* v3.3.0 — old home redirects to Dashboards */}
+            <Route index element={<Navigate to="dashboards" replace />} />
             <Route path="projects" element={<ProjectsPage />} />
             <Route path="projects/:projectId" element={<KanbanPage />} />
 
@@ -73,10 +79,15 @@ export default function App() {
 
             {/* Workspace-level */}
             <Route path="roadmap" element={<RoadmapPage />} />
-            <Route path="analytics" element={<AnalyticsPage />} />
+            {/* v3.3.0 — Dashboards (replaces + subsumes old Dashboard + Analytics pages) */}
+            <Route path="dashboards" element={<DashboardsPage />} />
+            {/* Legacy redirects so old bookmarks don't break */}
+            <Route path="analytics" element={<Navigate to="dashboards?tab=analytics" replace />} />
             <Route path="timesheets" element={<TimesheetsPage />} />
-            <Route path="members" element={<MembersPage />} />
-            <Route path="settings" element={<SettingsPage />} />
+            <Route path="portfolio"  element={<PortfolioPage />} />
+            <Route path="my-work"    element={<MyWorkPage />} />
+            <Route path="members"    element={<MembersPage />} />
+            <Route path="settings"   element={<SettingsPage />} />
           </Route>
         </Route>
 

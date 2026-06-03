@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, FolderKanban, Users, Settings, LogOut,
   ChevronDown, Search, Map, BarChart2, Plus, Check, Clock, Square,
+  Inbox, Briefcase,
 } from "lucide-react";
 import { useActiveTimer, useStopTimer, formatDuration } from "@/hooks/useTimeTracking";
 import NotificationBell from "@/components/layout/NotificationBell";
@@ -46,13 +47,14 @@ export default function AppLayout({ onOpenPalette }) {
   };
 
   const navLinks = [
-    { to: `/w/${workspaceSlug}`,             icon: LayoutDashboard, label: "Dashboard",   end: true },
-    { to: `/w/${workspaceSlug}/projects`,    icon: FolderKanban,    label: "Projects" },
-    { to: `/w/${workspaceSlug}/roadmap`,     icon: Map,             label: "Roadmap" },
-    { to: `/w/${workspaceSlug}/analytics`,   icon: BarChart2,       label: "Analytics" },
-    { to: `/w/${workspaceSlug}/timesheets`,  icon: Clock,           label: "Timesheets" },
-    { to: `/w/${workspaceSlug}/members`,     icon: Users,           label: "Members" },
-    { to: `/w/${workspaceSlug}/settings`,    icon: Settings,        label: "Settings" },
+    { to: `/w/${workspaceSlug}/dashboards`,  icon: LayoutDashboard,    label: "Dashboards"  },
+    { to: `/w/${workspaceSlug}/projects`,    icon: FolderKanban,       label: "Projects"    },
+    { to: `/w/${workspaceSlug}/my-work`,     icon: Inbox,     label: "My Work"  },
+    { to: `/w/${workspaceSlug}/portfolio`,   icon: Briefcase, label: "Portfolio" },
+    { to: `/w/${workspaceSlug}/roadmap`,     icon: Map,                label: "Roadmap"     },
+    { to: `/w/${workspaceSlug}/timesheets`,  icon: Clock,              label: "Timesheets"  },
+    { to: `/w/${workspaceSlug}/members`,     icon: Users,              label: "Members"     },
+    { to: `/w/${workspaceSlug}/settings`,    icon: Settings,           label: "Settings"    },
   ];
 
   const initials    = workspace?.name?.[0]?.toUpperCase() || "W";

@@ -35,6 +35,14 @@ from .views import (
     TimeEntryListCreateView, TimeEntryDeleteView,
     TimerStartView, TimerStopView, TimerActiveView,
     TimesheetView,
+    # v2.9.0
+    CalendarICSView,
+    # v3.2.0
+    AdvancedSearchView,
+    # v3.3.0
+    DashboardListCreateView, DashboardDetailView,
+    # v3.4.0
+    MyWorkView, PortfolioView,
 )
 
 _ws = "workspaces/<slug:workspace_slug>"
@@ -163,4 +171,26 @@ urlpatterns += [
     path(f"{_ws}/timer/stop/",                                  TimerStopView.as_view()),
     path(f"{_ws}/timer/active/",                                TimerActiveView.as_view()),
     path(f"{_ws}/timesheets/",                                  TimesheetView.as_view()),
+]
+
+# v2.9.0 — Calendar
+urlpatterns += [
+    path(f"{_pr}/calendar.ics/",                                CalendarICSView.as_view()),
+]
+
+# v3.2.0 — Advanced Search
+urlpatterns += [
+    path("search/advanced/",                                     AdvancedSearchView.as_view()),
+]
+
+# v3.3.0 — Custom Dashboards
+urlpatterns += [
+    path(f"{_ws}/dashboards/",                                   DashboardListCreateView.as_view()),
+    path(f"{_ws}/dashboards/<uuid:dashboard_id>/",               DashboardDetailView.as_view()),
+]
+
+# v3.4.0 — My Work + Portfolio
+urlpatterns += [
+    path("my-work/",                                             MyWorkView.as_view()),
+    path(f"{_ws}/portfolio/",                                    PortfolioView.as_view()),
 ]

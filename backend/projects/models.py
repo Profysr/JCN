@@ -244,14 +244,17 @@ class Board(models.Model):
 
 
 class SavedView(models.Model):
-    """Named filter preset per project per user (v0.8.0). Optionally scoped to a board (v2.2.0)."""
-    id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    project    = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="saved_views")
-    board      = models.ForeignKey("Board", on_delete=models.CASCADE, null=True, blank=True, related_name="saved_views")
-    user       = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="saved_views")
-    name       = models.CharField(max_length=100)
-    filters    = models.JSONField(default=dict)  # {search, priorities, assignees, labels}
-    created_at = models.DateTimeField(auto_now_add=True)
+    """Named filter preset per project per user (v0.8.0). Extended in v3.2.0."""
+    id                  = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project             = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="saved_views")
+    board               = models.ForeignKey("Board", on_delete=models.CASCADE, null=True, blank=True, related_name="saved_views")
+    user                = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="saved_views")
+    name                = models.CharField(max_length=100)
+    filters             = models.JSONField(default=dict)
+    # v3.2.0 — search alerts
+    is_workspace_scoped = models.BooleanField(default=False)
+    alert_enabled       = models.BooleanField(default=False)
+    created_at          = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["name"]
@@ -631,6 +634,26 @@ class TimeEntry(models.Model):
 
     def __str__(self):
         return f"{self.user.email} — {self.task.title} ({self.duration_seconds}s)"
+
+
+# ── v3.3.0 — Custom Dashboards ────────────────────────────────────────────────
+class Dashboard(models.Model):
+    """Configurable widget canvas per workspace (v3.3.0)."""
+    id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace  = models.ForeignKey("workspaces.Workspace", on_delete=models.CASCADE, related_name="dashboards")
+    name       = models.CharField(max_length=100)
+    widgets    = models.JSONField(default=list)   # [{id, type, title, config, position}]
+    is_builtin = models.BooleanField(default=False)  # overview/analytics — non-deletable
+    order      = models.PositiveIntegerField(default=0)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="dashboards")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["order", "name"]
+
+    def __str__(self):
+        return f"{self.workspace.name} / {self.name}"
 
 
 class AuditEvent(models.Model):

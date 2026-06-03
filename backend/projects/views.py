@@ -24,6 +24,7 @@ from .models import (
     TimeEntry,
     ProjectMember, GuestToken,
     Board,
+    Dashboard,
 )
 from .serializers import (
     ProjectSerializer, TaskStatusSerializer,
@@ -39,6 +40,7 @@ from .serializers import (
     TimeEntrySerializer,
     ProjectMemberSerializer, GuestTokenSerializer,
     BoardSerializer,
+    DashboardSerializer,
 )
 from .permissions import has_project_permission, get_effective_role, log_audit
 
@@ -249,12 +251,19 @@ class TaskListCreateView(APIView):
 
     def get(self, request, workspace_slug, project_id):
         project = self.get_project(workspace_slug, project_id, request.user)
-        tasks = project.tasks.select_related("status", "assignee", "created_by", "sprint").prefetch_related("subtasks", "comments", "labels")
+        tasks = project.tasks.select_related("status", "assignee", "created_by", "sprint").prefetch_related("subtasks", "comments", "labels", "blocked_by_deps")
         sprint_param = request.query_params.get("sprint")
         if sprint_param == "none":
             tasks = tasks.filter(sprint__isnull=True)
         elif sprint_param:
             tasks = tasks.filter(sprint_id=sprint_param)
+        # v2.9.0 — optional date-range filter (used by calendar view)
+        start = request.query_params.get("start")
+        end   = request.query_params.get("end")
+        if start:
+            tasks = tasks.filter(due_date__gte=start)
+        if end:
+            tasks = tasks.filter(due_date__lte=end)
         return Response(TaskSerializer(tasks, many=True, context={"request": request}).data)
 
     def post(self, request, workspace_slug, project_id):
@@ -557,10 +566,12 @@ class GlobalSearchView(APIView):
             user=request.user
         ).values_list("workspace_id", flat=True)
 
+        # v3.2.0 — search across title AND description
         tasks = (
             Task.objects.filter(
                 project__workspace_id__in=workspace_ids,
-                title__icontains=q,
+            ).filter(
+                django_models.Q(title__icontains=q) | django_models.Q(description__icontains=q)
             )
             .select_related("project__workspace", "status")[:8]
         )
@@ -576,6 +587,90 @@ class GlobalSearchView(APIView):
             "tasks":    TaskSearchSerializer(tasks, many=True).data,
             "projects": ProjectSearchSerializer(projects, many=True).data,
         })
+
+
+# v3.2.0 — Advanced filter endpoint ──────────────────────────────────────────
+class AdvancedSearchView(APIView):
+    """POST /search/advanced/ — arbitrary AND/OR filter tree across a workspace."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        workspace_slug = request.data.get("workspace_slug")
+        tree           = request.data.get("filters", {})  # {logic, conditions, groups}
+        if not workspace_slug:
+            return Response({"error": "workspace_slug required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        workspace = get_object_or_404(
+            Workspace, slug=workspace_slug,
+            members__user=request.user,
+        )
+        qs = Task.objects.filter(project__workspace=workspace).select_related("status", "assignee", "sprint").prefetch_related("labels")
+        qs = self._apply_tree(qs, tree)
+        return Response(TaskSerializer(qs[:100], many=True, context={"request": request}).data)
+
+    def _apply_tree(self, qs, tree):
+        if not tree:
+            return qs
+        logic      = tree.get("logic", "AND").upper()
+        conditions = tree.get("conditions", [])
+        groups     = tree.get("groups", [])
+
+        q_expr = django_models.Q()
+        for cond in conditions:
+            q_expr = (q_expr & self._cond_q(cond)) if logic == "AND" else (q_expr | self._cond_q(cond))
+        for grp in groups:
+            grp_q = self._group_q(grp)
+            q_expr = (q_expr & grp_q) if logic == "AND" else (q_expr | grp_q)
+
+        return qs.filter(q_expr)
+
+    def _group_q(self, group):
+        logic      = group.get("logic", "AND").upper()
+        conditions = group.get("conditions", [])
+        q = django_models.Q()
+        for cond in conditions:
+            cq = self._cond_q(cond)
+            q  = (q & cq) if logic == "AND" else (q | cq)
+        return q
+
+    def _cond_q(self, cond):
+        field    = cond.get("field", "")
+        operator = cond.get("operator", "equals")
+        value    = cond.get("value")
+        today    = timezone.now().date()
+
+        try:
+            if field == "text":
+                return django_models.Q(title__icontains=value) | django_models.Q(description__icontains=value)
+            if field == "priority":
+                return django_models.Q(priority=value) if operator == "equals" else ~django_models.Q(priority=value)
+            if field == "status":
+                return django_models.Q(status_id=value) if operator == "equals" else ~django_models.Q(status_id=value)
+            if field == "assignee":
+                if operator == "is_set":   return ~django_models.Q(assignee__isnull=True)
+                if operator == "is_not_set": return django_models.Q(assignee__isnull=True)
+                return django_models.Q(assignee_id=value)
+            if field == "task_type":
+                return django_models.Q(task_type=value)
+            if field == "label":
+                return django_models.Q(labels__id=value)
+            if field == "sprint":
+                return django_models.Q(sprint_id=value)
+            if field == "due_date":
+                if operator == "overdue":      return django_models.Q(due_date__lt=today)
+                if operator == "today":        return django_models.Q(due_date=today)
+                if operator == "is_set":       return ~django_models.Q(due_date__isnull=True)
+                if operator == "is_not_set":   return django_models.Q(due_date__isnull=True)
+                if operator == "before":       return django_models.Q(due_date__lt=value)
+                if operator == "after":        return django_models.Q(due_date__gt=value)
+            if field == "has_attachment":
+                return ~django_models.Q(attachments__isnull=True)
+            if field == "estimate_points":
+                if operator == "gte": return django_models.Q(estimate_points__gte=value)
+                if operator == "lte": return django_models.Q(estimate_points__lte=value)
+        except Exception:
+            pass
+        return django_models.Q()  # unknown condition — pass through
 
 
 # ── Custom Fields (v0.8.0) ────────────────────────────────────────────────────
@@ -1834,5 +1929,169 @@ class TimesheetView(APIView):
         ]
 
         return Response({"week_start": str(start_date), "days": days, "rows": rows})
+
+
+# ── v2.9.0 — iCal export ──────────────────────────────────────────────────────
+class CalendarICSView(APIView):
+    """GET /projects/:id/calendar.ics/ — subscribable iCal feed for the project."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, workspace_slug, project_id):
+        workspace = get_workspace_for_user(workspace_slug, request.user)
+        project   = get_object_or_404(Project, id=project_id, workspace=workspace)
+        tasks     = project.tasks.filter(due_date__isnull=False).select_related("status", "assignee")
+
+        lines = [
+            "BEGIN:VCALENDAR",
+            "VERSION:2.0",
+            f"PRODID:-//JCN//{project.name}//EN",
+            "CALSCALE:GREGORIAN",
+            "METHOD:PUBLISH",
+        ]
+        for task in tasks:
+            dt_str = task.due_date.strftime("%Y%m%d")
+            summary = task.title.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,")
+            lines += [
+                "BEGIN:VEVENT",
+                f"UID:{task.id}@jcn",
+                f"SUMMARY:{summary}",
+                f"DTSTART;VALUE=DATE:{dt_str}",
+                f"DTEND;VALUE=DATE:{dt_str}",
+                f"STATUS:{'COMPLETED' if task.status and task.status.is_done else 'NEEDS-ACTION'}",
+                "END:VEVENT",
+            ]
+        lines.append("END:VCALENDAR")
+
+        content = "\r\n".join(lines) + "\r\n"
+        response = HttpResponse(content, content_type="text/calendar; charset=utf-8")
+        response["Content-Disposition"] = f'attachment; filename="{project.name}-calendar.ics"'
+        return response
+
+
+# ── v3.3.0 — Custom Dashboards ────────────────────────────────────────────────
+def _ensure_builtin_dashboards(workspace):
+    """Create the two non-deletable built-in dashboards if they don't exist yet."""
+    if not Dashboard.objects.filter(workspace=workspace, is_builtin=True).exists():
+        Dashboard.objects.bulk_create([
+            Dashboard(workspace=workspace, name="Overview",  is_builtin=True, order=0, widgets=[]),
+            Dashboard(workspace=workspace, name="Analytics", is_builtin=True, order=1, widgets=[]),
+        ])
+
+
+class DashboardListCreateView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, workspace_slug):
+        workspace = get_workspace_for_user(workspace_slug, request.user)
+        _ensure_builtin_dashboards(workspace)
+        dashboards = workspace.dashboards.all()
+        return Response(DashboardSerializer(dashboards, many=True).data)
+
+    def post(self, request, workspace_slug):
+        workspace = get_workspace_for_user(workspace_slug, request.user)
+        serializer = DashboardSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        dashboard = serializer.save(workspace=workspace, created_by=request.user)
+        return Response(DashboardSerializer(dashboard).data, status=status.HTTP_201_CREATED)
+
+
+class DashboardDetailView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _get(self, workspace_slug, dashboard_id, user):
+        workspace = get_workspace_for_user(workspace_slug, user)
+        return get_object_or_404(Dashboard, id=dashboard_id, workspace=workspace)
+
+    def get(self, request, workspace_slug, dashboard_id):
+        d = self._get(workspace_slug, dashboard_id, request.user)
+        return Response(DashboardSerializer(d).data)
+
+    def patch(self, request, workspace_slug, dashboard_id):
+        d = self._get(workspace_slug, dashboard_id, request.user)
+        serializer = DashboardSerializer(d, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(DashboardSerializer(d).data)
+
+    def delete(self, request, workspace_slug, dashboard_id):
+        d = self._get(workspace_slug, dashboard_id, request.user)
+        if d.is_builtin:
+            return Response({"error": "Built-in dashboards cannot be deleted."}, status=status.HTTP_403_FORBIDDEN)
+        d.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ── v3.4.0 — My Work ─────────────────────────────────────────────────────────
+class MyWorkView(APIView):
+    """GET /my-work/ — all tasks assigned to the current user, across all workspaces, sorted by urgency."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        workspace_ids = WorkspaceMember.objects.filter(user=request.user).values_list("workspace_id", flat=True)
+        tasks = (
+            Task.objects
+            .filter(project__workspace_id__in=workspace_ids, assignee=request.user)
+            .exclude(status__is_done=True)
+            .select_related("status", "assignee", "sprint", "project__workspace")
+            .prefetch_related("labels", "blocked_by_deps")
+        )
+
+        today    = timezone.now().date()
+        week_end = today + datetime.timedelta(days=7)
+
+        def urgency(t):
+            score = 0
+            if t.due_date:
+                d = t.due_date
+                if d < today:     score += 100
+                elif d == today:  score += 30
+                elif d <= week_end: score += 10
+            if t.priority == "urgent": score += 50
+            elif t.priority == "high": score += 20
+            return score
+
+        sorted_tasks = sorted(tasks, key=lambda t: -urgency(t))
+        return Response(TaskSerializer(sorted_tasks, many=True, context={"request": request}).data)
+
+
+# ── v3.4.0 — Portfolio ────────────────────────────────────────────────────────
+class PortfolioView(APIView):
+    """GET /portfolio/ — cross-project health stats for a workspace."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, workspace_slug):
+        workspace = get_workspace_for_user(workspace_slug, request.user)
+        projects  = Project.objects.filter(workspace=workspace, status=Project.Status.ACTIVE).prefetch_related("tasks", "tasks__status", "sprints")
+        today = timezone.now().date()
+
+        def health(p):
+            tasks       = p.tasks.all()
+            total       = tasks.count()
+            done        = tasks.filter(status__is_done=True).count()
+            overdue     = tasks.filter(due_date__lt=today, status__is_done=False).count()
+            overdue_pct = (overdue / total * 100) if total else 0
+            if overdue_pct > 25:  return "off_track"
+            if overdue_pct > 10:  return "at_risk"
+            return "on_track"
+
+        data = []
+        for p in projects:
+            tasks   = p.tasks.all()
+            total   = tasks.count()
+            done    = tasks.filter(status__is_done=True).count()
+            overdue = tasks.filter(due_date__lt=today, status__is_done=False).count()
+            sprints = p.sprints.filter(status="active").values("id", "name", "start_date", "end_date")
+            data.append({
+                "id":           str(p.id),
+                "name":         p.name,
+                "health":       health(p),
+                "total_tasks":  total,
+                "done_tasks":   done,
+                "overdue_tasks": overdue,
+                "completion_pct": round(done / total * 100) if total else 0,
+                "active_sprints": list(sprints),
+            })
+
+        return Response(data)
 
 

@@ -11,8 +11,10 @@ from .models import (
     TimeEntry,
     ProjectMember, GuestToken,
     Board,
+    Dashboard,
 )
 from accounts.serializers import UserSerializer
+
 
 
 class TaskStatusSerializer(serializers.ModelSerializer):
@@ -60,12 +62,19 @@ class BoardSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "updated_at"]
 
 
+class DashboardSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = Dashboard
+        fields = ["id", "name", "widgets", "is_builtin", "order", "created_at", "updated_at"]
+        read_only_fields = ["id", "is_builtin", "created_at", "updated_at"]
+
+
 class SavedViewSerializer(serializers.ModelSerializer):
     board_id = serializers.UUIDField(allow_null=True, required=False)
 
     class Meta:
         model = SavedView
-        fields = ["id", "name", "filters", "board_id", "created_at"]
+        fields = ["id", "name", "filters", "board_id", "is_workspace_scoped", "alert_enabled", "created_at"]
         read_only_fields = ["id", "created_at"]
 
 
@@ -130,6 +139,8 @@ class TaskSerializer(serializers.ModelSerializer):
     comment_count      = serializers.SerializerMethodField()
     child_count        = serializers.SerializerMethodField()
     done_child_count   = serializers.SerializerMethodField()
+    # v3.0.0 — lightweight dep IDs for Gantt dependency arrows (no extra request needed)
+    blocked_by_ids     = serializers.SerializerMethodField()
 
     class Meta:
         model = Task
@@ -144,6 +155,7 @@ class TaskSerializer(serializers.ModelSerializer):
             "created_by", "created_at", "updated_at",
             "subtask_count", "done_subtask_count", "comment_count",
             "child_count", "done_child_count",
+            "blocked_by_ids",
         ]
         read_only_fields = ["id", "created_by", "created_at", "updated_at"]
 
@@ -152,6 +164,7 @@ class TaskSerializer(serializers.ModelSerializer):
     def get_comment_count(self, obj):      return obj.comments.count()
     def get_child_count(self, obj):        return obj.children.count()
     def get_done_child_count(self, obj):   return obj.children.filter(status__is_done=True).count()
+    def get_blocked_by_ids(self, obj):     return [str(d.blocker_id) for d in obj.blocked_by_deps.all()]
 
     def get_parent_detail(self, obj):
         if obj.parent_id:

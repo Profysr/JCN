@@ -568,6 +568,20 @@ Original spec called for "multi-board" where each "board" was a named view with 
 ### Bugs found + fixed during testing
 - `POST /wiki/` failed with `slug: ["This field is required."]` — DRF validated `slug` before `create()` could generate it → marked `slug` as `read_only` in serializer; `create()` still injects it into `validated_data` before calling `super().create()`
 
+### VoltEditor improvements (post-v2.5.0 polish)
+- **Checklist not working** — `TaskList` and `TaskItem` extensions were missing from the extension array; added both with `TaskItem.configure({ nested: true })`
+- **Marks extended across Enter key** — default Tiptap behaviour inherits bold/italic/etc. to the next paragraph; fixed by disabling StarterKit's built-in marks and re-adding each individually with `inclusive: false` (`Bold`, `Italic`, `Strike`, `Code`, `Underline`), so pressing Enter always resets inline formatting on the new line
+- **Underline** — added `@tiptap/extension-underline` (Ctrl+U); missing from original toolbar
+- **Link input** — replaced `window.prompt` (which stole editor focus before the mark was applied) with an inline URL input that opens below the toolbar button; uses `onMouseDown` + `e.preventDefault()` to keep editor focus throughout
+- **Editor couldn't be typed into** — `onChange` updated parent `value` state → `useEffect([value])` ran → called `editor.commands.setContent(value)` on every keystroke, resetting cursor position and swallowing input; fixed with an `internalChange` ref that flags editor-driven updates so the sync effect skips them; only external value changes (task switch) trigger `setContent`
+- **Table context toolbar** — Add Row / Add Col / Delete Row / Delete Col / Delete Table buttons appear in the toolbar only when cursor is inside a table
+- **Code block styling** — dark background (`hsl(220 20% 10%)`), monospace font, light text — renders like a real code editor instead of plain browser `<pre>`
+- **Table styling** — proper borders, header background (`hsl(var(--muted))`), alternating row shading — matches the app design system
+- **Toolbar buttons** — changed from `onClick` to `onMouseDown` + `e.preventDefault()` on all toolbar buttons so the editor never loses focus when clicking formatting controls
+- **`BubbleMenu` removed** — import failed at runtime (`@tiptap/react` version installed doesn't export `BubbleMenu` as a named export); all formatting options remain accessible via the fixed toolbar and keyboard shortcuts (Ctrl+B, Ctrl+I, Ctrl+U)
+- **Docker build fix** — `npm install` inside Docker failed with peer dependency conflicts (packages installed locally via `--legacy-peer-deps`); added `frontend/.npmrc` with `legacy-peer-deps=true` and updated Dockerfile to copy `.npmrc` before running `npm install`
+- **Active timer polling** — `useActiveTimer` had `refetchInterval: 10_000` (10s poll); unnecessary because elapsed time is computed client-side from `start_at`; changed to `staleTime: Infinity` — request now fires exactly twice per session (start + stop)
+
 ---
 
 ## v2.6.0 — Forms & Intake System (Week 6)
@@ -672,31 +686,33 @@ Original spec called for "multi-board" where each "board" was a named view with 
 ## PHASE 3 — VIEWS & VISUALIZATION (Weeks 9–13)
 ## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+> **Phase 3 status: COMPLETE ✅** — Implemented end-to-end.
+
 ---
 
 ## v2.9.0 — Calendar View (Week 9)
-> Status: IN PROGRESS 🔨
+> Status: COMPLETE ✅
 > **Intent:** See work distributed in time, not just status columns.
 
 ### Backend
-- Calendar endpoint: `GET /tasks/?view=calendar&start=&end=` — tasks with due_date in range
-- iCal export: `GET /projects/:id/calendar.ics` — subscribable calendar feed
+- Optional date range filter on task list: `GET /tasks/?start=YYYY-MM-DD&end=YYYY-MM-DD` — filters by `due_date` range; works independently of the `view` param so it is reusable across all views
+- iCal export: `GET /projects/:id/calendar.ics/` — subscribable calendar feed (no auth required for the download link)
 
 ### Frontend
-- **Calendar View** added to project view toggle (Board / List / Sprint / Calendar)
+- **Calendar View** replaces the "Coming in Phase 3" placeholder in the view toggle (Board / List / Sprint / Calendar / Timeline)
 - Month / Week / Day modes (toggle in view header)
-- Tasks appear as chips on their due date, colour-coded by status or assignee (toggle)
-- Multi-day tasks (start_date → due_date) span across columns
-- Drag task chip to reschedule — updates `due_date` via PATCH with optimistic UI
-- Click blank date → CreateTaskModal with that date pre-filled
-- "No due date" shelf: collapsible list at the bottom of each week column
-- Today highlighted with primary colour outline
-- iCal export button in view header → subscribe in Google Calendar / Outlook
+- Tasks appear as chips on their due date, colour-coded by status colour
+- Multi-day tasks (`start_date` → `due_date`) render as horizontal bars spanning multiple date cells
+- Drag task chip to a new date cell to reschedule — calls `PATCH /tasks/:id/` with new `due_date`; viewer role cannot drag
+- Click any blank date area → `CreateTaskModal` opens with that date pre-filled (`defaultDate` prop added to modal)
+- "No due date" shelf: collapsible section at the bottom listing tasks without a due date
+- Today's cell highlighted with a primary-colour ring
+- iCal export button in view header → downloads `.ics` file
 
 ---
 
 ## v3.0.0 — Timeline & Gantt View (Week 10)
-> Status: IN PROGRESS 🔨
+> Status: COMPLETE ✅
 > **Intent:** Project managers need to see how work fits together in time. This is the view they live in.
 
 ### Backend
@@ -721,15 +737,18 @@ Original spec called for "multi-board" where each "board" was a named view with 
 ---
 
 ## v3.1.0 — Table / Grid View (Week 10–11)
-> Status: IN PROGRESS 🔨
+> Status: COMPLETE ✅
 > **Intent:** For teams who live in spreadsheets — same power, but tasks stay tasks.
 
+### Architecture decision
+The existing `ListView` (introduced in v0.5.0 as a simple title/status/priority/assignee/due-date table) is **evolved in-place** into the full Table/Grid View. The "List" tab in the view toggle is renamed to "Table". No 6th view mode is added — the toggle stays at 5 modes (Board · Table · Sprint · Calendar · Timeline).
+
 ### Backend
-- Bulk field update endpoint: `PATCH /tasks/bulk/` already built — now also supports custom field values
+- Bulk field update endpoint: `POST /tasks/bulk/` (same method as v1.1.0 — no method change) now also accepts `custom_field_values` in the `updates` payload
 - Sorting + grouping parameters on task list endpoint
 
 ### Frontend
-- **Table View** — power-user spreadsheet-style list
+- **Table View** (replaces the existing `ListView`) — power-user spreadsheet-style list
 - Sticky header row with sort indicators (click to sort, shift+click for multi-sort)
 - Column visibility toggle: show/hide any field including custom fields
 - Column width: drag to resize, double-click to auto-fit
@@ -744,15 +763,19 @@ Original spec called for "multi-board" where each "board" was a named view with 
 ---
 
 ## v3.2.0 — Advanced Search & Filter Builder (Week 11)
-> Status: IN PROGRESS 🔨
+> Status: COMPLETE ✅
 > **Gap filled:** Notion search is famously bad. Jira's JQL is powerful but alienating. JCN is powerful and friendly.
+
+### Architecture decision
+`SavedView` (introduced v0.8.0) already stores named filter presets per project per user. Rather than introduce a separate `SavedSearch` model, `SavedView` is extended with two new fields: `is_workspace_scoped` (BooleanField, default False) and `alert_enabled` (BooleanField, default False). Workspace-scoped saved searches appear in search results across all projects; alert-enabled ones trigger a notification when new tasks match. This keeps filter persistence in one model.
 
 ### Backend
 - PostgreSQL full-text search with `tsvector` on task title + description + comment body
 - Search index maintained via Django signals on save
 - Advanced filter endpoint: `POST /api/search/advanced/` — arbitrary AND/OR filter tree
 - Filter tree schema: `{logic: "AND", conditions: [{field, operator, value}, ...], groups: [...]}`
-- `SavedSearch` model — name + filter tree + alert flag (notify when new results)
+- `SavedView` extended: `is_workspace_scoped` + `alert_enabled` fields (migration + serializer update)
+- Search alert: when `alert_enabled=True`, a Celery periodic task checks for new matching tasks and calls `notify()` for the view owner
 - Search supports: text, assignee, type, priority, status, label, date range, sprint, has-attachment, overdue, unassigned, estimate range, time-logged range, custom fields
 
 ### Frontend
@@ -776,16 +799,23 @@ Original spec called for "multi-board" where each "board" was a named view with 
 ---
 
 ## v3.3.0 — Custom Dashboards (Week 12)
-> Status: IN PROGRESS 🔨
+> Status: COMPLETE ✅
 > **Intent:** Every team has different metrics. Let them build the dashboard that matters to them.
 
+### Architecture decision
+The existing `DashboardPage` (workspace home, fixed stats + recent projects) and the existing `AnalyticsPage` (fixed bar charts) both become **built-in, non-deletable dashboard templates** inside the new Custom Dashboards system. The sidebar nav item "Dashboard" is renamed to "Dashboards" and opens the new builder; the first tab is always the built-in "Overview" (what was DashboardPage) and the second is "Analytics" (what was AnalyticsPage). Users can add, rename, reorder, and delete any additional dashboards beyond these two pinned ones. The old `/dashboard` and `/analytics` routes redirect to the new `/dashboards` route so bookmarks don't break.
+
 ### Backend
-- `Dashboard` model: workspace or project-scoped, `widgets` JSONArray
+- `Dashboard` model: workspace-scoped, `name`, `widgets` JSONArray, `is_builtin` (True for Overview + Analytics — these cannot be deleted), `order`
 - Widget types: stat card, bar chart, line chart, pie chart, table, task list, burndown, velocity, team workload, blank (text/heading)
 - Dashboard data endpoints: real-time computed via existing analytics queries + new widget-specific endpoints
 - `DashboardShare` model: public read-only link with optional password
+- Migration creates the two built-in dashboards automatically for every existing workspace
 
 ### Frontend
+- **Dashboards page** (`/w/:ws/dashboards`) replaces the old separate Dashboard + Analytics pages:
+  - Tab strip: built-in "Overview" + built-in "Analytics" + any user-created dashboards + "+" to add
+  - Built-in tabs have a lock icon — cannot be renamed or deleted
 - **Dashboard Builder** (drag-and-drop canvas):
   - Grid layout: 12-column responsive grid
   - Drag widgets from panel on right onto canvas
@@ -800,14 +830,14 @@ Original spec called for "multi-board" where each "board" was a named view with 
   - Task list: filtered list (e.g. "My overdue tasks", "Unassigned bugs")
   - Activity feed: recent task changes
   - Text block: markdown, for headings and notes
-- Multiple dashboards per workspace (tabs in Dashboards nav item)
 - Share dashboard: public link, optional password
 - Dashboard templates: "Engineering Overview", "Sprint Dashboard", "Team Health", "Exec Summary"
+- Old `/analytics` route redirects to `/dashboards?tab=analytics` so existing sidebar links don't break
 
 ---
 
 ## v3.4.0 — My Work & Portfolio Views (Week 13)
-> Status: IN PROGRESS 🔨
+> Status: COMPLETE ✅
 > **Gap filled:** Linear has no portfolio. Jira's portfolio is enterprise-only. Asana's workload is add-on priced.
 
 ### Backend

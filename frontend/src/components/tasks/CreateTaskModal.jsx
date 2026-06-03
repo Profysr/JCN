@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useCreateTask } from "@/hooks/useTasks";
 import { useTaskTemplates, useCreateTaskTemplate } from "@/hooks/useTaskHierarchy";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,7 @@ export default function CreateTaskModal({
   open, onClose, workspaceSlug, projectId,
   defaultStatusId, statuses = [], members = [],
   defaultParentId = null,
+  defaultDate = null,
 }) {
   const { mutate, isPending } = useCreateTask(workspaceSlug, projectId);
   const { data: templates = [] } = useTaskTemplates(workspaceSlug, projectId);
@@ -39,7 +40,7 @@ export default function CreateTaskModal({
   const [taskType,        setTaskType]        = useState("task");
   const [statusId,        setStatusId]        = useState("");
   const [assigneeId,      setAssigneeId]      = useState("");
-  const [dueDate,         setDueDate]         = useState("");
+  const [dueDate,         setDueDate]         = useState(defaultDate || "");
   const [startDate,       setStartDate]       = useState("");
   const [estimatePoints,  setEstimatePoints]  = useState("");
   const [estimateHours,   setEstimateHours]   = useState("");
@@ -50,9 +51,14 @@ export default function CreateTaskModal({
   const [newTplName,      setNewTplName]      = useState("");
   const [creatingTpl,     setCreatingTpl]     = useState(false);
 
+  // Sync defaultDate whenever the modal opens with a new date
+  useEffect(() => {
+    if (open) setDueDate(defaultDate || "");
+  }, [open, defaultDate]);
+
   const reset = () => {
     setTitle(""); setPriority("no_priority"); setTaskType("task");
-    setStatusId(""); setAssigneeId(""); setDueDate(""); setStartDate("");
+    setStatusId(""); setAssigneeId(""); setDueDate(defaultDate || ""); setStartDate("");
     setEstimatePoints(""); setEstimateHours(""); setParentId(defaultParentId || "");
     setDesc(""); setShowAdvanced(false);
   };

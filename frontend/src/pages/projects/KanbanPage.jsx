@@ -24,6 +24,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Plus, ArrowLeft, Download, Settings2, Users, Lock, LayoutGrid, List, Zap, CalendarDays, GanttChartSquare, BookOpen, FormInput } from "lucide-react";
+import CalendarView from "@/components/tasks/CalendarView";
+import GanttView from "@/components/tasks/GanttView";
 import { cn } from "@/lib/utils";
 import { useBulkUpdateTasks } from "@/hooks/useBulkActions";
 import api from "@/lib/api";
@@ -32,7 +34,7 @@ const EMPTY_FILTERS = { search: "", priorities: [], assignees: [], labels: [], t
 
 const VIEW_OPTIONS = [
   { id: "kanban",   icon: LayoutGrid,       label: "Board"    },
-  { id: "list",     icon: List,             label: "List"     },
+  { id: "list",     icon: List,             label: "Table"    },
   { id: "sprint",   icon: Zap,              label: "Sprint"   },
   { id: "calendar", icon: CalendarDays,     label: "Calendar" },
   { id: "timeline", icon: GanttChartSquare, label: "Timeline" },
@@ -113,7 +115,7 @@ export default function KanbanPage() {
   const createView = useCreateSavedView(workspaceSlug, projectId);
   const deleteView = useDeleteSavedView(workspaceSlug, projectId);
 
-  const [createModal, setCreateModal]   = useState({ open: false, statusId: null });
+  const [createModal, setCreateModal]   = useState({ open: false, statusId: null, date: null });
   const [boardSettings, setBoardSettings] = useState(false);
   const [membersModal, setMembersModal]   = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState(() => searchParams.get("task") || null);
@@ -365,9 +367,17 @@ export default function KanbanPage() {
         )}
 
         {view === "list" && (
-          <ListView tasks={filteredTasks} statuses={project?.statuses || []}
-            onTaskClick={task => openTask(task.id)} selectedTaskId={selectedTaskId}
-            selectedIds={selectedIds} onToggleSelect={toggleSelect} />
+          <ListView
+            tasks={filteredTasks}
+            statuses={project?.statuses || []}
+            members={members}
+            onTaskClick={(id) => openTask(id)}
+            onUpdateTask={(data) => updateTask.mutate(data)}
+            selectedTaskId={selectedTaskId}
+            selectedIds={selectedIds}
+            onToggleSelect={toggleSelect}
+            canEdit={perms.canEdit}
+          />
         )}
 
         {view === "sprint" && (
@@ -409,18 +419,34 @@ export default function KanbanPage() {
             )}
           </div>
         )}
-      </div>
 
-      {/* Calendar / Timeline — coming soon placeholders */}
-      {(view === "calendar" || view === "timeline") && (
-        <div className="flex-1 flex items-center justify-center text-center p-12">
-          <div>
-            <div className="text-4xl mb-3">{view === "calendar" ? "📅" : "📊"}</div>
-            <p className="text-sm font-semibold text-foreground mb-1 capitalize">{view} view</p>
-            <p className="text-xs text-muted-foreground">Coming in Phase 3 — Timeline &amp; Calendar views.</p>
-          </div>
-        </div>
-      )}
+        {/* Calendar View (v2.9.0) */}
+        {view === "calendar" && (
+          <CalendarView
+            tasks={filteredTasks}
+            statuses={project?.statuses || []}
+            onTaskClick={openTask}
+            onCreateTask={(date) => setCreateModal({ open: true, statusId: null, date })}
+            workspaceSlug={workspaceSlug}
+            projectId={projectId}
+            canEdit={perms.canEdit}
+          />
+        )}
+
+        {/* Timeline / Gantt View (v3.0.0) */}
+        {view === "timeline" && (
+          <GanttView
+            tasks={filteredTasks}
+            statuses={project?.statuses || []}
+            members={members}
+            sprints={sprints}
+            onTaskClick={openTask}
+            workspaceSlug={workspaceSlug}
+            projectId={projectId}
+            canEdit={perms.canEdit}
+          />
+        )}
+      </div>
 
       {/* Sprint panel (right side in sprint mode) */}
       {view === "sprint" && (
@@ -457,10 +483,11 @@ export default function KanbanPage() {
 
       <CreateTaskModal
         open={createModal.open}
-        onClose={() => setCreateModal({ open: false, statusId: null })}
+        onClose={() => setCreateModal({ open: false, statusId: null, date: null })}
         workspaceSlug={workspaceSlug}
         projectId={projectId}
         defaultStatusId={createModal.statusId}
+        defaultDate={createModal.date}
         statuses={project?.statuses || []}
         members={members}
       />
