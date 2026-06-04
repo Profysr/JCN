@@ -32,6 +32,21 @@ export function useRequestApproval(workspaceSlug, projectId, taskId) {
   });
 }
 
+export function useResubmitApproval(workspaceSlug, projectId, taskId, approvalId) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api
+        .post(
+          `/api/workspaces/${workspaceSlug}/projects/${projectId}/tasks/${taskId}/approvals/${approvalId}/resubmit/`,
+        )
+        .then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: approvalsKey(workspaceSlug, projectId, taskId) });
+    },
+  });
+}
+
 export function useSubmitReview(workspaceSlug, projectId, taskId, approvalId) {
   const qc = useQueryClient();
   return useMutation({

@@ -13,6 +13,7 @@ import { useWorkspaceSocket } from "@/hooks/useWorkspaceSocket";
 import { useProjectPermissions } from "@/hooks/useProjectPermissions";
 import { usePresence, useAnnouncePresence } from "@/hooks/usePresence";
 import { useAuthStore } from "@/store/authStore";
+import { useToast } from "@/components/ui/toast";
 import KanbanColumn from "@/components/tasks/KanbanColumn";
 import CreateTaskModal from "@/components/tasks/CreateTaskModal";
 import TaskDetailPanel from "@/components/tasks/TaskDetailPanel";
@@ -103,6 +104,7 @@ export default function KanbanPage() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const { user } = useAuthStore();
+  const { toast } = useToast();
   const { data: project }   = useProject(workspaceSlug, projectId);
   const { data: allTasks = [] } = useTasks(workspaceSlug, projectId);
   const { data: labels = [] }   = useLabels(workspaceSlug, projectId);
@@ -233,8 +235,17 @@ export default function KanbanPage() {
 
   const handleDragEnd = (result) => {
     if (!result.destination) return;
-    if (!perms.canEdit) return; // Viewers cannot reorder tasks
-    moveTask.mutate({ taskId: result.draggableId, status_id: result.destination.droppableId, order: result.destination.index });
+    if (!perms.canEdit) return;
+    moveTask.mutate(
+      { taskId: result.draggableId, status_id: result.destination.droppableId, order: result.destination.index },
+      {
+        onError: (err) => {
+          if (err?.response?.data?.approval_required) {
+            toast({ title: "Approval required", description: "Resolve pending approvals before marking this task done.", type: "error" });
+          }
+        },
+      },
+    );
   };
 
   const tasksByStatus = (statusId) =>

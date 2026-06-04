@@ -6,20 +6,18 @@ import { useThemeStore } from "@/store/themeStore";
 import api from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
-  Users, Settings, LogOut,
-  ChevronDown, Search, BarChart2, Plus, Check, Square, BellOff, SlidersHorizontal,
+  LogOut, ChevronDown, Search, Plus, Check, Square,
+  BellOff, SlidersHorizontal, Keyboard, UserCircle, MoreHorizontal,
 } from "lucide-react";
 import { useInboxUnreadCount } from "@/hooks/useInbox";
-import { NAV_ITEMS, workspaceUrl } from "@/lib/navLinks";
-import { useActiveTimer, useStopTimer, formatDuration } from "@/hooks/useTimeTracking";
+import { resolvedNavGroups, workspaceUrl } from "@/lib/navLinks";
+import { useActiveTimer, useStopTimer } from "@/hooks/useTimeTracking";
 import { useAnnouncePresence } from "@/hooks/usePresence";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import NotificationBell from "@/components/layout/NotificationBell";
 import CommandPalette from "@/components/CommandPalette";
 import ShortcutOverlay from "@/components/ShortcutOverlay";
 import UserSettingsModal from "@/components/UserSettingsModal";
-import { ThemeToggle } from "@/components/ui/theme-toggle";
-import { Tooltip } from "@/components/ui/tooltip";
 
 export default function AppLayout() {
   const { workspaceSlug } = useParams();
@@ -52,11 +50,14 @@ export default function AppLayout() {
     navigate("/login");
   };
 
-  const navLinks = NAV_ITEMS.map(item => ({
-    to:    workspaceUrl(workspaceSlug, item.path),
-    icon:  item.icon,
-    label: item.label,
-    key:   item.key,
+  const navGroups = resolvedNavGroups().map((group) => ({
+    ...group,
+    items: group.items.map((item) => ({
+      to:    workspaceUrl(workspaceSlug, item.path),
+      icon:  item.icon,
+      label: item.label,
+      key:   item.key,
+    })),
   }));
 
   const initials    = workspace?.name?.[0]?.toUpperCase() || "W";
@@ -142,30 +143,39 @@ export default function AppLayout() {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-2 py-1 space-y-0.5 overflow-y-auto">
-          {navLinks.map(({ to, icon: Icon, label, end, key }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={end}
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors active:scale-[0.98]",
-                  isActive
-                    ? "bg-primary/10 text-primary font-semibold"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                )
-              }
-            >
-              <Icon className="w-4 h-4 flex-shrink-0" />
-              <span className="flex-1">{label}</span>
-              {/* Inbox unread badge */}
-              {label === "Inbox" && inboxUnread > 0 && !isFocusMode && (
-                <span className="min-w-[18px] h-[18px] rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center px-1">
-                  {inboxUnread > 9 ? "9+" : inboxUnread}
-                </span>
+        <nav className="flex-1 px-2 py-1 overflow-y-auto">
+          {navGroups.map((group, gi) => (
+            <div key={gi} className={gi > 0 ? "mt-3" : ""}>
+              {group.label && (
+                <p className="px-3 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 select-none">
+                  {group.label}
+                </p>
               )}
-            </NavLink>
+              <div className="space-y-0.5">
+                {group.items.map(({ to, icon: Icon, label, key }) => (
+                  <NavLink
+                    key={to}
+                    to={to}
+                    className={({ isActive }) =>
+                      cn(
+                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors active:scale-[0.98]",
+                        isActive
+                          ? "bg-primary/10 text-primary font-semibold"
+                          : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                      )
+                    }
+                  >
+                    <Icon className="w-4 h-4 flex-shrink-0" />
+                    <span className="flex-1">{label}</span>
+                    {key === "inbox" && inboxUnread > 0 && !isFocusMode && (
+                      <span className="min-w-[18px] h-[18px] rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center px-1">
+                        {inboxUnread > 9 ? "9+" : inboxUnread}
+                      </span>
+                    )}
+                  </NavLink>
+                ))}
+              </div>
+            </div>
           ))}
         </nav>
 
@@ -227,61 +237,14 @@ export default function AppLayout() {
         )}
 
         {/* User panel */}
-        <div className="px-3 pb-3 pt-2 border-t border-border/60 space-y-1">
-          {/* Appearance toggle */}
-          <ThemeToggle />
+        <UserPanel
+          user={user}
+          userInitial={userInitial}
+          onOpenSettings={(tab) => { setSettingsTab(tab); setSettingsOpen(true); }}
+          onOpenShortcuts={() => setShortcutsOpen(true)}
+          onLogout={handleLogout}
+        />
 
-          {/* User info + actions */}
-          <div className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg">
-            <Tooltip content="Account settings" side="top">
-              <button
-                onClick={() => { setSettingsTab("me"); setSettingsOpen(true); }}
-                className="relative flex-shrink-0 group"
-              >
-                <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-bold group-hover:ring-2 group-hover:ring-primary/30 transition-all">
-                  {userInitial}
-                </div>
-                {/* Online presence dot */}
-                <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-sidebar-bg" />
-              </button>
-            </Tooltip>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold truncate leading-tight text-foreground">
-                {user?.display_name}
-              </p>
-              <p className="text-xs text-muted-foreground truncate leading-tight mt-0.5">
-                {user?.email}
-              </p>
-            </div>
-            <div className="flex items-center gap-1">
-              <NotificationBell />
-              <Tooltip content="Preferences" side="top">
-                <button
-                  onClick={() => { setSettingsTab("preferences"); setSettingsOpen(true); }}
-                  className="p-1.5 rounded-md text-foreground/60 hover:text-foreground hover:bg-accent transition-colors active:scale-[0.97]"
-                >
-                  <SlidersHorizontal className="w-3.5 h-3.5" />
-                </button>
-              </Tooltip>
-              <Tooltip content="Keyboard shortcuts" side="top">
-                <button
-                  onClick={() => setShortcutsOpen(true)}
-                  className="p-1.5 rounded-md text-foreground/60 hover:text-foreground hover:bg-accent transition-colors active:scale-[0.97]"
-                >
-                  <kbd className="text-[10px] font-bold leading-none">?</kbd>
-                </button>
-              </Tooltip>
-              <Tooltip content="Sign out" side="top">
-                <button
-                  onClick={handleLogout}
-                  className="p-1.5 rounded-md text-foreground/60 hover:text-foreground hover:bg-accent transition-colors active:scale-[0.97]"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                </button>
-              </Tooltip>
-            </div>
-          </div>
-        </div>
       </aside>
 
       {/* Main content */}
@@ -297,6 +260,99 @@ export default function AppLayout() {
           defaultTab={settingsTab}
           onClose={() => setSettingsOpen(false)}
         />
+      )}
+    </div>
+  );
+}
+
+// ── UserPanel ─────────────────────────────────────────────────────────────────
+function UserPanel({ user, userInitial, onOpenSettings, onOpenShortcuts, onLogout }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const action = (fn) => () => { fn(); setOpen(false); };
+
+  return (
+    <div ref={ref} className="px-3 pb-3 pt-2 border-t border-border/60 relative">
+      {/* Trigger row — a div with two interactive zones to avoid button-in-button */}
+      <div className="flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-accent transition-colors group">
+        {/* Left: avatar + name/email — clicking opens dropdown */}
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="flex-1 flex items-center gap-2.5 min-w-0 text-left"
+        >
+          {/* Avatar */}
+          <div className="relative flex-shrink-0">
+            <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-bold">
+              {userInitial}
+            </div>
+            <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-background" />
+          </div>
+
+          {/* Name + email */}
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold truncate leading-tight text-foreground">
+              {user?.display_name}
+            </p>
+            <p className="text-[11px] text-muted-foreground truncate leading-tight mt-0.5">
+              {user?.email}
+            </p>
+          </div>
+        </button>
+
+        {/* Right: notification bell + more icon (sibling buttons, not nested) */}
+        <NotificationBell />
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+        >
+          <MoreHorizontal className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Dropdown */}
+      {open && (
+        <div className="absolute left-3 right-3 bottom-full mb-1 z-50 bg-popover border border-border rounded-xl shadow-popover py-1">
+          <button
+            onClick={action(() => onOpenSettings("me"))}
+            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-accent transition-colors text-left"
+          >
+            <UserCircle className="w-4 h-4 text-muted-foreground" />
+            Account settings
+          </button>
+          <button
+            onClick={action(() => onOpenSettings("preferences"))}
+            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-accent transition-colors text-left"
+          >
+            <SlidersHorizontal className="w-4 h-4 text-muted-foreground" />
+            Preferences
+          </button>
+          <button
+            onClick={action(onOpenShortcuts)}
+            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-accent transition-colors text-left"
+          >
+            <Keyboard className="w-4 h-4 text-muted-foreground" />
+            <span className="flex-1">Keyboard shortcuts</span>
+            <kbd className="text-[10px] font-semibold bg-muted border border-border rounded px-1 py-0.5 leading-none">?</kbd>
+          </button>
+          <div className="border-t border-border/60 mx-2 my-1" />
+          <button
+            onClick={action(onLogout)}
+            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-accent transition-colors text-left text-destructive hover:text-destructive"
+          >
+            <LogOut className="w-4 h-4" />
+            Sign out
+          </button>
+        </div>
       )}
     </div>
   );

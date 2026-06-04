@@ -713,55 +713,25 @@ class Objective(models.Model):
 
 
 class KeyResult(models.Model):
-    """A measurable milestone under an Objective."""
-    class MetricType(models.TextChoices):
-        PERCENTAGE = "percentage", "Percentage"
-        NUMBER     = "number",     "Number"
-        CURRENCY   = "currency",   "Currency"
-        MILESTONE  = "milestone",  "Milestone (task-based)"
-
-    id            = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    objective     = models.ForeignKey(Objective, on_delete=models.CASCADE, related_name="key_results")
-    title         = models.CharField(max_length=500)
-    metric_type   = models.CharField(max_length=20, choices=MetricType.choices, default=MetricType.PERCENTAGE)
-    start_value   = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    target_value  = models.DecimalField(max_digits=12, decimal_places=2, default=100)
-    current_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    unit          = models.CharField(max_length=30, blank=True)
-    tasks         = models.ManyToManyField(Task, blank=True, related_name="key_results")
-    # Append-only progress history: [{value, date}]
-    history       = models.JSONField(default=list)
-    created_at    = models.DateTimeField(auto_now_add=True)
-    updated_at    = models.DateTimeField(auto_now=True)
+    """A measurable outcome under an Objective. Progress is task-driven."""
+    id        = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    objective = models.ForeignKey(Objective, on_delete=models.CASCADE, related_name="key_results")
+    title     = models.CharField(max_length=500)
+    tasks     = models.ManyToManyField(Task, blank=True, related_name="key_results")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["created_at"]
 
     @property
     def progress(self):
-        """0–100 completion percentage."""
-        if self.metric_type == self.MetricType.MILESTONE:
-            total = self.tasks.count()
-            if total == 0:
-                return 0
-            done = self.tasks.filter(status__is_done=True).count()
-            return round(done / total * 100)
-        span = float(self.target_value - self.start_value)
-        if span == 0:
-            return 100 if self.current_value >= self.target_value else 0
-        return min(100, max(0, round(
-            float(self.current_value - self.start_value) / span * 100
-        )))
-
-    def record_checkin(self, value):
-        """Append a history entry and update current_value."""
-        from django.utils import timezone
-        self.current_value = value
-        entry = {"value": float(value), "date": timezone.now().date().isoformat()}
-        history = list(self.history)
-        history.append(entry)
-        self.history = history
-        self.save(update_fields=["current_value", "history", "updated_at"])
+        """0–100 — done tasks / total linked tasks."""
+        total = self.tasks.count()
+        if total == 0:
+            return 0
+        done = self.tasks.filter(status__is_done=True).count()
+        return round(done / total * 100)
 
     def __str__(self):
         return f"{self.objective.title} / {self.title}"

@@ -60,16 +60,6 @@ export function useCreateKeyResult(workspaceSlug, objectiveId) {
   });
 }
 
-export function useUpdateKeyResult(workspaceSlug, objectiveId) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, ...data }) =>
-      api
-        .patch(`/api/workspaces/${workspaceSlug}/objectives/${objectiveId}/key-results/${id}/`, data)
-        .then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["objectives", workspaceSlug] }),
-  });
-}
 
 export function useDeleteKeyResult(workspaceSlug, objectiveId) {
   const qc = useQueryClient();

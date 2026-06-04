@@ -12,7 +12,6 @@ import SettingsPage from "@/pages/workspace/SettingsPage";
 import RoadmapPage from "@/pages/projects/RoadmapPage";
 import AcceptInvitePage from "@/pages/invite/AcceptInvitePage";
 import SetupWizard from "@/pages/workspace/SetupWizard";
-import ResetPasswordConfirmPage from "@/pages/auth/ResetPasswordConfirmPage";
 // v2.5.0
 import WikiPage from "@/pages/projects/WikiPage";
 // v2.6.0
@@ -42,10 +41,8 @@ export default function App() {
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/invites/:token" element={<AcceptInvitePage />} />
       <Route path="/forms/:formToken" element={<PublicFormPage />} />
-      {/* Password reset confirm — linked from the email sent by dj_rest_auth */}
-      <Route path="/reset-password/:uid/:token" element={<ResetPasswordConfirmPage />} />
 
-      {/* Protected */}
+{/* Protected */}
       <Route element={<ProtectedRoute />}>
         <Route path="/onboarding" element={<OnboardingPage />} />
         <Route path="/" element={<WorkspaceRedirect />} />

@@ -2,7 +2,7 @@ from django.urls import path
 from .views import (
     ProjectListCreateView, ProjectDetailView,
     UserPresenceView, CommentReactionToggleView,
-    ApprovalListCreateView, ApprovalReviewView,
+    ApprovalListCreateView, ApprovalReviewView, ApprovalResubmitView,
     ObjectiveListCreateView, ObjectiveDetailView,
     KeyResultListCreateView, KeyResultDetailView, KeyResultLinkedTasksView,
     TaskStatusListCreateView, TaskStatusDetailView,
@@ -209,6 +209,7 @@ urlpatterns += [
 urlpatterns += [
     path(f"{_tk}/approvals/",                                    ApprovalListCreateView.as_view()),
     path(f"{_tk}/approvals/<uuid:approval_id>/review/",          ApprovalReviewView.as_view()),
+    path(f"{_tk}/approvals/<uuid:approval_id>/resubmit/",        ApprovalResubmitView.as_view()),
 ]
 
 # v3.8.0 — OKR & Goal Tracking

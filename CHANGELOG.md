@@ -1071,9 +1071,64 @@ The existing `DashboardPage` (workspace home, fixed stats + recent projects) and
 - `?` button in sidebar user panel opens modal at Shortcuts tab
 
 ### Frontend — Password Reset Flow
-- **LoginPage** — "Forgot password?" button below password field toggles to an inline reset form (same card, no navigation)
-- **`ResetPasswordConfirmPage.jsx`** — public route `/reset-password/:uid/:token`; `POST /api/auth/password/reset/confirm/`; success state with "Sign in" redirect
-- `REST_AUTH["PASSWORD_RESET_CONFIRM_URL"]` set in `settings.py` so dj_rest_auth constructs the correct frontend link in the email
+- ~~LoginPage "Forgot password?" inline toggle~~ **REMOVED** — dj_rest_auth password reset email flow removed (NoReverseMatch on `password_reset_confirm`; not worth a custom adapter for the current scope)
+- ~~`ResetPasswordConfirmPage.jsx`~~ **REMOVED** — public route and import deleted from `App.jsx`
+- ~~`ForgotPasswordSection`~~ **REMOVED** — inline section in the Password tab of `UserSettingsModal` deleted
+- Password change (`POST /api/auth/password/change/`) still works; `OLD_PASSWORD_FIELD_ENABLED: True` added to `REST_AUTH` so the current password is actually validated (was being ignored without this flag)
+
+---
+
+## v3.9.1 — Phase 4 Polish & Bug Fixes
+> Status: COMPLETE ✅
+> Post-release fixes, UX improvements, and model simplification discovered during testing.
+
+### Backend — Approval Workflows (v3.6.0 fixes)
+- **Approval gate bug fix** — `TaskMoveView` was blocking moves to done-type columns on both `pending` AND `changes_requested` approvals; fixed to block on `PENDING` only (`changes_requested` / `rejected` are closed states)
+- **Approval resubmit endpoint** — `POST /tasks/:id/approvals/:id/resubmit/` resets a `changes_requested` or `rejected` approval + all reviewer statuses back to `pending` and re-notifies reviewers; only the original requester can call it
+- **`OLD_PASSWORD_FIELD_ENABLED: True`** added to `REST_AUTH` in `settings.py` — without this dj_rest_auth's password change endpoint silently ignored `old_password` and accepted any new password
+
+### Backend — OKR & Goal Tracking (v3.8.0 simplification)
+- **`KeyResult` model simplified** — removed `MetricType` enum, `metric_type`, `start_value`, `target_value`, `current_value`, `unit`, `history` fields, and `record_checkin()` method; model is now `id`, `title`, `tasks` M2M, timestamps only
+- **`KeyResult.progress`** — now purely task-driven: `round(done_tasks / total_tasks * 100)`; returns 0 when no tasks are linked; no more value-based fallback
+- **`KeyResultSerializer` simplified** — removed `task_count`, `done_task_count`, `metric_type`, `start_value`, `target_value`, `current_value`, `unit`, `history` from serialized fields; now exposes `id`, `title`, `progress`, `task_ids`, `linked_tasks`
+- **`linked_tasks` field added to `KeyResultSerializer`** — returns full `[{ id, title, status_name, is_done }]` for each linked task so the frontend needs no extra fetch
+- **Migration required** — run `makemigrations projects --name v3_8_0_simplify_keyresult` + `migrate`
+
+### Frontend — Sidebar & Navigation
+- **Nav groups** — sidebar links now grouped with section labels: *(unlabelled)* Dashboards / Projects → **Work** Inbox / My Work / Goals → **Views** Portfolio / Roadmap / Timesheets → **Workspace** Members / Settings
+- **User panel dropdown** — replaced 4 separate icon buttons (Bell, Sliders, ?, LogOut) with a single `⋯` button that opens an upward dropdown: Account settings · Preferences · Keyboard shortcuts (with `?` hint) · Sign out; `NotificationBell` remains as a sibling element
+
+### Frontend — Approval Workflows
+- **Approvals tab** — moved approval cards from the left column (always visible) into a dedicated "Approvals" tab alongside Comments / Activity / Time Log; shows count badge; empty state when no approvals exist
+- **Request approval dropdown** — replaced the full-screen modal with an inline dropdown anchored below the approval button in the task panel header; `useMemo` on the member filter prevents re-render lag on search keystroke
+- **Reviewer comment display** — `ApprovalCard` now shows the reviewer's comment as a quoted block (amber left border) below their row when status is `changes_requested` or `rejected`
+- **Re-submit for review button** — appears on `ApprovalCard` when the logged-in user is the original requester and the approval status is `changes_requested` or `rejected`; calls `POST .../resubmit/` and resets the approval to pending
+- **Approval gate toast** — drag-to-done 403 now shows a toast ("Resolve pending approvals before marking this task done.") via `useToast` in `KanbanPage.handleDragEnd`; removed the broken dynamic-import approach from `useMoveTask`
+
+### Frontend — Comment Form
+- **UX redesign** — replaced the wrapper-with-inner-border pattern (dual border) with a single clean border that glows primary on focus; Send + Cancel buttons appear only when the field is focused; Cancel clears text and collapses buttons; successful send resets to rest state
+- **`@mention` fix** — parent wrapper had `overflow-hidden` which clipped the `absolute bottom-full` dropdown invisibly; removed `overflow-hidden` from the wrapper; dropdown now opens upward correctly
+- **Typing indicator throttle** — presence ping on each keystroke reduced to at most once every 3 s via a `useRef` timestamp gate
+
+### Frontend — Goals Page (v3.8.0 improvements)
+- **Linked task list** — collapsible task list under each KR row; chevron toggle appears only when tasks are linked; each task shows a green filled circle ✓ if done / empty circle if pending, strikethrough title, status badge
+- **Automatic progress** — removed the pencil edit button that manually set `current_value`; progress is now always driven by linked task completion; `useUpdateKeyResult` removed from the hook and component
+- **`displayCurrent`** — simplified to `X/Y tasks` when tasks are linked, "No tasks linked" otherwise; start/target/current value labels row removed
+- **KR create payload** — `createKR.mutate()` now sends only `{ title }` (no `metric_type`, `start_value`, `target_value`, `current_value`)
+- **Search: AbortController** — task search in KR link popover uses native `AbortController`; previous request cancelled on every keystroke
+- **Goals empty state** — replaced plain "No objectives yet" with a 3-step OKR explainer card (Create objective → Add KRs → Link tasks) + "When to use it" section; collapses once objectives exist
+
+### Frontend — Command Palette
+- **AbortController search** — replaced TanStack Query `useSearch` hook with a direct `api.get` + `AbortController` in `CommandPalette`; each query change aborts the previous in-flight request; results cleared on palette close
+
+### Frontend — Modal System
+- **`Modal.jsx` fixed** — replaced `@configBuilder` import with `./button`; replaced non-existent `variant="danger-light"` / `icon` / `isLoading` Button props with the app's actual Button API; added `VARIANT_MAP` for semantic→shadcn variant translation; close button is now a plain `<button>` with `X` icon; footer has a top border
+- **`ShortcutOverlay.jsx`** — migrated from hand-rolled fixed overlay to `<Modal showFooter={false} maxWidth="900px">`; scrollable body via `flex-1 overflow-y-auto` pattern fixed
+- **`UserSettingsModal.jsx`** — migrated to `<Modal showFooter={false} padding="p-0">`; sidebar tabs layout lives inside the Modal body; `X` import removed; Esc handler removed (Modal backdrop handles close)
+- **`GoalsPage` create objective** — migrated to `<Modal>` with `onConfirm` wired to the create mutation; `handleCreate` function and hand-rolled backdrop removed
+
+### Frontend — Password Change
+- **`PwField` focus bug fixed** — `PwField` was defined as a `const` arrow function inside `PasswordTab`; every keystroke re-created its reference and unmounted/remounted the input, dropping focus; moved `PwField` to module scope as a named function component
 
 ---
 

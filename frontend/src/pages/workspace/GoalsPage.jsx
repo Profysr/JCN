@@ -1,37 +1,68 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
 import {
-  Target, Plus, ChevronDown, ChevronRight, Trash2,
-  Check, Link, X, Edit2,
+  Target,
+  Plus,
+  ChevronDown,
+  ChevronRight,
+  Trash2,
+  Check,
+  Link,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import Modal from "@/components/ui/Modal";
 import {
-  useObjectives, useCreateObjective, useUpdateObjective, useDeleteObjective,
-  useCreateKeyResult, useUpdateKeyResult, useDeleteKeyResult, useLinkTasks,
-  CONFIDENCE_CONFIG, TIME_PERIODS,
+  useObjectives,
+  useCreateObjective,
+  useUpdateObjective,
+  useDeleteObjective,
+  useCreateKeyResult,
+  useDeleteKeyResult,
+  useLinkTasks,
+  CONFIDENCE_CONFIG,
+  TIME_PERIODS,
 } from "@/hooks/useGoals";
 import { useMembers } from "@/hooks/useMembers";
-import { useSearch } from "@/hooks/useSearch";
+import api from "@/lib/api";
 
 // ── Circular progress ring ────────────────────────────────────────────────────
 function ProgressRing({ pct, confidence, size = 56 }) {
-  const r   = (size - 6) / 2;
+  const r = (size - 6) / 2;
   const circ = 2 * Math.PI * r;
-  const dash  = (pct / 100) * circ;
-  const cfg   = CONFIDENCE_CONFIG[confidence] || CONFIDENCE_CONFIG.on_track;
-  const strokeMap = { on_track: "#22c55e", at_risk: "#f59e0b", off_track: "#ef4444" };
+  const dash = (pct / 100) * circ;
+  const cfg = CONFIDENCE_CONFIG[confidence] || CONFIDENCE_CONFIG.on_track;
+  const strokeMap = {
+    on_track: "#22c55e",
+    at_risk: "#f59e0b",
+    off_track: "#ef4444",
+  };
   const stroke = strokeMap[confidence] || strokeMap.on_track;
 
   return (
-    <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
+    <div
+      className="relative flex-shrink-0"
+      style={{ width: size, height: size }}
+    >
       <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="hsl(var(--muted))" strokeWidth={5} />
         <circle
-          cx={size / 2} cy={size / 2} r={r}
-          fill="none" stroke={stroke} strokeWidth={5}
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke="hsl(var(--muted))"
+          strokeWidth={5}
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke={stroke}
+          strokeWidth={5}
           strokeDasharray={`${dash} ${circ}`}
           strokeLinecap="round"
           style={{ transition: "stroke-dasharray 0.6s ease" }}
@@ -46,22 +77,44 @@ function ProgressRing({ pct, confidence, size = 56 }) {
 
 // ── KR progress bar ───────────────────────────────────────────────────────────
 function KRProgressBar({ kr, workspaceSlug, objectiveId, canEdit }) {
-  const [editing,  setEditing]  = useState(false);
-  const [newValue, setNewValue] = useState(String(kr.current_value));
-  const [linkOpen, setLinkOpen] = useState(false);
-  const updateKR  = useUpdateKeyResult(workspaceSlug, objectiveId);
-  const deleteKR  = useDeleteKeyResult(workspaceSlug, objectiveId);
+  const [linkOpen,  setLinkOpen]  = useState(false);
+  const [tasksOpen, setTasksOpen] = useState(false);
+  const linkedTasks = kr.linked_tasks ?? [];
+  const deleteKR = useDeleteKeyResult(workspaceSlug, objectiveId);
   const linkTasks = useLinkTasks(workspaceSlug, objectiveId, kr.id);
   const [taskSearch, setTaskSearch] = useState("");
-  const { data: searchResults = [] } = useSearch(workspaceSlug, taskSearch, { enabled: linkOpen && taskSearch.length > 1 });
+  const [searchResults, setSearchResults] = useState([]);
+  const abortRef = useRef(null);
 
-  const commitValue = () => {
-    const v = parseFloat(newValue);
-    if (!isNaN(v) && v !== parseFloat(kr.current_value)) {
-      updateKR.mutate({ id: kr.id, current_value: v });
+  const handleTaskSearchChange = (e) => {
+    const val = e.target.value;
+    setTaskSearch(val);
+
+    // Cancel the previous in-flight request immediately
+    if (abortRef.current) abortRef.current.abort();
+
+    if (val.length < 2) {
+      setSearchResults([]);
+      return;
     }
-    setEditing(false);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    api
+      .get(`/api/search/?q=${encodeURIComponent(val)}`, {
+        signal: controller.signal,
+      })
+      .then((r) => setSearchResults(r.data?.tasks ?? []))
+      .catch((err) => {
+        // Ignore abort errors — a new request is already on the way
+        if (err.name !== "CanceledError" && err.name !== "AbortError")
+          setSearchResults([]);
+      });
   };
+
+  // Abort any pending request when the KR row unmounts
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   const toggleTask = (taskId) => {
     const linked = kr.task_ids || [];
@@ -71,27 +124,32 @@ function KRProgressBar({ kr, workspaceSlug, objectiveId, canEdit }) {
     linkTasks.mutate(next);
   };
 
-  const isPercent  = kr.metric_type === "percentage";
-  const isMilestone = kr.metric_type === "milestone";
-  const displayCurrent = isMilestone
-    ? `${kr.done_task_count ?? 0}/${kr.task_count ?? 0} tasks`
-    : `${parseFloat(kr.current_value).toLocaleString()}${kr.unit ? " " + kr.unit : ""}`;
+  const doneCount  = linkedTasks.filter((t) => t.is_done).length;
+  const totalCount = linkedTasks.length;
 
   return (
     <div className="group flex flex-col gap-1.5 py-2.5 border-b border-border/50 last:border-0">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-medium flex-1 min-w-0 truncate">{kr.title}</span>
+        {/* Collapse toggle — only shows when tasks are linked */}
+        {linkedTasks.length > 0 ? (
+          <button
+            onClick={() => setTasksOpen((v) => !v)}
+            className="flex items-center gap-1.5 flex-1 min-w-0 text-left group/title"
+          >
+            {tasksOpen
+              ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+              : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />}
+            <span className="text-sm font-medium truncate group-hover/title:text-primary transition-colors">
+              {kr.title}
+            </span>
+          </button>
+        ) : (
+          <span className="text-sm font-medium flex-1 min-w-0 truncate">{kr.title}</span>
+        )}
         <div className="flex items-center gap-1 flex-shrink-0">
-          <span className="text-xs text-muted-foreground">{displayCurrent}</span>
-          {!isMilestone && canEdit && (
-            <button
-              onClick={() => { setNewValue(String(kr.current_value)); setEditing(true); }}
-              className="opacity-0 group-hover:opacity-100 p-0.5 text-muted-foreground hover:text-foreground transition-all"
-              title="Update value"
-            >
-              <Edit2 className="w-3 h-3" />
-            </button>
-          )}
+          <span className="text-xs text-muted-foreground">
+            {totalCount > 0 ? `${doneCount}/${totalCount} tasks` : "No tasks linked"}
+          </span>
           {canEdit && (
             <button
               onClick={() => setLinkOpen((v) => !v)}
@@ -118,37 +176,41 @@ function KRProgressBar({ kr, workspaceSlug, objectiveId, canEdit }) {
           className="h-full rounded-full transition-all duration-500"
           style={{
             width: `${kr.progress}%`,
-            backgroundColor: kr.progress === 100 ? "#22c55e" : "hsl(var(--primary))",
+            backgroundColor:
+              kr.progress === 100 ? "#22c55e" : "hsl(var(--primary))",
           }}
         />
       </div>
 
-      <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-        <span>{isPercent ? `${kr.start_value}%` : kr.start_value}</span>
-        <span className="font-medium text-foreground">{kr.progress}% complete</span>
-        <span>{isPercent ? `${kr.target_value}%` : kr.target_value}{kr.unit ? " " + kr.unit : ""}</span>
+      <div className="flex justify-end">
+        <span className="text-[10px] text-muted-foreground">{kr.progress}% complete</span>
       </div>
 
-      {/* Inline value editor */}
-      {editing && (
-        <div className="flex items-center gap-2 mt-1">
-          <input
-            autoFocus
-            type="number"
-            className="flex-1 text-sm border border-border rounded-md px-2 py-1 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
-            value={newValue}
-            onChange={(e) => setNewValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") commitValue();
-              if (e.key === "Escape") setEditing(false);
-            }}
-          />
-          <button onClick={commitValue} className="text-xs px-2 py-1 rounded-md bg-primary text-primary-foreground font-medium">
-            Save
-          </button>
-          <button onClick={() => setEditing(false)} className="text-xs px-2 py-1 rounded-md border text-muted-foreground">
-            Cancel
-          </button>
+      {/* Collapsible linked task list */}
+      {tasksOpen && linkedTasks.length > 0 && (
+        <div className="mt-1 ml-4 space-y-0.5 border-l-2 border-border pl-3">
+          {linkedTasks.map((t) => (
+            <div key={t.id} className="flex items-center gap-2 py-1">
+              {t.is_done ? (
+                <div className="w-4 h-4 rounded-full bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center flex-shrink-0">
+                  <Check className="w-2.5 h-2.5 text-emerald-600" />
+                </div>
+              ) : (
+                <div className="w-4 h-4 rounded-full border-2 border-border flex-shrink-0" />
+              )}
+              <span className={cn(
+                "text-xs flex-1 truncate",
+                t.is_done ? "line-through text-muted-foreground" : "text-foreground",
+              )}>
+                {t.title}
+              </span>
+              {t.status_name && (
+                <span className="text-[10px] text-muted-foreground flex-shrink-0 bg-muted px-1.5 py-0.5 rounded">
+                  {t.status_name}
+                </span>
+              )}
+            </div>
+          ))}
         </div>
       )}
 
@@ -156,8 +218,13 @@ function KRProgressBar({ kr, workspaceSlug, objectiveId, canEdit }) {
       {linkOpen && (
         <div className="mt-2 border border-border rounded-xl bg-popover shadow-popover p-3 space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold">Link tasks to this key result</span>
-            <button onClick={() => setLinkOpen(false)} className="p-0.5 text-muted-foreground hover:text-foreground">
+            <span className="text-xs font-semibold">
+              Link tasks to this key result
+            </span>
+            <button
+              onClick={() => setLinkOpen(false)}
+              className="p-0.5 text-muted-foreground hover:text-foreground"
+            >
               <X className="w-3 h-3" />
             </button>
           </div>
@@ -166,10 +233,10 @@ function KRProgressBar({ kr, workspaceSlug, objectiveId, canEdit }) {
             placeholder="Search tasks…"
             className="w-full text-xs border border-border rounded-md px-2 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
             value={taskSearch}
-            onChange={(e) => setTaskSearch(e.target.value)}
+            onChange={handleTaskSearchChange}
           />
           <div className="max-h-36 overflow-y-auto space-y-0.5">
-            {searchResults.slice(0, 8).map((t) => {
+            {searchResults.slice(0, 10).map((t) => {
               const isLinked = (kr.task_ids || []).includes(t.id);
               return (
                 <button
@@ -186,7 +253,9 @@ function KRProgressBar({ kr, workspaceSlug, objectiveId, canEdit }) {
               );
             })}
             {taskSearch.length > 1 && searchResults.length === 0 && (
-              <p className="text-xs text-muted-foreground text-center py-2">No tasks found</p>
+              <p className="text-xs text-muted-foreground text-center py-2">
+                No tasks found
+              </p>
             )}
           </div>
         </div>
@@ -199,17 +268,23 @@ function KRProgressBar({ kr, workspaceSlug, objectiveId, canEdit }) {
 function ObjectiveCard({ objective, workspaceSlug }) {
   const [expanded, setExpanded] = useState(true);
   const [addingKR, setAddingKR] = useState(false);
-  const [krTitle,  setKRTitle]  = useState("");
+  const [krTitle, setKRTitle] = useState("");
   const deleteObjective = useDeleteObjective(workspaceSlug);
-  const createKR        = useCreateKeyResult(workspaceSlug, objective.id);
-  const cfg = CONFIDENCE_CONFIG[objective.confidence] || CONFIDENCE_CONFIG.on_track;
+  const createKR = useCreateKeyResult(workspaceSlug, objective.id);
+  const cfg =
+    CONFIDENCE_CONFIG[objective.confidence] || CONFIDENCE_CONFIG.on_track;
 
   const handleAddKR = (e) => {
     e.preventDefault();
     if (!krTitle.trim()) return;
     createKR.mutate(
-      { title: krTitle.trim(), metric_type: "percentage", start_value: 0, target_value: 100, current_value: 0 },
-      { onSuccess: () => { setKRTitle(""); setAddingKR(false); } },
+      { title: krTitle.trim() },
+      {
+        onSuccess: () => {
+          setKRTitle("");
+          setAddingKR(false);
+        },
+      },
     );
   };
 
@@ -217,29 +292,53 @@ function ObjectiveCard({ objective, workspaceSlug }) {
     <div className="bg-card border border-border rounded-2xl shadow-card overflow-hidden">
       {/* Card header */}
       <div className="flex items-start gap-4 p-4">
-        <ProgressRing pct={objective.progress} confidence={objective.confidence} size={56} />
+        <ProgressRing
+          pct={objective.progress}
+          confidence={objective.confidence}
+          size={56}
+        />
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
-            <h3 className="font-semibold text-sm leading-snug">{objective.title}</h3>
-            <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0", cfg.bg, cfg.color)}>
-              <span className={cn("inline-block w-1.5 h-1.5 rounded-full mr-1", cfg.dot)} />
+            <h3 className="font-semibold text-sm leading-snug">
+              {objective.title}
+            </h3>
+            <span
+              className={cn(
+                "text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0",
+                cfg.bg,
+                cfg.color,
+              )}
+            >
+              <span
+                className={cn(
+                  "inline-block w-1.5 h-1.5 rounded-full mr-1",
+                  cfg.dot,
+                )}
+              />
               {cfg.label}
             </span>
           </div>
 
           {objective.description && (
-            <p className="text-xs text-muted-foreground line-clamp-2 mb-2">{objective.description}</p>
+            <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
+              {objective.description}
+            </p>
           )}
 
           <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
             {objective.owner && (
               <span className="flex items-center gap-1">
-                <Avatar name={objective.owner.full_name || objective.owner.email} size="xs" />
+                <Avatar
+                  name={objective.owner.full_name || objective.owner.email}
+                  size="xs"
+                />
                 {objective.owner.full_name || objective.owner.email}
               </span>
             )}
-            <span className="uppercase font-semibold">{objective.time_period}</span>
+            <span className="uppercase font-semibold">
+              {objective.time_period}
+            </span>
             <span>{objective.key_results?.length || 0} key results</span>
           </div>
         </div>
@@ -249,7 +348,11 @@ function ObjectiveCard({ objective, workspaceSlug }) {
             onClick={() => setExpanded((v) => !v)}
             className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
           >
-            {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+            {expanded ? (
+              <ChevronDown className="w-4 h-4" />
+            ) : (
+              <ChevronRight className="w-4 h-4" />
+            )}
           </button>
           <button
             onClick={() => deleteObjective.mutate(objective.id)}
@@ -288,10 +391,19 @@ function ObjectiveCard({ objective, workspaceSlug }) {
                 value={krTitle}
                 onChange={(e) => setKRTitle(e.target.value)}
               />
-              <Button type="submit" size="sm" disabled={!krTitle.trim() || createKR.isPending}>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={!krTitle.trim() || createKR.isPending}
+              >
                 Add
               </Button>
-              <Button type="button" variant="outline" size="sm" onClick={() => setAddingKR(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setAddingKR(false)}
+              >
                 Cancel
               </Button>
             </form>
@@ -313,9 +425,9 @@ function ObjectiveCard({ objective, workspaceSlug }) {
 function Sparkline({ history = [], width = 80, height = 28 }) {
   if (history.length < 2) return null;
   const values = history.map((h) => parseFloat(h.value));
-  const min    = Math.min(...values);
-  const max    = Math.max(...values) || 1;
-  const pts    = values.map((v, i) => {
+  const min = Math.min(...values);
+  const max = Math.max(...values) || 1;
+  const pts = values.map((v, i) => {
     const x = (i / (values.length - 1)) * width;
     const y = height - ((v - min) / (max - min)) * height;
     return `${x},${y}`;
@@ -340,24 +452,116 @@ export default function GoalsPage() {
   const { workspaceSlug } = useParams();
   const [timePeriod, setTimePeriod] = useState("all");
   const [createOpen, setCreateOpen] = useState(false);
-  const [form, setForm] = useState({ title: "", description: "", time_period: "q1" });
+  const [form, setForm] = useState({
+    title: "",
+    description: "",
+    time_period: "q1",
+  });
 
-  const { data: objectives = [], isLoading } = useObjectives(workspaceSlug, timePeriod);
-  const { data: members = [] }               = useMembers(workspaceSlug);
-  const createObjective                       = useCreateObjective(workspaceSlug);
+  const { data: objectives = [], isLoading } = useObjectives(
+    workspaceSlug,
+    timePeriod,
+  );
+  const { data: members = [] } = useMembers(workspaceSlug);
+  const createObjective = useCreateObjective(workspaceSlug);
 
-  const handleCreate = (e) => {
-    e.preventDefault();
-    if (!form.title.trim()) return;
-    createObjective.mutate(form, { onSuccess: () => { setForm({ title: "", description: "", time_period: "q1" }); setCreateOpen(false); } });
-  };
 
-  const totalKRs      = objectives.flatMap((o) => o.key_results || []).length;
-  const onTrackCount  = objectives.filter((o) => o.confidence === "on_track").length;
-  const avgProgress   = objectives.length
-    ? Math.round(objectives.reduce((s, o) => s + o.progress, 0) / objectives.length)
+  const totalKRs = objectives.flatMap((o) => o.key_results || []).length;
+  const onTrackCount = objectives.filter(
+    (o) => o.confidence === "on_track",
+  ).length;
+  const avgProgress = objectives.length
+    ? Math.round(
+        objectives.reduce((s, o) => s + o.progress, 0) / objectives.length,
+      )
     : 0;
 
+  const EmptyState = () => (
+    <div className="max-w-2xl mx-auto space-y-8 py-10">
+      {/* OKR explainer */}
+      <div className="rounded-2xl border border-border bg-muted/30 p-6 space-y-5">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-primary/10 text-primary rounded-xl flex items-center justify-center flex-shrink-0">
+            <Target className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="font-semibold text-sm">What is the Goals page?</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              OKR tracking — Objectives & Key Results
+            </p>
+          </div>
+        </div>
+
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          Goals help your team align on{" "}
+          <strong className="text-foreground">what matters most</strong> and
+          measure real progress — not just task completion. You set an{" "}
+          <strong className="text-foreground">Objective</strong> (the ambitious
+          goal) and attach{" "}
+          <strong className="text-foreground">Key Results</strong> (the
+          measurable outcomes that prove you got there).
+        </p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {[
+            {
+              step: "1",
+              title: "Create an Objective",
+              desc: "A clear, inspiring goal. e.g. 'Launch v2 and delight users'",
+            },
+            {
+              step: "2",
+              title: "Add Key Results",
+              desc: "Measurable outcomes. e.g. 'Reach 500 signups' or 'NPS ≥ 45'",
+            },
+            {
+              step: "3",
+              title: "Link Tasks",
+              desc: "Connect KanbanBoard tasks to a KR so progress updates automatically.",
+            },
+          ].map((s) => (
+            <div
+              key={s.step}
+              className="bg-background rounded-xl border border-border p-3.5 space-y-1.5"
+            >
+              <span className="text-[10px] font-bold text-primary uppercase tracking-widest">
+                Step {s.step}
+              </span>
+              <p className="text-sm font-semibold">{s.title}</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                {s.desc}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        <div className="border-t border-border pt-4 space-y-2">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            When to use it
+          </p>
+          <ul className="text-sm text-muted-foreground space-y-1.5 list-none">
+            {[
+              "🎯  Quarterly planning — align the whole team on top priorities",
+              "📈  Product launches — track adoption, signups, or revenue milestones",
+              "🔧  Engineering health — reduce bug count, improve deploy frequency",
+              "🤝  Client projects — show measurable delivery against agreed outcomes",
+            ].map((item) => (
+              <li key={item} className="flex items-start gap-2 text-xs">
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+
+      <div className="flex flex-col items-center gap-3 text-center">
+        <p className="text-sm font-semibold">Ready to set your first goal?</p>
+        <Button onClick={() => setCreateOpen(true)}>
+          <Plus className="w-4 h-4 mr-1.5" /> Create your first objective
+        </Button>
+      </div>
+    </div>
+  );
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
@@ -405,7 +609,9 @@ export default function GoalsPage() {
           </div>
           <div>
             <span className="text-muted-foreground">On Track: </span>
-            <span className="font-semibold text-emerald-600">{onTrackCount}</span>
+            <span className="font-semibold text-emerald-600">
+              {onTrackCount}
+            </span>
           </div>
           <div>
             <span className="text-muted-foreground">Avg Progress: </span>
@@ -421,100 +627,85 @@ export default function GoalsPage() {
             <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
           </div>
         ) : objectives.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-4 py-24 text-center">
-            <div className="w-14 h-14 bg-primary/10 text-primary rounded-2xl flex items-center justify-center">
-              <Target className="w-7 h-7" />
-            </div>
-            <div>
-              <p className="font-semibold mb-1">No objectives yet</p>
-              <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-                Define clear goals and measure progress with key results.
-              </p>
-            </div>
-            <Button onClick={() => setCreateOpen(true)}>
-              <Plus className="w-4 h-4 mr-1.5" /> Create your first objective
-            </Button>
-          </div>
+          <EmptyState />
         ) : (
           <div className="space-y-4 max-w-3xl mx-auto">
             {objectives.map((obj) => (
-              <ObjectiveCard key={obj.id} objective={obj} workspaceSlug={workspaceSlug} />
+              <ObjectiveCard
+                key={obj.id}
+                objective={obj}
+                workspaceSlug={workspaceSlug}
+              />
             ))}
           </div>
         )}
       </div>
 
       {/* Create objective modal */}
-      {createOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setCreateOpen(false)} />
-          <div className="relative w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="font-semibold flex items-center gap-2">
-                <Target className="w-4 h-4 text-primary" /> New Objective
-              </h2>
-              <button onClick={() => setCreateOpen(false)} className="p-1 rounded text-muted-foreground hover:text-foreground">
-                <X className="w-4 h-4" />
-              </button>
+      <Modal
+        isOpen={createOpen}
+        onClose={() => setCreateOpen(false)}
+        title="New Objective"
+        icon={Target}
+        iconColor="text-primary"
+        confirmLabel={createObjective.isPending ? "Creating…" : "Create Objective"}
+        isConfirmDisabled={!form.title.trim() || createObjective.isPending}
+        isLoading={createObjective.isPending}
+        onConfirm={() => {
+          if (!form.title.trim()) return;
+          createObjective.mutate(form, {
+            onSuccess: () => {
+              setForm({ title: "", description: "", time_period: "q1" });
+              setCreateOpen(false);
+            },
+          });
+        }}
+        maxWidth="480px"
+      >
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Title</label>
+            <input
+              autoFocus
+              required
+              className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+              placeholder="e.g. Grow MRR to $100k"
+              value={form.title}
+              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Description (optional)</label>
+            <textarea
+              rows={2}
+              className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background resize-none focus:outline-none focus:ring-1 focus:ring-ring"
+              placeholder="What does success look like?"
+              value={form.description}
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Time Period</label>
+            <div className="flex gap-1.5 flex-wrap">
+              {TIME_PERIODS.filter((p) => p.value !== "all").map((p) => (
+                <button
+                  key={p.value}
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, time_period: p.value }))}
+                  className={cn(
+                    "px-3 py-1 rounded-md text-xs font-medium border transition-colors",
+                    form.time_period === p.value
+                      ? "bg-primary/10 border-primary/30 text-primary"
+                      : "border-border text-muted-foreground hover:bg-accent",
+                  )}
+                >
+                  {p.label}
+                </button>
+              ))}
             </div>
-
-            <form onSubmit={handleCreate} className="space-y-3">
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Title</label>
-                <input
-                  autoFocus
-                  required
-                  className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
-                  placeholder="e.g. Grow MRR to $100k"
-                  value={form.title}
-                  onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Description (optional)</label>
-                <textarea
-                  rows={2}
-                  className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background resize-none focus:outline-none focus:ring-1 focus:ring-ring"
-                  placeholder="What does success look like?"
-                  value={form.description}
-                  onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Time Period</label>
-                <div className="flex gap-1.5 flex-wrap">
-                  {TIME_PERIODS.filter((p) => p.value !== "all").map((p) => (
-                    <button
-                      key={p.value}
-                      type="button"
-                      onClick={() => setForm((f) => ({ ...f, time_period: p.value }))}
-                      className={cn(
-                        "px-3 py-1 rounded-md text-xs font-medium border transition-colors",
-                        form.time_period === p.value
-                          ? "bg-primary/10 border-primary/30 text-primary"
-                          : "border-border text-muted-foreground hover:bg-accent",
-                      )}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex gap-2 pt-1">
-                <Button type="submit" disabled={!form.title.trim() || createObjective.isPending} className="flex-1">
-                  {createObjective.isPending ? "Creating…" : "Create Objective"}
-                </Button>
-                <Button type="button" variant="outline" onClick={() => setCreateOpen(false)} className="flex-1">
-                  Cancel
-                </Button>
-              </div>
-            </form>
           </div>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

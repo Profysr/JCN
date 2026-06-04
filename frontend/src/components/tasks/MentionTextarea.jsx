@@ -2,9 +2,9 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
 
 export default function MentionTextarea({
-  value, onChange, onSubmit, members = [],
+  value, onChange, onSubmit, onFocus, onBlur, members = [],
   placeholder = "Write a comment… use @name to mention someone",
-  rows = 2, className,
+  rows = 3, className,
 }) {
   const [mentionQuery, setMentionQuery]   = useState(null); // string or null
   const [mentionIndex, setMentionIndex]   = useState(0);
@@ -76,7 +76,7 @@ export default function MentionTextarea({
       <textarea
         ref={ref}
         className={cn(
-          "w-full text-sm border rounded-md bg-transparent outline-none p-2.5 placeholder:text-muted-foreground focus:border-primary resize-none transition-colors",
+          "w-full text-sm bg-transparent outline-none px-3 py-2.5 placeholder:text-muted-foreground resize-none",
           className
         )}
         placeholder={placeholder}
@@ -84,6 +84,8 @@ export default function MentionTextarea({
         value={value}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
+        onFocus={onFocus}
+        onBlur={onBlur}
       />
 
       {showDropdown && (

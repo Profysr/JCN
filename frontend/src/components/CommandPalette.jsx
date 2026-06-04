@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import {
   Search, CheckSquare, ArrowRight, Loader2, Hash, Clock, Plus, UserPlus,
 } from "lucide-react";
-import { useSearch } from "@/hooks/useSearch";
+import api from "@/lib/api";
 import { NAV_ITEMS, workspaceUrl } from "@/lib/navLinks";
 import { cn } from "@/lib/utils";
 
@@ -68,15 +68,52 @@ export default function CommandPalette({ open, onClose }) {
   // Parse shortcuts from raw query
   const { cleanQuery, filters: shortcutFilters } = useMemo(() => parseShortcuts(query), [query]);
 
-  // All shortcuts map 1-to-1 to server-side query params — no client-side
-  // hacks needed. The server handles filtering; results come back pre-filtered.
-  const { data: results, isFetching } = useSearch(cleanQuery.trim(), {
-    task_type: shortcutFilters.type,
-    assignee:  shortcutFilters.assignee,
-    priority:  shortcutFilters.priority,
-    overdue:   shortcutFilters.special === "overdue",
-    today:     shortcutFilters.special === "today",
-  });
+  const [results, setResults]       = useState(null);
+  const [isFetching, setIsFetching] = useState(false);
+  const abortRef = useRef(null);
+
+  // Fire a new search whenever the parsed query or shortcut filters change.
+  // Each run aborts the previous in-flight request via AbortController.
+  useEffect(() => {
+    const hasTextQuery = cleanQuery.trim().length >= 2;
+    const hasShortcuts = Object.keys(shortcutFilters).length > 0;
+
+    if (!hasTextQuery && !hasShortcuts) {
+      if (abortRef.current) abortRef.current.abort();
+      setResults(null);
+      setIsFetching(false);
+      return;
+    }
+
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    const params = new URLSearchParams();
+    if (cleanQuery.trim())                      params.set("q",         cleanQuery.trim());
+    if (shortcutFilters.type)                   params.set("task_type", shortcutFilters.type);
+    if (shortcutFilters.assignee)               params.set("assignee",  shortcutFilters.assignee);
+    if (shortcutFilters.priority)               params.set("priority",  shortcutFilters.priority);
+    if (shortcutFilters.special === "overdue")  params.set("overdue",   "true");
+    if (shortcutFilters.special === "today")    params.set("today",     "true");
+
+    setIsFetching(true);
+    api.get(`/api/search/?${params.toString()}`, { signal: controller.signal })
+      .then((r) => { setResults(r.data); setIsFetching(false); })
+      .catch((err) => {
+        if (err.name !== "CanceledError" && err.name !== "AbortError") {
+          setResults(null);
+          setIsFetching(false);
+        }
+        // Aborted — a newer request is already in flight, don't touch state
+      });
+  }, [cleanQuery, shortcutFilters.type, shortcutFilters.assignee, shortcutFilters.priority, shortcutFilters.special]);
+
+  // Abort pending request when palette closes or component unmounts
+  useEffect(() => {
+    if (!open && abortRef.current) { abortRef.current.abort(); setResults(null); setIsFetching(false); }
+  }, [open]);
+  useEffect(() => () => abortRef.current?.abort(), []);
   const recentlyViewed = useMemo(() => open ? getRecentlyViewed() : [], [open]);
 
   // Quick actions

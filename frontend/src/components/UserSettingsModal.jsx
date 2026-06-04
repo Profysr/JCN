@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  X, User, Lock, SlidersHorizontal, Palette, Keyboard,
+  User, Lock, SlidersHorizontal, Palette, Keyboard,
   Check, Eye, EyeOff, AlertCircle,
 } from "lucide-react";
+import Modal from "@/components/ui/Modal";
 import { useAuthStore } from "@/store/authStore";
 import { useThemeStore } from "@/store/themeStore";
 import { Button } from "@/components/ui/button";
@@ -102,72 +103,31 @@ function MeTab() {
   );
 }
 
-// ── Forgot-password inline section (inside modal) ────────────────────────────
-function ForgotPasswordSection() {
-  const [open,    setOpen]    = useState(false);
-  const [email,   setEmail]   = useState("");
-  const [sent,    setSent]    = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [err,     setErr]     = useState("");
-
-  const send = async (e) => {
-    e.preventDefault();
-    setErr("");
-    setLoading(true);
-    try {
-      await api.post("/api/auth/password/reset/", { email });
-      setSent(true);
-    } catch (ex) {
-      setErr(ex?.response?.data?.email?.[0] || "Could not send reset email.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (!open) {
-    return (
-      <div className="pt-3 border-t">
+// ── Stable password field — must live OUTSIDE PasswordTab so its identity
+//    doesn't change on every keystroke (which would unmount the input and
+//    drop focus after each character typed).
+function PwField({ id, label, field, stateKey, show, setShow, setForm }) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <div className="relative">
+        <Input
+          id={id}
+          type={show[stateKey] ? "text" : "password"}
+          value={field}
+          onChange={(e) => setForm((f) => ({ ...f, [id]: e.target.value }))}
+          className="pr-10"
+          required
+        />
         <button
           type="button"
-          onClick={() => setOpen(true)}
-          className="text-xs text-muted-foreground hover:text-primary transition-colors"
+          tabIndex={-1}
+          onClick={() => setShow((s) => ({ ...s, [stateKey]: !s[stateKey] }))}
+          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
         >
-          Forgot your password? Reset via email →
+          {show[stateKey] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
         </button>
       </div>
-    );
-  }
-
-  if (sent) {
-    return (
-      <div className="pt-3 border-t flex items-start gap-2 text-sm text-emerald-600">
-        <Check className="w-4 h-4 flex-shrink-0 mt-0.5" />
-        Reset link sent to <strong>{email}</strong>. Check your inbox.
-      </div>
-    );
-  }
-
-  return (
-    <div className="pt-3 border-t space-y-2">
-      <p className="text-xs font-medium text-muted-foreground">Reset via email</p>
-      <form onSubmit={send} className="flex gap-2">
-        <Input
-          type="email"
-          placeholder="your@email.com"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          className="flex-1 h-8 text-sm"
-          autoFocus
-        />
-        <Button type="submit" size="sm" className="h-8" disabled={loading}>
-          {loading ? "Sending…" : "Send"}
-        </Button>
-        <Button type="button" size="sm" variant="ghost" className="h-8" onClick={() => setOpen(false)}>
-          Cancel
-        </Button>
-      </form>
-      {err && <p className="text-xs text-destructive">{err}</p>}
     </div>
   );
 }
@@ -210,30 +170,6 @@ function PasswordTab() {
     change.mutate(form);
   };
 
-  const PwField = ({ id, label, field, stateKey }) => (
-    <div className="space-y-1.5">
-      <Label htmlFor={id}>{label}</Label>
-      <div className="relative">
-        <Input
-          id={id}
-          type={show[stateKey] ? "text" : "password"}
-          value={field}
-          onChange={(e) => setForm((f) => ({ ...f, [id.replace(/-/g, "_")]: e.target.value }))}
-          className="pr-10"
-          required
-        />
-        <button
-          type="button"
-          tabIndex={-1}
-          onClick={() => setShow((s) => ({ ...s, [stateKey]: !s[stateKey] }))}
-          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-        >
-          {show[stateKey] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-        </button>
-      </div>
-    </div>
-  );
-
   return (
     <div className="space-y-4">
       <div>
@@ -242,9 +178,9 @@ function PasswordTab() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <PwField id="old_password"   label="Current password"    field={form.old_password}   stateKey="old"  />
-        <PwField id="new_password1"  label="New password"        field={form.new_password1}  stateKey="new1" />
-        <PwField id="new_password2"  label="Confirm new password" field={form.new_password2} stateKey="new2" />
+        <PwField id="old_password"   label="Current password"     field={form.old_password}  stateKey="old"  show={show} setShow={setShow} setForm={setForm} />
+        <PwField id="new_password1"  label="New password"         field={form.new_password1} stateKey="new1" show={show} setShow={setShow} setForm={setForm} />
+        <PwField id="new_password2"  label="Confirm new password" field={form.new_password2} stateKey="new2" show={show} setShow={setShow} setForm={setForm} />
 
         {serverError && (
           <div className="flex items-start gap-2 text-sm text-destructive bg-destructive/8 border border-destructive/20 rounded-lg px-3 py-2">
@@ -265,7 +201,6 @@ function PasswordTab() {
         </div>
       </form>
 
-      <ForgotPasswordSection />
     </div>
   );
 }
@@ -501,13 +436,6 @@ function ShortcutsTab() {
 export default function UserSettingsModal({ onClose, defaultTab = "me" }) {
   const [activeTab, setActiveTab] = useState(defaultTab);
 
-  // Close on Esc
-  useEffect(() => {
-    const h = (e) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", h);
-    return () => window.removeEventListener("keydown", h);
-  }, [onClose]);
-
   const CONTENT = {
     me:          <MeTab />,
     password:    <PasswordTab />,
@@ -517,20 +445,17 @@ export default function UserSettingsModal({ onClose, defaultTab = "me" }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-
-      {/* Modal */}
-      <div
-        className="relative w-full max-w-2xl bg-card border border-border rounded-2xl shadow-2xl overflow-hidden flex"
-        style={{ height: "min(600px, 90vh)" }}
-      >
+    <Modal
+      isOpen
+      onClose={onClose}
+      title={TABS.find((t) => t.id === activeTab)?.label ?? "Settings"}
+      showFooter={false}
+      maxWidth="672px"
+      padding="p-0"
+    >
+      <div className="flex" style={{ height: "min(540px, 80vh)" }}>
         {/* Left tab sidebar */}
         <aside className="w-44 flex-shrink-0 bg-muted/20 border-r border-border flex flex-col py-4 px-2 gap-0.5">
-          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest px-3 mb-2">
-            Settings
-          </p>
           {TABS.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
@@ -548,27 +473,11 @@ export default function UserSettingsModal({ onClose, defaultTab = "me" }) {
           ))}
         </aside>
 
-        {/* Content pane */}
-        <div className="flex-1 flex flex-col min-w-0">
-          {/* Pane header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0">
-            <h2 className="font-bold text-base">
-              {TABS.find((t) => t.id === activeTab)?.label}
-            </h2>
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-
-          {/* Scrollable content */}
-          <div className="flex-1 overflow-y-auto px-6 py-5">
-            {CONTENT[activeTab]}
-          </div>
+        {/* Scrollable content pane */}
+        <div className="flex-1 overflow-y-auto px-6 py-5 min-w-0">
+          {CONTENT[activeTab]}
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

@@ -646,34 +646,28 @@ class ApprovalSerializer(serializers.ModelSerializer):
 # ── v3.8.0 — OKR & Goal Tracking ─────────────────────────────────────────────
 
 class KeyResultSerializer(serializers.ModelSerializer):
-    progress      = serializers.SerializerMethodField()
-    task_count    = serializers.SerializerMethodField()
-    done_task_count = serializers.SerializerMethodField()
-    task_ids      = serializers.ListField(child=serializers.UUIDField(), write_only=True, required=False)
+    progress     = serializers.SerializerMethodField()
+    task_ids     = serializers.SerializerMethodField()
+    linked_tasks = serializers.SerializerMethodField()
 
     class Meta:
         model  = KeyResult
-        fields = [
-            "id", "title", "metric_type",
-            "start_value", "target_value", "current_value", "unit",
-            "progress", "task_count", "done_task_count", "task_ids",
-            "history", "created_at", "updated_at",
-        ]
-        read_only_fields = ["id", "progress", "task_count", "done_task_count", "history", "created_at", "updated_at"]
+        fields = ["id", "title", "progress", "task_ids", "linked_tasks", "created_at", "updated_at"]
+        read_only_fields = ["id", "progress", "task_ids", "linked_tasks", "created_at", "updated_at"]
 
-    def get_progress(self, obj):        return obj.progress
-    def get_task_count(self, obj):      return obj.tasks.count()
-    def get_done_task_count(self, obj): return obj.tasks.filter(status__is_done=True).count()
+    def get_progress(self, obj):     return obj.progress
+    def get_task_ids(self, obj):     return [str(pk) for pk in obj.tasks.values_list("id", flat=True)]
+    def get_linked_tasks(self, obj): return KeyResultLinkedTaskSerializer(obj.tasks.select_related("status").all(), many=True).data
 
     def create(self, validated_data):
-        task_ids = validated_data.pop("task_ids", [])
+        task_ids = self.initial_data.get("task_ids", [])
         kr = KeyResult.objects.create(**validated_data)
         if task_ids:
             kr.tasks.set(task_ids)
         return kr
 
     def update(self, instance, validated_data):
-        task_ids = validated_data.pop("task_ids", None)
+        task_ids = self.initial_data.get("task_ids", None)
         instance = super().update(instance, validated_data)
         if task_ids is not None:
             instance.tasks.set(task_ids)

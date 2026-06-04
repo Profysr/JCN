@@ -20,6 +20,33 @@ export const NAV_ITEMS = [
   { key: "settings",   icon: Settings,        label: "Settings",   desc: "Workspace settings",      path: "settings"   },
 ];
 
+/** Grouped nav — used by the sidebar to render section labels between links. */
+export const NAV_GROUPS = [
+  {
+    label: null,
+    items: ["dashboards", "projects"],
+  },
+  {
+    label: "Work",
+    items: ["inbox", "my-work", "goals"],
+  },
+  {
+    label: "Views",
+    items: ["portfolio", "roadmap", "timesheets"],
+  },
+  {
+    label: "Workspace",
+    items: ["members", "settings"],
+  },
+];
+
+const _byKey = Object.fromEntries(NAV_ITEMS.map((n) => [n.key, n]));
+
+/** Returns NAV_GROUPS with full item objects resolved. */
+export function resolvedNavGroups() {
+  return NAV_GROUPS.map((g) => ({ ...g, items: g.items.map((k) => _byKey[k]) }));
+}
+
 export function workspaceUrl(slug, path) {
   return `/w/${slug}/${path}`;
 }

@@ -397,12 +397,10 @@ class TaskMoveView(APIView):
 
         if status_id is not None:
             task_status = get_object_or_404(TaskStatus, id=status_id, project=project)
-            # v3.6.0 — approval gate: block move to done-type columns if approvals are pending
+            # v3.6.0 — approval gate: block only if there is an approval still awaiting a verdict.
+            # changes_requested / rejected are closed states — the reviewer already responded.
             if task_status.is_done:
-                pending_approvals = task.approvals.filter(
-                    status__in=[Approval.Status.PENDING, Approval.Status.CHANGES_REQUESTED]
-                )
-                if pending_approvals.exists():
+                if task.approvals.filter(status=Approval.Status.PENDING).exists():
                     return Response(
                         {"approval_required": True,
                          "detail": "This task has pending approvals. Resolve them before marking it done."},
@@ -2399,6 +2397,51 @@ class ApprovalReviewView(APIView):
                 fire_automation(trigger, approval.task, actor=request.user, context={"approval_id": str(approval_id)})
 
         return Response(data)
+
+
+class ApprovalResubmitView(APIView):
+    """
+    POST /tasks/:id/approvals/:approval_id/resubmit/
+    Resets a changes_requested or rejected approval back to pending so reviewers
+    can re-evaluate without the assignee creating a duplicate approval record.
+    Only the original requester may resubmit.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, workspace_slug, project_id, task_id, approval_id):
+        workspace = get_workspace_for_user(workspace_slug, request.user)
+        project   = get_object_or_404(Project, id=project_id, workspace=workspace)
+        task      = get_object_or_404(Task, id=task_id, project=project)
+        approval  = get_object_or_404(Approval, id=approval_id, task=task)
+
+        if approval.requested_by != request.user:
+            return Response({"detail": "Only the original requester can resubmit."}, status=status.HTTP_403_FORBIDDEN)
+
+        if approval.status == Approval.Status.APPROVED:
+            return Response({"detail": "This approval is already approved."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Reset the approval and all individual reviewer verdicts back to pending
+        approval.status = Approval.Status.PENDING
+        approval.save(update_fields=["status", "updated_at"])
+        approval.reviewers.all().update(status=ApprovalReviewer.Status.PENDING, comment="")
+
+        # Notify each reviewer again
+        for reviewer in approval.reviewers.select_related("user"):
+            notify(
+                recipient=reviewer.user,
+                actor=request.user,
+                verb=Notification.Verb.APPROVAL_REQUESTED,
+                workspace=workspace,
+                task=task,
+            )
+
+        broadcast(workspace_slug, "approval.updated", {
+            "task_id":    str(task_id),
+            "project_id": str(project_id),
+            "approval":   ApprovalSerializer(approval).data,
+        })
+
+        return Response(ApprovalSerializer(approval).data)
 
 
 # ── v3.8.0 — OKR & Goal Tracking ─────────────────────────────────────────────

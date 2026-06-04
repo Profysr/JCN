@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { format, formatDistanceToNow } from "date-fns";
 import {
@@ -70,7 +70,7 @@ import {
 } from "@/hooks/useTimeTracking";
 import { useAnnouncePresence, usePresence } from "@/hooks/usePresence";
 import { useToggleReaction } from "@/hooks/useCommentReactions";
-import { useApprovals, useRequestApproval, useSubmitReview } from "@/hooks/useApprovals";
+import { useApprovals, useRequestApproval, useSubmitReview, useResubmitApproval } from "@/hooks/useApprovals";
 
 // Local alias so existing code below keeps working without changes
 const LABEL_COLORS = LABEL_COLOR_PALETTE;
@@ -137,7 +137,8 @@ export default function TaskDetailPanel({
   // v3.6.0 — approvals
   const { data: approvals = [] } = useApprovals(workspaceSlug, projectId, taskId);
   const requestApproval = useRequestApproval(workspaceSlug, projectId, taskId);
-  const [approvalModal, setApprovalModal] = useState(false);
+  const [approvalDropdown, setApprovalDropdown] = useState(false);
+  const approvalBtnRef = useRef(null);
 
   // v3.5.0 — presence + conflict
   useAnnouncePresence(workspaceSlug, "task", taskId);
@@ -162,7 +163,9 @@ export default function TaskDetailPanel({
   const [manualMinutes, setManualMinutes] = useState("");
   const [manualDesc, setManualDesc] = useState("");
   const [activityTab, setActivityTab] = useState("comments"); // "comments" | "activity"
+  const [commentFocused, setCommentFocused] = useState(false);
   const titleRef = useRef(null);
+  const typingPingRef = useRef(0); // timestamp of last presence ping
 
   useEffect(() => {
     if (editingTitle && titleRef.current) titleRef.current.focus();
@@ -238,10 +241,10 @@ export default function TaskDetailPanel({
   };
 
   const handleCommentSubmit = (e) => {
-    e.preventDefault();
+    e?.preventDefault();
     if (!commentBody.trim()) return;
     createComment.mutate(commentBody.trim(), {
-      onSuccess: () => setCommentBody(""),
+      onSuccess: () => { setCommentBody(""); setCommentFocused(false); },
     });
   };
 
@@ -322,24 +325,34 @@ export default function TaskDetailPanel({
               </Tooltip>
             )}
 
-            {/* v3.6.0 — request approval */}
+            {/* v3.6.0 — request approval dropdown */}
             {canEdit && (
-              <Tooltip content="Request approval">
-                <button
-                  onClick={() => setApprovalModal(true)}
-                  className={cn(
-                    "flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors active:scale-[0.97]",
-                    approvals.some((a) => a.status === "pending")
-                      ? "bg-amber-500/15 text-amber-600 hover:bg-amber-500/25"
-                      : "bg-accent/60 text-foreground/70 hover:text-foreground hover:bg-accent",
-                  )}
-                >
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  {approvals.length > 0
-                    ? `${approvals.filter((a) => a.status === "approved").length}/${approvals.length} approved`
-                    : "Request approval"}
-                </button>
-              </Tooltip>
+              <div className="relative" ref={approvalBtnRef}>
+                <Tooltip content="Request approval">
+                  <button
+                    onClick={() => setApprovalDropdown((v) => !v)}
+                    className={cn(
+                      "flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors active:scale-[0.97]",
+                      approvals.some((a) => a.status === "pending")
+                        ? "bg-amber-500/15 text-amber-600 hover:bg-amber-500/25"
+                        : "bg-accent/60 text-foreground/70 hover:text-foreground hover:bg-accent",
+                    )}
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    {approvals.length > 0
+                      ? `${approvals.filter((a) => a.status === "approved").length}/${approvals.length} approved`
+                      : "Request approval"}
+                  </button>
+                </Tooltip>
+                {approvalDropdown && (
+                  <RequestApprovalDropdown
+                    members={members}
+                    requestApproval={requestApproval}
+                    onClose={() => setApprovalDropdown(false)}
+                    anchorRef={approvalBtnRef}
+                  />
+                )}
+              </div>
             )}
 
             {/* Timer button */}
@@ -673,36 +686,6 @@ export default function TaskDetailPanel({
             />
 
 
-            {/* ── v3.6.0 Approval section ── */}
-            {approvals.length > 0 && (
-              <div>
-                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                  Approvals
-                </p>
-                <div className="space-y-3">
-                  {approvals.map((approval) => (
-                    <ApprovalCard
-                      key={approval.id}
-                      approval={approval}
-                      currentUserId={user?.id}
-                      workspaceSlug={workspaceSlug}
-                      projectId={projectId}
-                      taskId={taskId}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* ── Request approval modal ── */}
-            {approvalModal && (
-              <RequestApprovalModal
-                workspaceSlug={workspaceSlug}
-                requestApproval={requestApproval}
-                onClose={() => setApprovalModal(false)}
-                members={members}
-              />
-            )}
 
             {/* ── Comments + Activity tabs + Time Log ── */}
             <div>
@@ -725,8 +708,13 @@ export default function TaskDetailPanel({
                     id: "timelog",
                     icon: Clock,
                     label: "Time Log",
-                    // Show total hours logged inside the tab badge if greater than 0
                     count: totalLogged > 0 ? formatDuration(totalLogged) : null,
+                  },
+                  {
+                    id: "approvals",
+                    icon: ShieldCheck,
+                    label: "Approvals",
+                    count: approvals.length || null,
                   },
                 ].map((tab) => (
                   <button
@@ -760,43 +748,60 @@ export default function TaskDetailPanel({
               {/* Comments tab */}
               {activityTab === "comments" && (
                 <div>
-                  {/* Comment input at top (like Jira) */}
-                  <form
-                    onSubmit={handleCommentSubmit}
-                    className="flex gap-3 items-start mb-1"
-                  >
+                  {/* Comment input */}
+                  <form onSubmit={handleCommentSubmit} className="flex gap-2.5 items-start mb-3">
                     <Avatar
                       name={user?.display_name || user?.email || "?"}
                       size="sm"
-                      className="flex-shrink-0 mt-1"
+                      className="flex-shrink-0 mt-1.5"
                     />
-                    <div className="flex-1 border border-border rounded-lg overflow-hidden focus-within:ring-1 focus-within:ring-primary focus-within:border-primary transition-all">
-                      <MentionTextarea
-                        value={commentBody}
-                        onChange={(val) => {
-                          setCommentBody(val);
-                          // Broadcast typing to other users (fire-and-forget)
-                          import("@/lib/api").then(({ default: api }) => {
-                            api.post(`/api/workspaces/${workspaceSlug}/presence/`, {
-                              resource_type: "task",
-                              resource_id: taskId,
-                            }).catch(() => {});
-                          });
-                        }}
-                        onSubmit={handleCommentSubmit}
-                        members={members}
-                      />
-                      {commentBody.trim() && (
-                        <div className="flex justify-end px-2 pb-2">
-                          <Button
-                            type="submit"
-                            size="sm"
-                            disabled={createComment.isPending}
-                          >
-                            {createComment.isPending ? "Sending…" : "Send"}
-                          </Button>
-                        </div>
-                      )}
+                    <div className="flex-1 min-w-0">
+                      <div
+                        className={cn(
+                          "rounded-xl border transition-all",
+                          commentFocused
+                            ? "border-primary ring-2 ring-primary/15"
+                            : "border-border",
+                        )}
+                      >
+                        <MentionTextarea
+                          value={commentBody}
+                          onChange={(val) => {
+                            setCommentBody(val);
+                            const now = Date.now();
+                            if (now - typingPingRef.current > 3000) {
+                              typingPingRef.current = now;
+                              import("@/lib/api").then(({ default: api }) => {
+                                api.post(`/api/workspaces/${workspaceSlug}/presence/`, {
+                                  resource_type: "task",
+                                  resource_id: taskId,
+                                }).catch(() => {});
+                              });
+                            }
+                          }}
+                          onFocus={() => setCommentFocused(true)}
+                          onSubmit={handleCommentSubmit}
+                          members={members}
+                        />
+                        {commentFocused && (
+                          <div className="flex items-center justify-end gap-2 px-3 pb-2.5">
+                            <button
+                              type="button"
+                              onClick={() => { setCommentBody(""); setCommentFocused(false); }}
+                              className="text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-md hover:bg-accent"
+                            >
+                              Cancel
+                            </button>
+                            <Button
+                              type="submit"
+                              size="sm"
+                              disabled={!commentBody.trim() || createComment.isPending}
+                            >
+                              {createComment.isPending ? "Sending…" : "Send"}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </form>
 
@@ -1106,6 +1111,30 @@ export default function TaskDetailPanel({
                         </div>
                       ))}
                     </div>
+                  )}
+                </div>
+              )}
+
+              {/* Approvals tab */}
+              {activityTab === "approvals" && (
+                <div className="space-y-3">
+                  {approvals.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-10 text-center text-muted-foreground gap-2">
+                      <ShieldCheck className="w-8 h-8 opacity-30" />
+                      <p className="text-sm font-medium">No approvals yet</p>
+                      <p className="text-xs">Use the approval button in the header to request one.</p>
+                    </div>
+                  ) : (
+                    approvals.map((approval) => (
+                      <ApprovalCard
+                        key={approval.id}
+                        approval={approval}
+                        currentUserId={user?.id}
+                        workspaceSlug={workspaceSlug}
+                        projectId={projectId}
+                        taskId={taskId}
+                      />
+                    ))
                   )}
                 </div>
               )}
@@ -1718,13 +1747,17 @@ const REVIEWER_STATUS_CONFIG = {
   changes_requested: { label: "Changes requested", cls: "bg-amber-500/10 text-amber-700" },
 };
 
-function ApprovalCard({ approval, currentUserId, workspaceSlug, projectId, taskId }) {
+function ApprovalCard({ approval, currentUserId, workspaceSlug, projectId, taskId, requestedById }) {
   const [reviewComment, setReviewComment] = useState("");
   const [showReviewForm, setShowReviewForm] = useState(false);
-  const submitReview = useSubmitReview(workspaceSlug, projectId, taskId, approval.id);
+  const submitReview  = useSubmitReview(workspaceSlug, projectId, taskId, approval.id);
+  const resubmit      = useResubmitApproval(workspaceSlug, projectId, taskId, approval.id);
 
-  const myReviewer = approval.reviewers?.find((r) => r.user?.id === currentUserId);
-  const isMyTurn   = myReviewer && myReviewer.status === "pending";
+  const myReviewer    = approval.reviewers?.find((r) => r.user?.id === currentUserId);
+  const isMyTurn      = myReviewer && myReviewer.status === "pending";
+  const isRequester   = approval.requested_by?.id === currentUserId;
+  const canResubmit   = isRequester &&
+    (approval.status === "changes_requested" || approval.status === "rejected");
 
   const overallCfg = REVIEWER_STATUS_CONFIG[approval.status] || REVIEWER_STATUS_CONFIG.pending;
 
@@ -1755,24 +1788,44 @@ function ApprovalCard({ approval, currentUserId, workspaceSlug, projectId, taskI
       )}
 
       {/* Reviewer list */}
-      <div className="space-y-1.5">
+      <div className="space-y-2">
         {approval.reviewers?.map((r) => {
           const cfg = REVIEWER_STATUS_CONFIG[r.status] || REVIEWER_STATUS_CONFIG.pending;
           return (
-            <div key={r.id} className="flex items-center gap-2">
-              <Avatar
-                name={r.user?.display_name || r.user?.full_name || r.user?.email}
-                src={r.user?.avatar}
-                size="xs"
-              />
-              <span className="text-xs font-medium flex-1">{r.user?.full_name || r.user?.email}</span>
-              <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded-full", cfg.cls)}>
-                {cfg.label}
-              </span>
+            <div key={r.id} className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Avatar
+                  name={r.user?.display_name || r.user?.full_name || r.user?.email}
+                  src={r.user?.avatar}
+                  size="xs"
+                />
+                <span className="text-xs font-medium flex-1">{r.user?.full_name || r.user?.email}</span>
+                <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded-full", cfg.cls)}>
+                  {cfg.label}
+                </span>
+              </div>
+              {/* Show the reviewer's comment when they requested changes or rejected */}
+              {r.comment && (
+                <div className="ml-6 px-2.5 py-1.5 rounded-md bg-muted/60 border-l-2 border-amber-400 text-xs text-muted-foreground italic">
+                  "{r.comment}"
+                </div>
+              )}
             </div>
           );
         })}
       </div>
+
+      {/* Re-submit button — shown to the requester when changes were requested / rejected */}
+      {canResubmit && (
+        <button
+          onClick={() => resubmit.mutate()}
+          disabled={resubmit.isPending}
+          className="w-full flex items-center justify-center gap-1.5 text-xs py-1.5 rounded-md bg-primary/10 text-primary hover:bg-primary/20 font-semibold transition-colors"
+        >
+          <RotateCcw className="w-3 h-3" />
+          {resubmit.isPending ? "Re-submitting…" : "Re-submit for review"}
+        </button>
+      )}
 
       {/* Reviewer action buttons — only for the reviewer whose turn it is */}
       {isMyTurn && (
@@ -1837,16 +1890,38 @@ function ApprovalCard({ approval, currentUserId, workspaceSlug, projectId, taskI
   );
 }
 
-function RequestApprovalModal({ workspaceSlug, requestApproval, onClose, members = [] }) {
+function RequestApprovalDropdown({ members = [], requestApproval, onClose, anchorRef }) {
   const [reviewerIds, setReviewerIds] = useState([]);
   const [dueDate, setDueDate]         = useState("");
   const [note, setNote]               = useState("");
   const [search, setSearch]           = useState("");
+  const dropdownRef = useRef(null);
 
-  const filtered = members.filter((m) =>
-    (m.user?.full_name || m.user?.email || "")
-      .toLowerCase()
-      .includes(search.toLowerCase()),
+  // Close on outside click
+  useEffect(() => {
+    const handler = (e) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target) &&
+        anchorRef.current &&
+        !anchorRef.current.contains(e.target)
+      ) {
+        onClose();
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [onClose, anchorRef]);
+
+  // Memoised so search typing doesn't re-filter the full list on every parent render
+  const filtered = useMemo(
+    () =>
+      members.filter((m) =>
+        (m.user?.full_name || m.user?.email || "")
+          .toLowerCase()
+          .includes(search.toLowerCase()),
+      ),
+    [members, search],
   );
 
   const toggle = (id) =>
@@ -1864,101 +1939,98 @@ function RequestApprovalModal({ workspaceSlug, requestApproval, onClose, members
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-md bg-card border border-border rounded-xl shadow-2xl p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-sm flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-primary" /> Request Approval
-          </h3>
-          <button onClick={onClose} className="p-1 rounded text-muted-foreground hover:text-foreground">
-            <X className="w-4 h-4" />
-          </button>
+    <div
+      ref={dropdownRef}
+      className="absolute right-0 top-full mt-1.5 z-50 w-72 bg-popover border border-border rounded-xl shadow-xl p-4 space-y-3"
+    >
+      <p className="text-xs font-semibold flex items-center gap-1.5">
+        <ShieldCheck className="w-3.5 h-3.5 text-primary" /> Request Approval
+      </p>
+
+      <form onSubmit={handleSubmit} className="space-y-3">
+        {/* Reviewer search */}
+        <div>
+          <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1 block">
+            Reviewers
+          </label>
+          <input
+            autoFocus
+            placeholder="Search members…"
+            className="w-full text-sm border border-border rounded-lg px-2.5 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring mb-1.5"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <div className="max-h-32 overflow-y-auto space-y-0.5 border border-border rounded-lg p-1">
+            {filtered.map((m) => {
+              const id = m.user?.id;
+              const selected = reviewerIds.includes(id);
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => toggle(id)}
+                  className={cn(
+                    "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors text-left",
+                    selected ? "bg-primary/10 text-primary" : "hover:bg-accent",
+                  )}
+                >
+                  <Avatar
+                    name={m.user?.display_name || m.user?.full_name || m.user?.email}
+                    src={m.user?.avatar}
+                    size="xs"
+                  />
+                  <span className="flex-1 truncate text-xs">{m.user?.full_name || m.user?.email}</span>
+                  {selected && <Check className="w-3 h-3 flex-shrink-0" />}
+                </button>
+              );
+            })}
+            {filtered.length === 0 && (
+              <p className="text-xs text-muted-foreground text-center py-2">No members found</p>
+            )}
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-3">
-          {/* Reviewer search */}
-          <div>
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
-              Reviewers
-            </label>
-            <input
-              placeholder="Search members…"
-              className="w-full text-sm border border-border rounded-lg px-3 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring mb-2"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            <div className="max-h-36 overflow-y-auto space-y-0.5 border border-border rounded-lg p-1">
-              {filtered.map((m) => {
-                const id = m.user?.id;
-                const selected = reviewerIds.includes(id);
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => toggle(id)}
-                    className={cn(
-                      "w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-sm transition-colors text-left",
-                      selected ? "bg-primary/10 text-primary" : "hover:bg-accent",
-                    )}
-                  >
-                    <Avatar
-                      name={m.user?.display_name || m.user?.full_name || m.user?.email}
-                      src={m.user?.avatar}
-                      size="xs"
-                    />
-                    <span className="flex-1 truncate">{m.user?.full_name || m.user?.email}</span>
-                    {selected && <Check className="w-3 h-3 flex-shrink-0" />}
-                  </button>
-                );
-              })}
-              {filtered.length === 0 && (
-                <p className="text-xs text-muted-foreground text-center py-2">No members found</p>
-              )}
-            </div>
-          </div>
+        {/* Due date */}
+        <div>
+          <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1 block">
+            Due date (optional)
+          </label>
+          <input
+            type="date"
+            className="w-full text-sm border border-border rounded-lg px-2.5 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+            value={dueDate}
+            onChange={(e) => setDueDate(e.target.value)}
+          />
+        </div>
 
-          {/* Due date */}
-          <div>
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1 block">
-              Due date (optional)
-            </label>
-            <input
-              type="date"
-              className="w-full text-sm border border-border rounded-lg px-3 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-            />
-          </div>
+        {/* Note */}
+        <div>
+          <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1 block">
+            Note (optional)
+          </label>
+          <textarea
+            rows={2}
+            placeholder="Context for reviewers…"
+            className="w-full text-sm border border-border rounded-lg px-2.5 py-2 bg-background resize-none focus:outline-none focus:ring-1 focus:ring-ring"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+          />
+        </div>
 
-          {/* Note */}
-          <div>
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1 block">
-              Note (optional)
-            </label>
-            <textarea
-              rows={2}
-              placeholder="Context for reviewers…"
-              className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background resize-none focus:outline-none focus:ring-1 focus:ring-ring"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-            />
-          </div>
-
-          <div className="flex gap-2 pt-1">
-            <Button
-              type="submit"
-              disabled={!reviewerIds.length || requestApproval.isPending}
-              className="flex-1"
-            >
-              {requestApproval.isPending ? "Sending…" : "Send request"}
-            </Button>
-            <Button type="button" variant="outline" onClick={onClose} className="flex-1">
-              Cancel
-            </Button>
-          </div>
-        </form>
-      </div>
+        <div className="flex gap-2">
+          <Button
+            type="submit"
+            size="sm"
+            disabled={!reviewerIds.length || requestApproval.isPending}
+            className="flex-1"
+          >
+            {requestApproval.isPending ? "Sending…" : "Send request"}
+          </Button>
+          <Button type="button" size="sm" variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+        </div>
+      </form>
     </div>
   );
 }

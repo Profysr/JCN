@@ -179,6 +179,8 @@ REST_AUTH = {
     "USER_DETAILS_SERIALIZER": "accounts.serializers.UserSerializer",
     # Password reset confirm URL — frontend route that handles uid/token from the email link
     "PASSWORD_RESET_CONFIRM_URL": "reset-password/{uid}/{token}",
+    # Without this, dj_rest_auth ignores old_password entirely and saves any new password.
+    "OLD_PASSWORD_FIELD_ENABLED": True,
 }
 
 # allauth account behaviour
