@@ -4,6 +4,7 @@ import { Plus, MoreHorizontal, Pencil, Check, Trash2, X, CheckCircle } from "luc
 import TaskCard from "./TaskCard";
 import { useUpdateStatus, useDeleteStatus } from "@/hooks/useStatusManagement";
 import { cn } from "@/lib/utils";
+import { Avatar } from "@/components/ui/avatar";
 
 const PRESET_COLORS = [
   "#94a3b8","#6366f1","#8b5cf6","#ec4899",
@@ -123,12 +124,33 @@ export default function KanbanColumn({
   column, tasks, onAddTask, onTaskClick,
   selectedTaskId, selectedIds = new Set(), onToggleSelect,
   workspaceSlug, projectId, canEdit,
+  columnViewers = [],
+  taskViewerMap  = {},
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
 
   return (
     <div className="flex flex-col w-[272px] flex-shrink-0">
+      {/* Active-user avatar strip above header */}
+      {columnViewers.length > 0 && (
+        <div className="flex items-center gap-1 px-2 pb-1">
+          {columnViewers.slice(0, 5).map((v) => (
+            <div key={v.user.id} title={v.user.full_name || v.user.email}>
+              <Avatar
+                name={v.user.display_name || v.user.full_name || v.user.email}
+                src={v.user.avatar}
+                size="xs"
+                className="ring-1 ring-background"
+              />
+            </div>
+          ))}
+          {columnViewers.length > 5 && (
+            <span className="text-[9px] text-muted-foreground">+{columnViewers.length - 5}</span>
+          )}
+        </div>
+      )}
+
       {/* Column header */}
       <div
         className="group flex items-center justify-between px-2 py-2 mb-1.5 rounded-t-md border-t-[3px] bg-card border-x border-border"
@@ -202,6 +224,7 @@ export default function KanbanColumn({
                 isBulkSelected={selectedIds.has(task.id)}
                 onToggleSelect={canEdit ? onToggleSelect : undefined}
                 canEdit={canEdit}
+                viewers={taskViewerMap[task.id] || []}
               />
             ))}
             {provided.placeholder}

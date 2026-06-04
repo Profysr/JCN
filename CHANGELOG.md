@@ -687,6 +687,14 @@ Original spec called for "multi-board" where each "board" was a named view with 
 ## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 > **Phase 3 status: COMPLETE ✅** — Implemented end-to-end.
+>
+> **Scope decisions made during implementation:**
+> - Inline cell editing removed from Table View (TC-19: double-click opened task panel; editing consolidated into Task Detail Panel)
+> - Zoom keyboard shortcut (TC-08) skipped
+> - Advanced search scoped to query-param shortcuts (`@`, `!`, `#`, `>`) — PostgreSQL FTS + filter builder tree deferred to Phase 5
+> - Export PNG/PDF and WIP overlay deferred from Gantt View
+> - `TaskDetailPanel` fully redesigned as a Jira-style two-column modal (v3.4.1)
+> - `src/lib/constants.js` introduced as single source of truth for all priority/type/status UI config
 
 ---
 
@@ -722,17 +730,26 @@ Original spec called for "multi-board" where each "board" was a named view with 
 ### Frontend
 - **Timeline View** (full Gantt) — added to view toggle
 - Horizontal bars = task duration (`start_date` → `due_date`)
-- Group by: Status / Assignee / Sprint / Label / Epic (switcher in header)
+- Group by: Status / Assignee / Sprint (switcher in header)
 - Swimlanes: each group is a collapsible row section
-- Drag bar body → moves both start and due date
+- Drag bar body → moves both start and due date (with live tooltip showing the new date range)
 - Drag right edge → extends due_date
 - Dependency arrows: visual lines connecting `blocks`/`blocked_by` task pairs
 - Critical path: tasks on the critical chain highlighted in amber
 - Zoom levels: Day / Week / Month / Quarter — horizontal scroll adapts
-- "Today" vertical red line (same as Roadmap)
-- Collapsed tasks: click chevron to expand into children
-- WIP indicators: coloured column overlays for sprint boundaries
-- Export as PNG (screenshot) or printable PDF
+- "Today" vertical red line; current-month column gets a subtle shade to aid orientation
+- Month labels and clear month separators on the time axis
+
+### Bugs fixed during implementation
+- **Viewport jump on drag commit**: after releasing a drag the chart scrolled back to today — fixed with `scrolledToTodayRef` (scroll-to-today fires only on mount, ignored on subsequent `rangeStart` refetch changes)
+- **Click after drag opens task panel**: `didDragRef` tracks whether `|deltaDays| > 0`; the `onClick` handler is suppressed when the ref is set, preventing unintended panel opens
+- **Auto-scroll activates immediately on drag start**: gated behind a 4px movement threshold (`MOVE_THRESHOLD`) so accidental micro-movements during click don't trigger edge scrolling
+
+### Deferred to later phase
+- Export as PNG / printable PDF
+- WIP column overlays for sprint boundaries
+- Collapsible task rows for parent/child hierarchy in the chart
+- Keyboard shortcut zoom level switching (TC-08 — skipped per team decision)
 
 ---
 
@@ -749,52 +766,50 @@ The existing `ListView` (introduced in v0.5.0 as a simple title/status/priority/
 
 ### Frontend
 - **Table View** (replaces the existing `ListView`) — power-user spreadsheet-style list
-- Sticky header row with sort indicators (click to sort, shift+click for multi-sort)
-- Column visibility toggle: show/hide any field including custom fields
-- Column width: drag to resize, double-click to auto-fit
-- Row grouping: group by status / assignee / priority / label / sprint — collapsible groups with count + aggregate
-- Inline cell editing: click any cell to edit directly (title, priority, assignee, due date, custom fields)
-- Row height: compact / default / tall (shows description preview)
-- "Freeze columns" for title column (always visible on horizontal scroll)
-- Add column button at end of header row: add custom field inline
-- Footer row: sum/avg/count aggregates per column (configurable per column type)
-- Keyboard navigation: Tab to move right, Enter to move down, Esc to cancel edit
+- Sticky header row with sort indicators (click to sort)
+- Priority column: icon + label (e.g. `↑ High`) — icons from centralized `PRIORITIES` constant, colour-coded per priority
+- All column headers, row content, and footer text aligned left for visual consistency
+- Task title opens the Task Detail Panel on click
+- Bulk action bar: floating bottom bar with Status / Priority / Assign dropdowns + Delete, appears when rows are selected
+- Footer row: task count per group
+
+### Implementation notes
+- **Inline cell editing removed**: double-click to edit was interfering with single-click to open the detail panel (TC-19 regression). Editing is handled exclusively through the Task Detail Panel to keep concerns clean.
+- Column resize, column visibility toggle, row height modes, freeze columns, and per-column aggregates deferred to a polish pass.
 
 ---
 
 ## v3.2.0 — Advanced Search & Filter Builder (Week 11)
-> Status: COMPLETE ✅
+> Status: COMPLETE ✅ *(scope scoped down — see implementation note)*
 > **Gap filled:** Notion search is famously bad. Jira's JQL is powerful but alienating. JCN is powerful and friendly.
 
-### Architecture decision
-`SavedView` (introduced v0.8.0) already stores named filter presets per project per user. Rather than introduce a separate `SavedSearch` model, `SavedView` is extended with two new fields: `is_workspace_scoped` (BooleanField, default False) and `alert_enabled` (BooleanField, default False). Workspace-scoped saved searches appear in search results across all projects; alert-enabled ones trigger a notification when new tasks match. This keeps filter persistence in one model.
+### Implementation note
+Full PostgreSQL FTS (`tsvector`) and the AND/OR/group filter tree are deferred to Phase 5. What shipped in Phase 3 is a **query-param shortcut system** that covers the highest-value search patterns without the infrastructure complexity.
 
 ### Backend
-- PostgreSQL full-text search with `tsvector` on task title + description + comment body
-- Search index maintained via Django signals on save
-- Advanced filter endpoint: `POST /api/search/advanced/` — arbitrary AND/OR filter tree
-- Filter tree schema: `{logic: "AND", conditions: [{field, operator, value}, ...], groups: [...]}`
-- `SavedView` extended: `is_workspace_scoped` + `alert_enabled` fields (migration + serializer update)
-- Search alert: when `alert_enabled=True`, a Celery periodic task checks for new matching tasks and calls `notify()` for the view owner
-- Search supports: text, assignee, type, priority, status, label, date range, sprint, has-attachment, overdue, unassigned, estimate range, time-logged range, custom fields
+- `GlobalSearchView` extended with dedicated query params:
+  - `?assignee=<username_or_email>` — filter by assignee (`@name` shortcut)
+  - `?priority=<value>` — filter by priority (`!urgent`, `!high`, etc.)
+  - `?task_type=<value>` — filter by type (`#bug`, `#feature`, etc.)
+  - `?overdue=true` — tasks past due date (`>overdue` shortcut)
+  - `?today=true` — tasks due today (`>today` shortcut)
+- All params composable — can combine type + priority + assignee in one request
 
 ### Frontend
-- **Command Palette v2:**
-  - Type `#bug` to filter by type instantly
-  - Type `@bilal` to filter by assignee
-  - Type `>overdue` for overdue tasks
-  - Type `!urgent` for urgent priority
-  - Recently viewed (tasks + pages + docs) with timestamps
-  - Quick actions: `c` create task, `p` create project, `i` invite member
-  - Navigate with arrow keys, open with Enter, secondary actions with Tab
-- **Filter Builder** in all views:
-  - Add filter row: field picker (all task fields + custom fields) → operator → value
-  - AND/OR logic toggle between rows
-  - Group conditions with `( )` brackets for complex logic
-  - Save as named view → shared view URL (copy link)
-  - Clear all / restore last saved
-- Search results page `/w/:ws/search?q=` — paginated, grouped by project, with type badges
-- Saved search alerts: "New tasks matching 'API bug'" notification
+- **Command Palette shortcuts** (search bar understands these prefixes):
+  - `@name` → assignee filter
+  - `!urgent` / `!high` / `!medium` / `!low` → priority filter
+  - `#bug` / `#feature` / `#task` → type filter
+  - `>overdue` → overdue tasks
+  - `>today` → due today
+- `useSearch` hook passes these as query params to the backend instead of client-side filtering
+- Results show correctly labelled task chips with type badge + priority icon
+
+### Deferred to Phase 5
+- PostgreSQL `tsvector` full-text search on description + comments
+- Advanced filter builder (AND/OR logic tree, bracket groups)
+- Saved search alerts (requires Celery beat)
+- `SavedView.is_workspace_scoped` + `alert_enabled` fields
 
 ---
 
@@ -862,14 +877,50 @@ The existing `DashboardPage` (workspace home, fixed stats + recent projects) and
 
 ---
 
+## v3.4.1 — Task Detail Panel Redesign & Priority System (Phase 3 Polish)
+> Status: COMPLETE ✅
+> **Intent:** The task detail panel is where users spend most of their time. It should feel like Jira's best feature, not an afterthought.
+
+### TaskDetailPanel — Jira-style modal
+- Converted from a right-side flex sibling (`w-[500px]`) to a **full-screen modal** (`fixed inset-0 z-50`) with a translucent backdrop; Escape key closes it
+- **Two-column layout** (max-w-6xl, rounded-xl):
+  - **Left column** — title (inline editable), description (VoltEditor), child tasks, checklist, attachments, dependencies, time log, Comments / Activity tabs
+  - **Right column** — animated Dropdown for status / priority / type / assignee + detail rows for start date, due date, story points, est. hours, labels, custom fields
+- **Comments / Activity tabs**: segmented control at the bottom of the left column; Comments shows the `MentionTextarea` thread, Activity shows the immutable audit log
+- **Animated Dropdown component** (`src/components/ui/Dropdown.jsx`): replaces all native `<select>` elements in the panel; slide-down open animation (200ms), keyboard nav (↑↓ + Enter), rendered via Portal to avoid clipping; used for Status, Priority, Type, Assignee
+- Icons shown alongside labels in all dropdowns for at-a-glance scanning
+
+### Priority system centralisation (`src/lib/constants.js`)
+- **Single source of truth** for all priority/status/type UI across the app — eliminates 14+ duplicate local definitions
+- `PRIORITIES` array: `value, label, order, icon, textCls, dotCls, hex, filterActiveCls, modalBtnCls` per priority
+  - `urgent` → `ChevronsUp` (red), `high` → `ChevronUp` (orange), `medium` → `Minus` (yellow), `low` → `ArrowDown` (blue), `no_priority` → `Minus` (muted)
+- `TASK_TYPES` array: `value, label, icon, color, bg` for task / epic / bug / feature / story / improvement / question
+- `SPRINT_STATUSES` object: `planning / active / completed` with badge classes
+- Helpers: `getPriority(value)`, `getTaskType(value)`, `getSprintStatus(value)`, `PRIORITY_ORDER` map
+- All consumers (`ListView`, `KanbanPage`, `CalendarView`, `GanttView`, `RoadmapPage`, `MyWorkPage`, `TaskDependenciesSection`, `SprintPanel`) updated to import from this file
+
+### Priority icons in all views
+- **ListView (Table View)**: priority cells now show icon + label (e.g. `↑ High`) coloured with `textCls` — replaces coloured dot
+- **TaskDependenciesSection**: task chips in the Blocked by / Blocking sections now show the priority icon instead of a coloured dot; AddDependencyPicker search results likewise show icons
+- **CalendarView**, **GanttView**, **MyWorkPage**: `PRI_DOT` / `PRI` lookups migrated to `getPriority()` from constants
+
+### Bug fixes
+- **`MentionTextarea` double border**: `MentionTextarea` already applies `border rounded-md` on its inner `<textarea>`; removed the outer wrapper `border` div in `TaskDetailPanel` that caused a double border in the comment input area
+- **`AnalyticsTab` "Objects are not valid as React child"**: `tasks_by_priority` is an array of `{priority, count}` objects, not a plain object; fixed `AnalyticsTab` in `DashboardsPage.jsx` to map over the array correctly
+- **`MyWorkTaskSerializer` NameError**: serializer was defined before `TaskSerializer` in `serializers.py`; moved after `TaskSerializer`
+- **Calendar "No due date" shelf → right-side panel**: replaced the collapsible bottom shelf with a Jira-style 300px right-side panel with search, drag-to-reschedule support, and empty state
+
+---
+
 ## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ## PHASE 4 — COLLABORATION & COMMUNICATION (Weeks 14–17)
+## Status: COMPLETE ✅
 ## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ---
 
 ## v3.5.0 — Real-Time Collaboration v2 (Week 14)
-> Status: IN PROGRESS 🔨
+> Status: COMPLETE ✅
 > **Intent:** Multiple people working simultaneously — nobody steps on each other, everyone sees each other.
 
 ### Backend
@@ -893,7 +944,7 @@ The existing `DashboardPage` (workspace home, fixed stats + recent projects) and
 ---
 
 ## v3.6.0 — Approval Workflows (Week 14–15)
-> Status: IN PROGRESS 🔨
+> Status: COMPLETE ✅
 > **Gap filled:** Asana has approvals but they're separate task types. Jira has it in enterprise only.
 
 ### Backend
@@ -918,7 +969,8 @@ The existing `DashboardPage` (workspace home, fixed stats + recent projects) and
 ---
 
 ## v3.7.0 — Notifications Hub v2 (Week 15)
-> Status: IN PROGRESS 🔨
+> Status: COMPLETE ✅
+> **Scope note:** Email delivery (SendGrid/Resend) and Celery beat digest scheduling are infra-only tasks deferred to a deployment pass. All in-app inbox, preferences model, and WebSocket real-time delivery are fully implemented.
 > **Gap filled:** Every tool blasts you with emails. JCN sends exactly what matters, when it matters.
 
 ### Backend
@@ -952,7 +1004,7 @@ The existing `DashboardPage` (workspace home, fixed stats + recent projects) and
 ---
 
 ## v3.8.0 — OKR & Goal Tracking (Week 16)
-> Status: IN PROGRESS 🔨
+> Status: COMPLETE ✅
 > **Gap filled:** No mainstream PM tool does OKRs well alongside task execution.
 
 ### Backend
@@ -978,36 +1030,50 @@ The existing `DashboardPage` (workspace home, fixed stats + recent projects) and
 ---
 
 ## v3.9.0 — Keyboard-First Power User Mode (Week 17)
-> Status: IN PROGRESS 🔨
+> Status: COMPLETE ✅
 > **Gap filled:** Linear set the bar here. JCN matches it and then adds more.
+>
+> **Implementation notes:**
+> - `SHORTCUTS_REGISTRY.js` is the single source of truth — drives overlay, preferences modal, and the keyboard handler
+> - Global shortcuts registered via `useKeyboardShortcuts` hook in `AppLayout` (chord timeout 1.5 s)
+> - `c` shortcut fires `jcn:create-task` custom DOM event; KanbanPage listens and opens the create modal
+> - `/` fires `jcn:focus-filter`; filter bars can listen to focus themselves
+> - Vim mode (`h j k l`) and custom keybinding editor deferred to a polish pass
+> - Password change uses `dj_rest_auth` built-in endpoint (`/api/auth/password/change/`) — no custom view
+> - Password reset uses `dj_rest_auth` built-in flow (`/api/auth/password/reset/` + `/api/auth/password/reset/confirm/`)
 
-### Frontend
-- **Global keyboard shortcuts** (`useHotkeys` throughout app):
-  - `c` — create task (context-aware: in current project/sprint)
+### Frontend — Keyboard Shortcuts
+- **`SHORTCUTS_REGISTRY.js`** (`src/lib/shortcutsRegistry.js`) — grouped shortcut definitions consumed everywhere
+- **`useKeyboardShortcuts.js`** — registers global `keydown` handler; suppresses shortcuts when typing in inputs; chord state machine for `g X` sequences
+- **`ShortcutOverlay.jsx`** — `?` key full-screen two-column reference card; `<kbd>` badges; Esc to close
+- **Shortcuts implemented:**
+  - `⌘K` / `Ctrl+K` — command palette
+  - `?` — shortcut reference overlay
   - `g p` — go to Projects
-  - `g d` — go to Dashboard
+  - `g d` — go to Dashboards
   - `g m` — go to My Work
   - `g i` — go to Inbox
   - `g a` — go to Analytics
-  - `e` — edit selected task title inline
-  - `a` — assign selected task (opens member picker)
-  - `s` — change status (opens status picker)
-  - `p` — change priority (opens priority picker)
-  - `l` — add label (opens label picker)
-  - `d` — set due date (opens date picker)
-  - `t` — start/stop timer on focused task
-  - `/` — open filter builder
-  - `⌘K` — command palette (already exists)
-  - `?` — keyboard shortcut reference overlay
-  - `Esc` — close panel / deselect / cancel edit
-  - `↑ ↓` — navigate task list
-  - `Enter` — open focused task
-  - `Space` — check/uncheck task (in My Work)
-- **Shortcut reference overlay** (`?`): beautiful full-screen reference card grouped by context
-- Task list keyboard navigation: row focus ring, arrow keys to move
-- Quick-assign: `a` → type to filter members → Enter assigns
-- Quick-status: `s` → status picker navigable by arrows, 1-click close
-- "Vim mode" toggle in preferences: `h j k l` navigation, `:q` to close panel
+  - `g g` — go to Goals
+  - `c` — create task (context-aware; fires `jcn:create-task` event)
+  - `/` — focus filter bar (fires `jcn:focus-filter` event)
+  - `↑ ↓ Enter Esc` — handled per-page
+
+### Frontend — User Settings Modal
+- **`UserSettingsModal.jsx`** — global modal opened by clicking the user avatar in the sidebar
+- **Tabs:**
+  - **Me** — edit full name; read-only email; live save to `PATCH /api/users/me/`
+  - **Password** — change password via `POST /api/auth/password/change/` (dj_rest_auth); show/hide toggles; inline "Forgot password? Reset via email" section
+  - **Preferences** — Focus Mode DND (1h / 4h / 8h, persisted in localStorage); placeholder for future prefs
+  - **Appearance** — theme selector (Light / Dark / Midnight); accent colour (9 options); layout density; all saved live to `/api/users/me/`
+  - **Shortcuts** — read-only shortcut reference table (same data as the overlay); note about custom bindings coming
+- Preferences button (`SlidersHorizontal` icon) in sidebar user panel opens modal at Preferences tab
+- `?` button in sidebar user panel opens modal at Shortcuts tab
+
+### Frontend — Password Reset Flow
+- **LoginPage** — "Forgot password?" button below password field toggles to an inline reset form (same card, no navigation)
+- **`ResetPasswordConfirmPage.jsx`** — public route `/reset-password/:uid/:token`; `POST /api/auth/password/reset/confirm/`; success state with "Sign in" redirect
+- `REST_AUTH["PASSWORD_RESET_CONFIRM_URL"]` set in `settings.py` so dj_rest_auth constructs the correct frontend link in the email
 
 ---
 
@@ -1103,7 +1169,7 @@ The existing `DashboardPage` (workspace home, fixed stats + recent projects) and
 
 ---
 
-## v4.3.0 — Slack & Microsoft Teams Integration (Week 20)
+## v4.3.0 — Slack & Microsoft Teams Integration (Week 20)  --- Do it in Phase 06
 > Status: IN PROGRESS 🔨
 
 ### Backend
@@ -1124,7 +1190,7 @@ The existing `DashboardPage` (workspace home, fixed stats + recent projects) and
 
 ---
 
-## v4.4.0 — AI-Powered Features (Week 20–21)
+## v4.4.0 — AI-Powered Features (Week 20–21)  --- Do it in Phase 06
 > Status: IN PROGRESS 🔨
 > **Gap filled:** Other tools bolt on AI as gimmicks. JCN integrates AI into every real workflow moment.
 
@@ -1195,7 +1261,7 @@ The existing `DashboardPage` (workspace home, fixed stats + recent projects) and
 
 ---
 
-## v4.6.0 — Import & Migration Tools (Week 22)
+## v4.6.0 — Import & Migration Tools (Week 22) --- Do in Phase 06
 > Status: IN PROGRESS 🔨
 > **Goal:** Switching to JCN from any tool should take 10 minutes, not 10 days.
 

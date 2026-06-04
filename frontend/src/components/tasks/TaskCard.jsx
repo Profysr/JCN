@@ -1,6 +1,6 @@
 import { Draggable } from "@hello-pangea/dnd";
 import { cn } from "@/lib/utils";
-import { Calendar, MessageSquare, CheckSquare } from "lucide-react";
+import { Calendar, MessageSquare, CheckSquare, ShieldCheck } from "lucide-react";
 import { getPriority, getTaskType } from "@/lib/constants";
 import { Avatar } from "@/components/ui/avatar";
 
@@ -12,6 +12,7 @@ export default function TaskCard({
   isBulkSelected,
   onToggleSelect,
   canEdit = true,
+  viewers = [],
 }) {
   const _p = getPriority(task.priority);
   const priority = { ..._p, dot: _p.dotCls, cls: _p.textCls }; // shape compat
@@ -161,6 +162,44 @@ export default function TaskCard({
                   {task.comment_count}
                 </span>
               )}
+
+              {/* Approval badge — v3.6.0 */}
+              {(task.pending_approval_count > 0 || task.approved_approval_count > 0) && (
+                <span
+                  className={cn(
+                    "flex items-center gap-0.5 text-[11px]",
+                    task.pending_approval_count > 0
+                      ? "text-amber-600"
+                      : "text-emerald-600",
+                  )}
+                  title={task.pending_approval_count > 0 ? "Pending approval" : "Approved"}
+                >
+                  <ShieldCheck className="w-3 h-3" />
+                  {task.approved_approval_count}/{task.pending_approval_count + task.approved_approval_count}
+                </span>
+              )}
+
+              {/* Viewer avatar stack */}
+              {viewers.length > 0 && (
+                <div className="flex items-center -space-x-1 ml-auto">
+                  {viewers.slice(0, 3).map((v) => (
+                    <div key={v.user.id} title={`${v.user.full_name || v.user.email} is viewing`}>
+                      <Avatar
+                        name={v.user.display_name || v.user.full_name || v.user.email}
+                        src={v.user.avatar}
+                        size="xs"
+                        className="ring-1 ring-background"
+                      />
+                    </div>
+                  ))}
+                  {viewers.length > 3 && (
+                    <span className="text-[9px] text-muted-foreground pl-1.5">
+                      +{viewers.length - 3}
+                    </span>
+                  )}
+                </div>
+              )}
+
               {task.assignee && (
                 <Avatar
                   name={

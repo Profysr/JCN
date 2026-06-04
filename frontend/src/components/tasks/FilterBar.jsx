@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Search, X, Bookmark, BookmarkPlus, SlidersHorizontal, ChevronDown, Check } from "lucide-react";
+import { Search, X, Bookmark, BookmarkPlus, SlidersHorizontal, ChevronDown, Check, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/avatar";
 import { PRIORITIES, TASK_TYPES } from "@/lib/constants";
@@ -247,7 +247,7 @@ function AdvancedFilters({ filters, onChange, labels }) {
 }
 
 /* ── Main FilterBar ──────────────────────────────────────────────────────── */
-export default function FilterBar({ filters, onChange, members = [], labels = [], savedViews = [], onSaveView, onDeleteView, inline = false }) {
+export default function FilterBar({ filters, onChange, members = [], labels = [], savedViews = [], onSaveView, onDeleteView, inline = false, currentUserId }) {
   const [savingName, setSavingName] = useState("");
   const [showSaveInput, setShowSaveInput] = useState(false);
 
@@ -324,6 +324,22 @@ export default function FilterBar({ filters, onChange, members = [], labels = []
 
       {/* Advanced filters */}
       <AdvancedFilters filters={filters} onChange={onChange} labels={labels} />
+
+      {/* Pending my approval chip — v3.6.0 */}
+      {currentUserId && (
+        <button
+          onClick={() => onChange({ ...filters, pendingMyApproval: !filters.pendingMyApproval })}
+          className={cn(
+            "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border transition-colors",
+            filters.pendingMyApproval
+              ? "bg-amber-500/15 border-amber-500/30 text-amber-700"
+              : "border-border text-muted-foreground hover:bg-accent",
+          )}
+        >
+          <ShieldCheck className="w-3 h-3" />
+          Pending my approval
+        </button>
+      )}
 
       {/* Save view */}
       {hasFilters && onSaveView && (

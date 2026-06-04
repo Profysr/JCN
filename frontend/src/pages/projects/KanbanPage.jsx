@@ -11,6 +11,8 @@ import { useSavedViews, useCreateSavedView, useDeleteSavedView } from "@/hooks/u
 import { useSprints } from "@/hooks/useSprints";
 import { useWorkspaceSocket } from "@/hooks/useWorkspaceSocket";
 import { useProjectPermissions } from "@/hooks/useProjectPermissions";
+import { usePresence, useAnnouncePresence } from "@/hooks/usePresence";
+import { useAuthStore } from "@/store/authStore";
 import KanbanColumn from "@/components/tasks/KanbanColumn";
 import CreateTaskModal from "@/components/tasks/CreateTaskModal";
 import TaskDetailPanel from "@/components/tasks/TaskDetailPanel";
@@ -31,7 +33,7 @@ import { APP_COLORS } from "@/lib/constants";
 import { useBulkUpdateTasks } from "@/hooks/useBulkActions";
 import api from "@/lib/api";
 
-const EMPTY_FILTERS = { search: "", priorities: [], assignees: [], labels: [], types: [], due: [] };
+const EMPTY_FILTERS = { search: "", priorities: [], assignees: [], labels: [], types: [], due: [], pendingMyApproval: false };
 
 const VIEW_OPTIONS = [
   { id: "kanban",   icon: LayoutGrid,       label: "Board"    },
@@ -100,6 +102,7 @@ export default function KanbanPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
+  const { user } = useAuthStore();
   const { data: project }   = useProject(workspaceSlug, projectId);
   const { data: allTasks = [] } = useTasks(workspaceSlug, projectId);
   const { data: labels = [] }   = useLabels(workspaceSlug, projectId);
@@ -163,6 +166,28 @@ export default function KanbanPage() {
 
   useWorkspaceSocket(workspaceSlug);
 
+  // v3.9.0 — `c` shortcut creates a task in the current project
+  useEffect(() => {
+    const handler = () => setCreateModal({ open: true, statusId: null, date: null });
+    window.addEventListener("jcn:create-task", handler);
+    return () => window.removeEventListener("jcn:create-task", handler);
+  }, []);
+
+  // v3.5.0 — announce presence for this project board
+  useAnnouncePresence(workspaceSlug, "project", projectId);
+  const { data: boardPresence = [] } = usePresence(workspaceSlug, "project", projectId);
+
+  // Map task-scoped presence to individual task cards
+  const taskViewerMap = useMemo(() => {
+    const map = {};
+    boardPresence
+      .filter((p) => p.resource_type === "task")
+      .forEach((p) => {
+        (map[p.resource_id] ||= []).push(p);
+      });
+    return map;
+  }, [boardPresence]);
+
   const openTask  = (taskId) => { setSelectedTaskId(taskId); setSearchParams({ task: taskId }, { replace: true }); };
   const closeTask = () => { setSelectedTaskId(null); setSearchParams({}, { replace: true }); };
 
@@ -198,6 +223,10 @@ export default function KanbanPage() {
         if (filters.due.includes("this_week") && d >= today && d <= weekEnd) return true;
         return false;
       });
+    }
+    // v3.6.0 — pending my approval: show tasks that have a pending approval
+    if (filters.pendingMyApproval) {
+      result = result.filter(t => t.pending_approval_count > 0);
     }
     return result;
   }, [tasks, filters]);
@@ -242,6 +271,14 @@ export default function KanbanPage() {
                   <Badge variant="muted" size="sm" className="capitalize">
                     {perms.role}
                   </Badge>
+                )}
+                {boardPresence.length > 0 && (
+                  <Tooltip content={`${boardPresence.length} ${boardPresence.length === 1 ? "person" : "people"} online`}>
+                    <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 text-[11px] font-medium cursor-default">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      {boardPresence.length} online
+                    </span>
+                  </Tooltip>
                 )}
               </div>
               {project?.description && (
@@ -345,6 +382,7 @@ export default function KanbanPage() {
             onSaveView={(data) => createView.mutate(data)}
             onDeleteView={(id) => deleteView.mutate(id)}
             inline
+            currentUserId={user?.id}
           />
 
           <div className="w-px h-4 bg-border/60 flex-shrink-0" />
@@ -389,6 +427,10 @@ export default function KanbanPage() {
                     workspaceSlug={workspaceSlug}
                     projectId={projectId}
                     canEdit={perms.canEdit}
+                    columnViewers={boardPresence.filter(
+                      (p) => p.resource_type === "board" && p.resource_id === col.id
+                    )}
+                    taskViewerMap={taskViewerMap}
                   />
                 ))}
                 {/* Add column button */}
@@ -436,6 +478,10 @@ export default function KanbanPage() {
                       workspaceSlug={workspaceSlug}
                       projectId={projectId}
                       canEdit={perms.canEdit}
+                      columnViewers={boardPresence.filter(
+                        (p) => p.resource_type === "board" && p.resource_id === col.id
+                      )}
+                      taskViewerMap={taskViewerMap}
                     />
                   ))}
                 </div>

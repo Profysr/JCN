@@ -12,6 +12,9 @@ from .models import (
     ProjectMember, GuestToken,
     Board,
     Dashboard,
+    UserPresence, CommentReaction,
+    Approval, ApprovalReviewer,
+    Objective, KeyResult,
 )
 from accounts.serializers import UserSerializer
 
@@ -104,16 +107,41 @@ class SubTaskSerializer(serializers.ModelSerializer):
 
 
 class TaskCommentSerializer(serializers.ModelSerializer):
-    author = UserSerializer(read_only=True)
+    author    = UserSerializer(read_only=True)
+    reactions = serializers.SerializerMethodField()
 
     class Meta:
         model = TaskComment
-        fields = ["id", "author", "body", "created_at", "updated_at"]
-        read_only_fields = ["id", "author", "created_at", "updated_at"]
+        fields = ["id", "author", "body", "reactions", "created_at", "updated_at"]
+        read_only_fields = ["id", "author", "reactions", "created_at", "updated_at"]
+
+    def get_reactions(self, obj):
+        grouped = {}
+        for r in obj.reactions.select_related("user").all():
+            grouped.setdefault(r.emoji, []).append(
+                {"id": str(r.id), "user_id": str(r.user_id), "name": r.user.full_name or r.user.email}
+            )
+        return grouped
 
     def create(self, validated_data):
         validated_data["author"] = self.context["request"].user
         return super().create(validated_data)
+
+
+class CommentReactionSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+
+    class Meta:
+        model  = CommentReaction
+        fields = ["id", "user", "emoji"]
+
+
+class UserPresenceSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+
+    class Meta:
+        model  = UserPresence
+        fields = ["id", "user", "resource_type", "resource_id", "last_seen"]
 
 
 class TaskActivitySerializer(serializers.ModelSerializer):
@@ -143,6 +171,9 @@ class TaskSerializer(serializers.ModelSerializer):
     done_child_count   = serializers.SerializerMethodField()
     # v3.0.0 — lightweight dep IDs for Gantt dependency arrows (no extra request needed)
     blocked_by_ids     = serializers.SerializerMethodField()
+    # v3.6.0 — approval badge counts
+    pending_approval_count  = serializers.SerializerMethodField()
+    approved_approval_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Task
@@ -158,8 +189,10 @@ class TaskSerializer(serializers.ModelSerializer):
             "subtask_count", "done_subtask_count", "comment_count",
             "child_count", "done_child_count",
             "blocked_by_ids",
+            "version",
+            "pending_approval_count", "approved_approval_count",
         ]
-        read_only_fields = ["id", "created_by", "created_at", "updated_at"]
+        read_only_fields = ["id", "created_by", "created_at", "updated_at", "version"]
 
     def get_subtask_count(self, obj):      return obj.subtasks.count()
     def get_done_subtask_count(self, obj): return obj.subtasks.filter(is_done=True).count()
@@ -167,6 +200,10 @@ class TaskSerializer(serializers.ModelSerializer):
     def get_child_count(self, obj):        return obj.children.count()
     def get_done_child_count(self, obj):   return obj.children.filter(status__is_done=True).count()
     def get_blocked_by_ids(self, obj):     return [str(d.blocker_id) for d in obj.blocked_by_deps.all()]
+    def get_pending_approval_count(self, obj):
+        return obj.approvals.filter(status__in=["pending", "changes_requested"]).count()
+    def get_approved_approval_count(self, obj):
+        return obj.approvals.filter(status="approved").count()
 
     def get_parent_detail(self, obj):
         if obj.parent_id:
@@ -252,11 +289,14 @@ class TaskDetailSerializer(TaskSerializer):
     blocked_by    = serializers.SerializerMethodField()
     blocking      = serializers.SerializerMethodField()
     relations     = serializers.SerializerMethodField()
+    # v3.8.0 — key results this task contributes to
+    key_result_links = serializers.SerializerMethodField()
 
     class Meta(TaskSerializer.Meta):
         fields = TaskSerializer.Meta.fields + [
             "subtasks", "comments", "activities", "field_values",
             "attachments", "children", "ancestors", "blocked_by", "blocking", "relations",
+            "key_result_links",
         ]
 
     def get_children(self, obj):
@@ -287,6 +327,12 @@ class TaskDetailSerializer(TaskSerializer):
         for dep in obj.blocked_by_deps.filter(relation_type__in=non_block).select_related("blocker__status"):
             result.append({"id": str(dep.id), "relation_type": dep.relation_type, "task": MinimalTaskSerializer(dep.blocker).data})
         return result
+
+    def get_key_result_links(self, obj):
+        return [
+            {"id": str(kr.id), "title": kr.title, "objective_title": kr.objective.title}
+            for kr in obj.key_results.select_related("objective").all()
+        ]
 
 
 class TaskSearchSerializer(serializers.ModelSerializer):
@@ -396,10 +442,10 @@ class ProjectSerializer(serializers.ModelSerializer):
         project   = Project.objects.create(workspace=workspace, created_by=request.user, **validated_data)
         TaskStatus.objects.bulk_create([
             TaskStatus(project=project, **s) for s in [
-                {"name": "Backlog",     "color": "#94a3b8", "order": 0, "is_done": False},
+                {"name": "Backlog", "color": "#94a3b8", "order": 0, "is_done": False},
                 {"name": "In Progress", "color": "#6366f1", "order": 1, "is_done": False},
-                {"name": "In Review",   "color": "#f59e0b", "order": 2, "is_done": False},
-                {"name": "Done",        "color": "#22c55e", "order": 3, "is_done": True},
+                {"name": "In Review", "color": "#f59e0b", "order": 2, "is_done": False},
+                {"name": "Done", "color": "#22c55e", "order": 3, "is_done": True},
             ]
         ])
         # Auto-create default board (v2.2.0)
@@ -550,3 +596,125 @@ class TimeEntrySerializer(serializers.ModelSerializer):
 
     def get_is_running(self, obj):
         return obj.is_running
+
+
+# ── v3.6.0 — Approval Workflows ──────────────────────────────────────────────
+
+class ApprovalReviewerSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+    user_id = serializers.UUIDField(write_only=True)
+
+    class Meta:
+        model  = ApprovalReviewer
+        fields = ["id", "user", "user_id", "status", "comment", "reviewed_at"]
+        read_only_fields = ["id", "user", "status", "comment", "reviewed_at"]
+
+
+class ApprovalSerializer(serializers.ModelSerializer):
+    requested_by = UserSerializer(read_only=True)
+    reviewers    = ApprovalReviewerSerializer(many=True, read_only=True)
+    reviewer_ids = serializers.ListField(
+        child=serializers.UUIDField(), write_only=True, required=True
+    )
+    approved_count = serializers.SerializerMethodField()
+    total_count    = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = Approval
+        fields = [
+            "id", "status", "due_date", "note",
+            "requested_by", "reviewers", "reviewer_ids",
+            "approved_count", "total_count",
+            "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "status", "requested_by", "created_at", "updated_at"]
+
+    def get_approved_count(self, obj):
+        return obj.reviewers.filter(status=ApprovalReviewer.Status.APPROVED).count()
+
+    def get_total_count(self, obj):
+        return obj.reviewers.count()
+
+    def create(self, validated_data):
+        reviewer_ids = validated_data.pop("reviewer_ids")
+        approval = Approval.objects.create(**validated_data)
+        for uid in reviewer_ids:
+            ApprovalReviewer.objects.get_or_create(approval=approval, user_id=uid)
+        return approval
+
+
+# ── v3.8.0 — OKR & Goal Tracking ─────────────────────────────────────────────
+
+class KeyResultSerializer(serializers.ModelSerializer):
+    progress      = serializers.SerializerMethodField()
+    task_count    = serializers.SerializerMethodField()
+    done_task_count = serializers.SerializerMethodField()
+    task_ids      = serializers.ListField(child=serializers.UUIDField(), write_only=True, required=False)
+
+    class Meta:
+        model  = KeyResult
+        fields = [
+            "id", "title", "metric_type",
+            "start_value", "target_value", "current_value", "unit",
+            "progress", "task_count", "done_task_count", "task_ids",
+            "history", "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "progress", "task_count", "done_task_count", "history", "created_at", "updated_at"]
+
+    def get_progress(self, obj):        return obj.progress
+    def get_task_count(self, obj):      return obj.tasks.count()
+    def get_done_task_count(self, obj): return obj.tasks.filter(status__is_done=True).count()
+
+    def create(self, validated_data):
+        task_ids = validated_data.pop("task_ids", [])
+        kr = KeyResult.objects.create(**validated_data)
+        if task_ids:
+            kr.tasks.set(task_ids)
+        return kr
+
+    def update(self, instance, validated_data):
+        task_ids = validated_data.pop("task_ids", None)
+        instance = super().update(instance, validated_data)
+        if task_ids is not None:
+            instance.tasks.set(task_ids)
+        return instance
+
+
+class ObjectiveSerializer(serializers.ModelSerializer):
+    owner       = UserSerializer(read_only=True)
+    owner_id    = serializers.UUIDField(write_only=True, required=False, allow_null=True)
+    key_results = KeyResultSerializer(many=True, read_only=True)
+    progress    = serializers.SerializerMethodField()
+    confidence  = serializers.SerializerMethodField()
+    child_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = Objective
+        fields = [
+            "id", "title", "description", "time_period",
+            "start_date", "end_date",
+            "owner", "owner_id",
+            "project",
+            "parent",
+            "key_results", "progress", "confidence", "child_count",
+            "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "owner", "progress", "confidence", "child_count", "created_at", "updated_at"]
+
+    def get_progress(self, obj):    return obj.progress
+    def get_confidence(self, obj):  return obj.confidence
+    def get_child_count(self, obj): return obj.children.count()
+
+    def create(self, validated_data):
+        validated_data.setdefault("owner", self.context["request"].user)
+        return super().create(validated_data)
+
+
+class KeyResultLinkedTaskSerializer(serializers.ModelSerializer):
+    """Minimal task info for the 'linked tasks' list on a KR."""
+    status_name = serializers.CharField(source="status.name", read_only=True, default="")
+    is_done     = serializers.BooleanField(source="status.is_done", read_only=True, default=False)
+
+    class Meta:
+        model  = Task
+        fields = ["id", "title", "priority", "status_name", "is_done"]

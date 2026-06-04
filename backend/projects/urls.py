@@ -1,6 +1,10 @@
 from django.urls import path
 from .views import (
     ProjectListCreateView, ProjectDetailView,
+    UserPresenceView, CommentReactionToggleView,
+    ApprovalListCreateView, ApprovalReviewView,
+    ObjectiveListCreateView, ObjectiveDetailView,
+    KeyResultListCreateView, KeyResultDetailView, KeyResultLinkedTasksView,
     TaskStatusListCreateView, TaskStatusDetailView,
     TaskListCreateView, TaskDetailView, TaskMoveView,
     SubTaskListCreateView, SubTaskDetailView,
@@ -193,4 +197,26 @@ urlpatterns += [
 urlpatterns += [
     path("my-work/",                                             MyWorkView.as_view()),
     path(f"{_ws}/portfolio/",                                    PortfolioView.as_view()),
+]
+
+# v3.5.0 — Real-Time Collaboration v2
+urlpatterns += [
+    path(f"{_ws}/presence/",                                     UserPresenceView.as_view()),
+    path(f"{_tk}/comments/<uuid:comment_id>/reactions/",         CommentReactionToggleView.as_view()),
+]
+
+# v3.6.0 — Approval Workflows
+urlpatterns += [
+    path(f"{_tk}/approvals/",                                    ApprovalListCreateView.as_view()),
+    path(f"{_tk}/approvals/<uuid:approval_id>/review/",          ApprovalReviewView.as_view()),
+]
+
+# v3.8.0 — OKR & Goal Tracking
+_ob = "workspaces/<slug:workspace_slug>/objectives"
+urlpatterns += [
+    path(f"{_ob}/",                                                        ObjectiveListCreateView.as_view()),
+    path(f"{_ob}/<uuid:obj_id>/",                                          ObjectiveDetailView.as_view()),
+    path(f"{_ob}/<uuid:obj_id>/key-results/",                              KeyResultListCreateView.as_view()),
+    path(f"{_ob}/<uuid:obj_id>/key-results/<uuid:kr_id>/",                 KeyResultDetailView.as_view()),
+    path(f"{_ob}/<uuid:obj_id>/key-results/<uuid:kr_id>/tasks/",           KeyResultLinkedTasksView.as_view()),
 ]

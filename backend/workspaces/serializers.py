@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.utils.text import slugify
-from .models import Workspace, WorkspaceMember, WorkspaceInvite, Notification
+from .models import Workspace, WorkspaceMember, WorkspaceInvite, Notification, InboxItem, NotificationPreference
 from accounts.serializers import UserSerializer
 
 class WorkspaceSerializer(serializers.ModelSerializer):
@@ -78,3 +78,32 @@ class NotificationSerializer(serializers.ModelSerializer):
         model = Notification
         fields = ["id", "actor", "verb", "meta", "read", "created_at"]
         read_only_fields = ["id", "actor", "verb", "meta", "created_at"]
+
+
+# ── v3.7.0 ────────────────────────────────────────────────────────────────────
+
+class InboxItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = InboxItem
+        fields = [
+            "id", "actor_id", "actor_name", "verb", "event_type",
+            "resource_name", "project_id", "project_name",
+            "meta", "status", "snoozed_until", "created_at",
+        ]
+        read_only_fields = [
+            "id", "actor_id", "actor_name", "verb", "event_type",
+            "resource_name", "project_id", "project_name",
+            "meta", "created_at",
+        ]
+
+
+class NotificationPreferenceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = NotificationPreference
+        fields = [
+            "id", "event_type", "in_app", "email",
+            "project_id_override",
+            "quiet_hours_start", "quiet_hours_end", "digest_hour",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "updated_at"]

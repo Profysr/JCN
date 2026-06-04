@@ -7,15 +7,21 @@ import api from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
   Users, Settings, LogOut,
-  ChevronDown, Search, BarChart2, Plus, Check, Square,
+  ChevronDown, Search, BarChart2, Plus, Check, Square, BellOff, SlidersHorizontal,
 } from "lucide-react";
+import { useInboxUnreadCount } from "@/hooks/useInbox";
 import { NAV_ITEMS, workspaceUrl } from "@/lib/navLinks";
 import { useActiveTimer, useStopTimer, formatDuration } from "@/hooks/useTimeTracking";
+import { useAnnouncePresence } from "@/hooks/usePresence";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import NotificationBell from "@/components/layout/NotificationBell";
+import CommandPalette from "@/components/CommandPalette";
+import ShortcutOverlay from "@/components/ShortcutOverlay";
+import UserSettingsModal from "@/components/UserSettingsModal";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { Tooltip } from "@/components/ui/tooltip";
 
-export default function AppLayout({ onOpenPalette }) {
+export default function AppLayout() {
   const { workspaceSlug } = useParams();
   const { user, logout } = useAuthStore();
   const { setTheme, setAccent, setDensity } = useThemeStore();
@@ -50,6 +56,7 @@ export default function AppLayout({ onOpenPalette }) {
     to:    workspaceUrl(workspaceSlug, item.path),
     icon:  item.icon,
     label: item.label,
+    key:   item.key,
   }));
 
   const initials    = workspace?.name?.[0]?.toUpperCase() || "W";
@@ -57,6 +64,54 @@ export default function AppLayout({ onOpenPalette }) {
 
   const { data: activeTimer } = useActiveTimer(workspaceSlug);
   const stopTimer = useStopTimer(workspaceSlug);
+  const inboxUnread = useInboxUnreadCount(workspaceSlug);
+
+  // v3.5.0 — announce workspace-level presence so other users see us as online
+  useAnnouncePresence(workspaceSlug, "project", workspaceSlug);
+
+  // v3.9.0 — command palette + shortcut overlay + user settings modal
+  const [paletteOpen,   setPaletteOpen]   = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [settingsOpen,  setSettingsOpen]  = useState(false);
+  const [settingsTab,   setSettingsTab]   = useState("me");
+
+  useKeyboardShortcuts({
+    onOpenPalette:   () => setPaletteOpen((o) => !o),
+    onOpenShortcuts: () => setShortcutsOpen((o) => !o),
+    onCreateTask:    () => {
+      // Dispatch a custom event; KanbanPage (and other pages) can listen
+      window.dispatchEvent(new CustomEvent("jcn:create-task"));
+    },
+    onOpenFilter: () => {
+      window.dispatchEvent(new CustomEvent("jcn:focus-filter"));
+    },
+  });
+
+  // v3.7.0 — Focus Mode DND: snooze in-app notifications for a chosen duration
+  const [focusModeUntil, setFocusModeUntil] = useState(() => {
+    const stored = localStorage.getItem("jcn_focus_until");
+    return stored ? parseInt(stored, 10) : null;
+  });
+  const isFocusMode = focusModeUntil && Date.now() < focusModeUntil;
+
+  const enableFocusMode = (hours) => {
+    const until = Date.now() + hours * 3_600_000;
+    setFocusModeUntil(until);
+    localStorage.setItem("jcn_focus_until", String(until));
+  };
+  const disableFocusMode = () => {
+    setFocusModeUntil(null);
+    localStorage.removeItem("jcn_focus_until");
+  };
+
+  const [focusMenuOpen, setFocusMenuOpen] = useState(false);
+  const focusRef = useRef(null);
+  useEffect(() => {
+    if (!focusMenuOpen) return;
+    const h = (e) => { if (focusRef.current && !focusRef.current.contains(e.target)) setFocusMenuOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [focusMenuOpen]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -75,7 +130,7 @@ export default function AppLayout({ onOpenPalette }) {
         {/* Search / command palette */}
         <div className="px-3 pt-2.5 pb-2">
           <button
-            onClick={onOpenPalette}
+            onClick={() => setPaletteOpen(true)}
             className="w-full flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs text-muted-foreground bg-background border border-border/70 hover:border-border hover:text-foreground shadow-sm transition-all active:scale-[0.98]"
           >
             <Search className="w-3.5 h-3.5 flex-shrink-0" />
@@ -88,7 +143,7 @@ export default function AppLayout({ onOpenPalette }) {
 
         {/* Nav */}
         <nav className="flex-1 px-2 py-1 space-y-0.5 overflow-y-auto">
-          {navLinks.map(({ to, icon: Icon, label, end }) => (
+          {navLinks.map(({ to, icon: Icon, label, end, key }) => (
             <NavLink
               key={to}
               to={to}
@@ -103,10 +158,53 @@ export default function AppLayout({ onOpenPalette }) {
               }
             >
               <Icon className="w-4 h-4 flex-shrink-0" />
-              {label}
+              <span className="flex-1">{label}</span>
+              {/* Inbox unread badge */}
+              {label === "Inbox" && inboxUnread > 0 && !isFocusMode && (
+                <span className="min-w-[18px] h-[18px] rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center px-1">
+                  {inboxUnread > 9 ? "9+" : inboxUnread}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>
+
+        {/* v3.7.0 — Focus Mode DND toggle */}
+        <div ref={focusRef} className="mx-3 mb-1 relative">
+          {isFocusMode ? (
+            <button
+              onClick={disableFocusMode}
+              className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg bg-violet-500/10 border border-violet-500/20 text-violet-600 hover:bg-violet-500/15 transition-colors"
+            >
+              <BellOff className="w-3.5 h-3.5 flex-shrink-0" />
+              <span className="text-xs font-medium flex-1 text-left">Focus Mode on</span>
+              <span className="text-[10px] text-violet-500 opacity-80">tap to disable</span>
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={() => setFocusMenuOpen((v) => !v)}
+                className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-muted-foreground hover:bg-accent transition-colors"
+              >
+                <BellOff className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="text-xs">Focus Mode</span>
+              </button>
+              {focusMenuOpen && (
+                <div className="absolute bottom-full left-0 right-0 mb-1 z-50 bg-popover border border-border rounded-xl shadow-popover py-1">
+                  {[["1h","1 hour"], ["4h","4 hours"], ["8h","8 hours"]].map(([k, label]) => (
+                    <button
+                      key={k}
+                      onClick={() => { enableFocusMode(parseFloat(k)); setFocusMenuOpen(false); }}
+                      className="w-full text-left px-3 py-2 text-xs hover:bg-accent transition-colors"
+                    >
+                      Mute for {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
 
         {/* Active timer strip — v2.8.0 */}
         {activeTimer && (
@@ -135,9 +233,18 @@ export default function AppLayout({ onOpenPalette }) {
 
           {/* User info + actions */}
           <div className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg">
-            <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-bold flex-shrink-0">
-              {userInitial}
-            </div>
+            <Tooltip content="Account settings" side="top">
+              <button
+                onClick={() => { setSettingsTab("me"); setSettingsOpen(true); }}
+                className="relative flex-shrink-0 group"
+              >
+                <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-bold group-hover:ring-2 group-hover:ring-primary/30 transition-all">
+                  {userInitial}
+                </div>
+                {/* Online presence dot */}
+                <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-sidebar-bg" />
+              </button>
+            </Tooltip>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold truncate leading-tight text-foreground">
                 {user?.display_name}
@@ -148,6 +255,22 @@ export default function AppLayout({ onOpenPalette }) {
             </div>
             <div className="flex items-center gap-1">
               <NotificationBell />
+              <Tooltip content="Preferences" side="top">
+                <button
+                  onClick={() => { setSettingsTab("preferences"); setSettingsOpen(true); }}
+                  className="p-1.5 rounded-md text-foreground/60 hover:text-foreground hover:bg-accent transition-colors active:scale-[0.97]"
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                </button>
+              </Tooltip>
+              <Tooltip content="Keyboard shortcuts" side="top">
+                <button
+                  onClick={() => setShortcutsOpen(true)}
+                  className="p-1.5 rounded-md text-foreground/60 hover:text-foreground hover:bg-accent transition-colors active:scale-[0.97]"
+                >
+                  <kbd className="text-[10px] font-bold leading-none">?</kbd>
+                </button>
+              </Tooltip>
               <Tooltip content="Sign out" side="top">
                 <button
                   onClick={handleLogout}
@@ -165,6 +288,16 @@ export default function AppLayout({ onOpenPalette }) {
       <main className="flex-1 overflow-y-auto">
         <Outlet />
       </main>
+
+      {/* v3.9.0 — global overlays owned here */}
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      {shortcutsOpen && <ShortcutOverlay onClose={() => setShortcutsOpen(false)} />}
+      {settingsOpen  && (
+        <UserSettingsModal
+          defaultTab={settingsTab}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
     </div>
   );
 }

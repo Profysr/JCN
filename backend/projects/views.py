@@ -25,6 +25,9 @@ from .models import (
     ProjectMember, GuestToken,
     Board,
     Dashboard,
+    UserPresence, CommentReaction,
+    Approval, ApprovalReviewer,
+    Objective, KeyResult,
 )
 from .serializers import (
     ProjectSerializer, TaskStatusSerializer,
@@ -42,6 +45,9 @@ from .serializers import (
     BoardSerializer,
     DashboardSerializer,
     MyWorkTaskSerializer,
+    UserPresenceSerializer, CommentReactionSerializer,
+    ApprovalSerializer, ApprovalReviewerSerializer,
+    ObjectiveSerializer, KeyResultSerializer, KeyResultLinkedTaskSerializer,
 )
 from .permissions import has_project_permission, get_effective_role, log_audit
 
@@ -110,8 +116,16 @@ def broadcast_to_user(user_id, event_type, data):
     )
 
 
+_VERB_TO_EVENT_TYPE = {
+    Notification.Verb.TASK_ASSIGNED:      "assigned",
+    Notification.Verb.TASK_COMMENTED:     "commented",
+    Notification.Verb.TASK_MENTIONED:     "mentioned",
+    Notification.Verb.APPROVAL_REQUESTED: "approved",
+}
+
+
 def notify(recipient, actor, verb, workspace, task):
-    """Create a Notification and push it to the recipient's WS group. No-op if actor == recipient."""
+    """Create a Notification + InboxItem and push to the recipient's WS group. No-op if actor == recipient."""
     if recipient == actor:
         return
     meta = {
@@ -123,6 +137,23 @@ def notify(recipient, actor, verb, workspace, task):
     notif = Notification.objects.create(
         recipient=recipient, actor=actor, verb=verb, workspace=workspace, meta=meta
     )
+
+    # v3.7.0 — create persistent InboxItem
+    from workspaces.models import InboxItem
+    InboxItem.objects.create(
+        user=recipient,
+        workspace=workspace,
+        notification=notif,
+        actor_id=str(actor.id),
+        actor_name=actor.full_name or actor.email,
+        verb=verb,
+        event_type=_VERB_TO_EVENT_TYPE.get(verb, "assigned"),
+        resource_name=task.title,
+        project_id=str(task.project_id),
+        project_name=task.project.name if hasattr(task, "project") else "",
+        meta=meta,
+    )
+
     broadcast_to_user(str(recipient.id), "notification.created", {
         "id": str(notif.id),
         "actor": {"id": str(actor.id), "full_name": actor.full_name, "email": actor.email},
@@ -297,6 +328,16 @@ class TaskDetailView(APIView):
 
     def patch(self, request, workspace_slug, project_id, task_id):
         task = self.get_task(workspace_slug, project_id, task_id, request.user)
+
+        # v3.5.0 — optimistic locking: reject stale writes
+        incoming_version = request.data.get("version")
+        if incoming_version is not None and int(incoming_version) != task.version:
+            return Response({
+                "conflict": True,
+                "current_version": task.version,
+                "updated_at": task.updated_at.isoformat(),
+            }, status=status.HTTP_409_CONFLICT)
+
         old_status = task.status
         old_priority = task.priority
         old_assignee = task.assignee
@@ -304,6 +345,8 @@ class TaskDetailView(APIView):
         serializer = TaskSerializer(task, data=request.data, partial=True, context={"request": request})
         serializer.is_valid(raise_exception=True)
         serializer.save()
+        # Increment version on every successful save
+        Task.objects.filter(pk=task.pk).update(version=task.version + 1)
         task.refresh_from_db()
 
         # Log what actually changed
@@ -354,6 +397,17 @@ class TaskMoveView(APIView):
 
         if status_id is not None:
             task_status = get_object_or_404(TaskStatus, id=status_id, project=project)
+            # v3.6.0 — approval gate: block move to done-type columns if approvals are pending
+            if task_status.is_done:
+                pending_approvals = task.approvals.filter(
+                    status__in=[Approval.Status.PENDING, Approval.Status.CHANGES_REQUESTED]
+                )
+                if pending_approvals.exists():
+                    return Response(
+                        {"approval_required": True,
+                         "detail": "This task has pending approvals. Resolve them before marking it done."},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
             task.status = task_status
         if order is not None:
             task.order = order
@@ -2121,4 +2175,379 @@ class PortfolioView(APIView):
 
         return Response(data)
 
+
+# ── v3.5.0 — Real-Time Collaboration v2 ──────────────────────────────────────
+
+class UserPresenceView(APIView):
+    """
+    POST   /workspaces/:slug/presence/  — join/heartbeat a resource
+    DELETE /workspaces/:slug/presence/  — leave
+    GET    /workspaces/:slug/presence/?resource_type=X&resource_id=Y — active viewers
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _get_workspace(self, slug, user):
+        return get_workspace_for_user(slug, user)
+
+    def get(self, request, workspace_slug):
+        workspace = self._get_workspace(workspace_slug, request.user)
+        resource_type = request.query_params.get("resource_type")
+        resource_id   = request.query_params.get("resource_id")
+        cutoff = timezone.now() - datetime.timedelta(seconds=90)
+        qs = workspace.presences.filter(last_seen__gte=cutoff).select_related("user")
+        if resource_type:
+            qs = qs.filter(resource_type=resource_type)
+        if resource_id:
+            qs = qs.filter(resource_id=resource_id)
+        return Response(UserPresenceSerializer(qs, many=True).data)
+
+    def post(self, request, workspace_slug):
+        workspace     = self._get_workspace(workspace_slug, request.user)
+        resource_type = request.data.get("resource_type", UserPresence.ResourceType.PROJECT)
+        resource_id   = str(request.data.get("resource_id", ""))
+        if not resource_id:
+            return Response({"detail": "resource_id required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        presence, _ = UserPresence.objects.update_or_create(
+            user=request.user, workspace=workspace,
+            resource_type=resource_type, resource_id=resource_id,
+            defaults={},
+        )
+        UserPresence.objects.filter(pk=presence.pk).update(last_seen=timezone.now())
+        presence.refresh_from_db()
+
+        data = UserPresenceSerializer(presence).data
+        broadcast(workspace_slug, "presence.updated", {
+            "resource_type": resource_type,
+            "resource_id": resource_id,
+            "user": data["user"],
+            "last_seen": data["last_seen"],
+            "action": "join",
+        })
+        return Response(data)
+
+    def delete(self, request, workspace_slug):
+        workspace     = self._get_workspace(workspace_slug, request.user)
+        resource_type = request.data.get("resource_type")
+        resource_id   = str(request.data.get("resource_id", ""))
+
+        qs = UserPresence.objects.filter(user=request.user, workspace=workspace)
+        if resource_type and resource_id:
+            qs = qs.filter(resource_type=resource_type, resource_id=resource_id)
+        qs.delete()
+
+        if resource_type and resource_id:
+            from accounts.serializers import UserSerializer as AccUserSerializer
+            broadcast(workspace_slug, "presence.updated", {
+                "resource_type": resource_type,
+                "resource_id": resource_id,
+                "user": AccUserSerializer(request.user).data,
+                "action": "leave",
+            })
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class CommentReactionToggleView(APIView):
+    """
+    POST /tasks/:id/comments/:comment_id/reactions/
+    Body: { "emoji": "👍" }
+    Toggles the reaction — creates if absent, deletes if present.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _get_comment(self, workspace_slug, project_id, task_id, comment_id, user):
+        workspace = get_workspace_for_user(workspace_slug, user)
+        project   = get_object_or_404(Project, id=project_id, workspace=workspace)
+        task      = get_object_or_404(Task, id=task_id, project=project)
+        return get_object_or_404(TaskComment, id=comment_id, task=task)
+
+    def post(self, request, workspace_slug, project_id, task_id, comment_id):
+        comment = self._get_comment(workspace_slug, project_id, task_id, comment_id, request.user)
+        emoji   = request.data.get("emoji", "").strip()
+        if not emoji:
+            return Response({"detail": "emoji required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        existing = CommentReaction.objects.filter(comment=comment, user=request.user, emoji=emoji).first()
+        if existing:
+            existing.delete()
+            action = "removed"
+        else:
+            CommentReaction.objects.create(comment=comment, user=request.user, emoji=emoji)
+            action = "added"
+
+        grouped = {}
+        for r in comment.reactions.select_related("user").all():
+            grouped.setdefault(r.emoji, []).append({
+                "id": str(r.id),
+                "user_id": str(r.user_id),
+                "name": r.user.full_name or r.user.email,
+            })
+
+        broadcast(workspace_slug, "reaction.updated", {
+            "comment_id": str(comment.id),
+            "task_id":    str(task_id),
+            "project_id": str(project_id),
+            "reactions":  grouped,
+            "action":     action,
+            "emoji":      emoji,
+        })
+        return Response({"reactions": grouped, "action": action})
+
+
+# ── v3.6.0 — Approval Workflows ──────────────────────────────────────────────
+
+class ApprovalListCreateView(APIView):
+    """
+    GET  /tasks/:id/approvals/  — list all approvals for a task
+    POST /tasks/:id/approvals/  — request a new approval
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _get_task(self, workspace_slug, project_id, task_id, user):
+        workspace = get_workspace_for_user(workspace_slug, user)
+        project   = get_object_or_404(Project, id=project_id, workspace=workspace)
+        return get_object_or_404(Task, id=task_id, project=project)
+
+    def get(self, request, workspace_slug, project_id, task_id):
+        task = self._get_task(workspace_slug, project_id, task_id, request.user)
+        approvals = task.approvals.prefetch_related("reviewers__user").select_related("requested_by")
+        return Response(ApprovalSerializer(approvals, many=True).data)
+
+    def post(self, request, workspace_slug, project_id, task_id):
+        task = self._get_task(workspace_slug, project_id, task_id, request.user)
+        serializer = ApprovalSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        approval = serializer.save(task=task, requested_by=request.user)
+
+        # Notify every reviewer
+        workspace = task.project.workspace
+        for reviewer in approval.reviewers.select_related("user"):
+            notify(
+                recipient=reviewer.user,
+                actor=request.user,
+                verb=Notification.Verb.APPROVAL_REQUESTED,
+                workspace=workspace,
+                task=task,
+            )
+
+        broadcast(workspace_slug, "approval.created", {
+            "task_id":    str(task_id),
+            "project_id": str(project_id),
+            "approval":   ApprovalSerializer(approval).data,
+        })
+        return Response(ApprovalSerializer(approval).data, status=status.HTTP_201_CREATED)
+
+
+class ApprovalReviewView(APIView):
+    """
+    POST /tasks/:id/approvals/:approval_id/review/
+    Body: { "status": "approved"|"rejected"|"changes_requested", "comment": "..." }
+    Only the designated reviewer can submit their verdict.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _get_approval(self, workspace_slug, project_id, task_id, approval_id, user):
+        workspace = get_workspace_for_user(workspace_slug, user)
+        project   = get_object_or_404(Project, id=project_id, workspace=workspace)
+        task      = get_object_or_404(Task, id=task_id, project=project)
+        return get_object_or_404(
+            Approval.objects.prefetch_related("reviewers__user").select_related("requested_by"),
+            id=approval_id, task=task,
+        )
+
+    def post(self, request, workspace_slug, project_id, task_id, approval_id):
+        approval = self._get_approval(workspace_slug, project_id, task_id, approval_id, request.user)
+
+        reviewer = approval.reviewers.filter(user=request.user).first()
+        if not reviewer:
+            return Response({"detail": "You are not a reviewer on this approval."}, status=status.HTTP_403_FORBIDDEN)
+
+        new_status = request.data.get("status")
+        valid_statuses = [
+            ApprovalReviewer.Status.APPROVED,
+            ApprovalReviewer.Status.REJECTED,
+            ApprovalReviewer.Status.CHANGES_REQUESTED,
+        ]
+        if new_status not in valid_statuses:
+            return Response({"detail": f"status must be one of: {', '.join(valid_statuses)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+        reviewer.status      = new_status
+        reviewer.comment     = request.data.get("comment", "")
+        reviewer.reviewed_at = timezone.now()
+        reviewer.save(update_fields=["status", "comment", "reviewed_at"])
+
+        # Recompute overall approval status
+        old_overall = approval.status
+        approval.recompute_status()
+
+        data = ApprovalSerializer(approval).data
+        broadcast(workspace_slug, "approval.updated", {
+            "task_id":    str(task_id),
+            "project_id": str(project_id),
+            "approval":   data,
+        })
+
+        # Fire automation triggers when overall status changes
+        if approval.status != old_overall:
+            from .automation import fire_automation
+            trigger = None
+            if approval.status == Approval.Status.APPROVED:
+                trigger = "approval.approved"
+            elif approval.status == Approval.Status.REJECTED:
+                trigger = "approval.rejected"
+            if trigger:
+                fire_automation(trigger, approval.task, actor=request.user, context={"approval_id": str(approval_id)})
+
+        return Response(data)
+
+
+# ── v3.8.0 — OKR & Goal Tracking ─────────────────────────────────────────────
+
+class ObjectiveListCreateView(APIView):
+    """GET/POST /workspaces/:slug/objectives/"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _get_workspace(self, slug, user):
+        return get_workspace_for_user(slug, user)
+
+    def get(self, request, workspace_slug):
+        workspace   = self._get_workspace(workspace_slug, request.user)
+        time_period = request.query_params.get("time_period")
+        qs = Objective.objects.filter(workspace=workspace).prefetch_related(
+            "key_results__tasks", "owner"
+        )
+        if time_period and time_period != "all":
+            qs = qs.filter(time_period=time_period)
+        return Response(ObjectiveSerializer(qs, many=True, context={"request": request}).data)
+
+    def post(self, request, workspace_slug):
+        workspace  = self._get_workspace(workspace_slug, request.user)
+        serializer = ObjectiveSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        obj = serializer.save(workspace=workspace, owner=request.user)
+        return Response(ObjectiveSerializer(obj, context={"request": request}).data, status=status.HTTP_201_CREATED)
+
+
+class ObjectiveDetailView(APIView):
+    """GET/PATCH/DELETE /workspaces/:slug/objectives/:obj_id/"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _get_obj(self, workspace_slug, obj_id, user):
+        workspace = get_workspace_for_user(workspace_slug, user)
+        return get_object_or_404(
+            Objective.objects.prefetch_related("key_results__tasks").select_related("owner"),
+            id=obj_id, workspace=workspace,
+        )
+
+    def get(self, request, workspace_slug, obj_id):
+        obj = self._get_obj(workspace_slug, obj_id, request.user)
+        return Response(ObjectiveSerializer(obj, context={"request": request}).data)
+
+    def patch(self, request, workspace_slug, obj_id):
+        obj = self._get_obj(workspace_slug, obj_id, request.user)
+        serializer = ObjectiveSerializer(obj, data=request.data, partial=True, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+    def delete(self, request, workspace_slug, obj_id):
+        obj = self._get_obj(workspace_slug, obj_id, request.user)
+        obj.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class KeyResultListCreateView(APIView):
+    """GET/POST /workspaces/:slug/objectives/:obj_id/key-results/"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _get_objective(self, workspace_slug, obj_id, user):
+        workspace = get_workspace_for_user(workspace_slug, user)
+        return get_object_or_404(Objective, id=obj_id, workspace=workspace)
+
+    def get(self, request, workspace_slug, obj_id):
+        obj = self._get_objective(workspace_slug, obj_id, request.user)
+        return Response(KeyResultSerializer(
+            obj.key_results.prefetch_related("tasks"), many=True
+        ).data)
+
+    def post(self, request, workspace_slug, obj_id):
+        obj        = self._get_objective(workspace_slug, obj_id, request.user)
+        serializer = KeyResultSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        kr = serializer.save(objective=obj)
+        return Response(KeyResultSerializer(kr).data, status=status.HTTP_201_CREATED)
+
+
+class KeyResultDetailView(APIView):
+    """GET/PATCH/DELETE /workspaces/:slug/objectives/:obj_id/key-results/:kr_id/"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _get_kr(self, workspace_slug, obj_id, kr_id, user):
+        workspace = get_workspace_for_user(workspace_slug, user)
+        obj = get_object_or_404(Objective, id=obj_id, workspace=workspace)
+        return get_object_or_404(KeyResult.objects.prefetch_related("tasks"), id=kr_id, objective=obj)
+
+    def get(self, request, workspace_slug, obj_id, kr_id):
+        kr = self._get_kr(workspace_slug, obj_id, kr_id, request.user)
+        return Response(KeyResultSerializer(kr).data)
+
+    def patch(self, request, workspace_slug, obj_id, kr_id):
+        kr = self._get_kr(workspace_slug, obj_id, kr_id, request.user)
+        new_value = request.data.get("current_value")
+        if new_value is not None and str(new_value) != str(kr.current_value):
+            kr.record_checkin(new_value)
+            kr.refresh_from_db()
+            other_data = {k: v for k, v in request.data.items() if k != "current_value"}
+            if other_data:
+                serializer = KeyResultSerializer(kr, data=other_data, partial=True)
+                serializer.is_valid(raise_exception=True)
+                kr = serializer.save()
+        else:
+            serializer = KeyResultSerializer(kr, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            kr = serializer.save()
+        return Response(KeyResultSerializer(kr).data)
+
+    def delete(self, request, workspace_slug, obj_id, kr_id):
+        kr = self._get_kr(workspace_slug, obj_id, kr_id, request.user)
+        kr.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class KeyResultLinkedTasksView(APIView):
+    """Manage tasks linked to a Key Result.
+    GET    — list linked tasks
+    PUT    — replace full task set { task_ids: [...] }
+    POST   — link one task { task_id: "..." }
+    DELETE — unlink one task { task_id: "..." }
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _get_kr(self, workspace_slug, obj_id, kr_id, user):
+        workspace = get_workspace_for_user(workspace_slug, user)
+        obj = get_object_or_404(Objective, id=obj_id, workspace=workspace)
+        return get_object_or_404(KeyResult.objects.prefetch_related("tasks__status"), id=kr_id, objective=obj)
+
+    def get(self, request, workspace_slug, obj_id, kr_id):
+        kr = self._get_kr(workspace_slug, obj_id, kr_id, request.user)
+        return Response(KeyResultLinkedTaskSerializer(kr.tasks.all(), many=True).data)
+
+    def put(self, request, workspace_slug, obj_id, kr_id):
+        kr = self._get_kr(workspace_slug, obj_id, kr_id, request.user)
+        kr.tasks.set(request.data.get("task_ids", []))
+        return Response(KeyResultSerializer(kr).data)
+
+    def post(self, request, workspace_slug, obj_id, kr_id):
+        kr      = self._get_kr(workspace_slug, obj_id, kr_id, request.user)
+        task_id = request.data.get("task_id")
+        if task_id:
+            kr.tasks.add(task_id)
+        return Response(KeyResultSerializer(kr).data)
+
+    def delete(self, request, workspace_slug, obj_id, kr_id):
+        kr      = self._get_kr(workspace_slug, obj_id, kr_id, request.user)
+        task_id = request.data.get("task_id")
+        if task_id:
+            kr.tasks.remove(task_id)
+        return Response(KeyResultSerializer(kr).data)
 

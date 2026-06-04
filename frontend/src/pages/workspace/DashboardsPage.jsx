@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { Plus, X, Lock, LayoutDashboard, BarChart2, Settings2, Trash2 } from "lucide-react";
 import { useDashboards, useCreateDashboard, useUpdateDashboard, useDeleteDashboard } from "@/hooks/useDashboards";
+import { useObjectives, CONFIDENCE_CONFIG } from "@/hooks/useGoals";
 import { useAnalytics } from "@/hooks/useAnalytics";
 import { useProjects } from "@/hooks/useProjects";
 import { useQuery } from "@tanstack/react-query";
@@ -185,9 +186,62 @@ const WIDGET_TYPES = [
   { id: "task_list",     label: "Task List",    icon: "✅", desc: "Filtered list of tasks"          },
   { id: "activity_feed", label: "Activity Feed",icon: "🔔", desc: "Recent task changes"             },
   { id: "text",          label: "Text Block",   icon: "📝", desc: "Markdown heading or notes"       },
+  { id: "okr_progress",  label: "OKR Progress", icon: "🎯", desc: "Goal & key result status"        },
 ];
 
-function WidgetCard({ widget, onRemove, canEdit }) {
+function OKRWidget({ workspaceSlug }) {
+  const navigate = useNavigate();
+  const { data: objectives = [] } = useObjectives(workspaceSlug);
+  const top = objectives.slice(0, 3);
+
+  if (top.length === 0) {
+    return (
+      <button
+        onClick={() => navigate(`/w/${workspaceSlug}/goals`)}
+        className="w-full text-xs text-muted-foreground hover:text-foreground text-center py-4 transition-colors"
+      >
+        No goals yet — create your first objective →
+      </button>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {top.map((obj) => {
+        const cfg = CONFIDENCE_CONFIG[obj.confidence] || CONFIDENCE_CONFIG.on_track;
+        return (
+          <div key={obj.id}>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-medium truncate">{obj.title}</span>
+              <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ml-2", cfg.bg, cfg.color)}>
+                {obj.progress}%
+              </span>
+            </div>
+            <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all"
+                style={{ width: `${obj.progress}%`, backgroundColor: obj.confidence === "on_track" ? "#22c55e" : obj.confidence === "at_risk" ? "#f59e0b" : "#ef4444" }}
+              />
+            </div>
+          </div>
+        );
+      })}
+      {objectives.length > 3 && (
+        <button
+          onClick={() => navigate(`/w/${workspaceSlug}/goals`)}
+          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          +{objectives.length - 3} more goals →
+        </button>
+      )}
+    </div>
+  );
+}
+
+function WidgetCard({ widget, onRemove, canEdit, workspaceSlug }) {
+  const { workspaceSlug: wsSlug } = useParams();
+  const slug = workspaceSlug || wsSlug;
+
   return (
     <div className="bg-card border border-border rounded-xl p-4 shadow-card group relative">
       {canEdit && (
@@ -199,12 +253,13 @@ function WidgetCard({ widget, onRemove, canEdit }) {
         </button>
       )}
       <p className="text-xs font-semibold text-muted-foreground mb-1">{widget.type.replace(/_/g, " ").toUpperCase()}</p>
-      <p className="font-semibold text-sm">{widget.title || "Untitled widget"}</p>
-      <div className="mt-3 text-xs text-muted-foreground">
+      <p className="font-semibold text-sm mb-3">{widget.title || "Untitled widget"}</p>
+      <div className="text-xs text-muted-foreground">
         {widget.type === "kpi"           && <p className="text-3xl font-bold text-foreground">{widget.config?.value ?? "—"}</p>}
         {widget.type === "task_list"     && <p>Showing filtered task list</p>}
         {widget.type === "activity_feed" && <p>Recent activity will appear here</p>}
         {widget.type === "text"          && <p className="whitespace-pre-wrap">{widget.config?.content || "Add some text…"}</p>}
+        {widget.type === "okr_progress"  && <OKRWidget workspaceSlug={slug} />}
       </div>
     </div>
   );

@@ -22,6 +22,9 @@ import {
   Timer,
   Square,
   Clock,
+  ShieldCheck,
+  XCircle,
+  RotateCcw,
 } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -65,6 +68,9 @@ import {
   useActiveTimer,
   formatDuration,
 } from "@/hooks/useTimeTracking";
+import { useAnnouncePresence, usePresence } from "@/hooks/usePresence";
+import { useToggleReaction } from "@/hooks/useCommentReactions";
+import { useApprovals, useRequestApproval, useSubmitReview } from "@/hooks/useApprovals";
 
 // Local alias so existing code below keeps working without changes
 const LABEL_COLORS = LABEL_COLOR_PALETTE;
@@ -128,6 +134,24 @@ export default function TaskDetailPanel({
     0,
   );
 
+  // v3.6.0 — approvals
+  const { data: approvals = [] } = useApprovals(workspaceSlug, projectId, taskId);
+  const requestApproval = useRequestApproval(workspaceSlug, projectId, taskId);
+  const [approvalModal, setApprovalModal] = useState(false);
+
+  // v3.5.0 — presence + conflict
+  useAnnouncePresence(workspaceSlug, "task", taskId);
+  const { data: taskViewers = [] } = usePresence(workspaceSlug, "task", taskId);
+  const otherViewers = taskViewers.filter((v) => v.user?.id !== user?.id);
+  const toggleReaction = useToggleReaction(workspaceSlug, projectId, taskId);
+
+  const [conflict, setConflict] = useState(null); // { current_version, updated_at }
+  const [typingUsers, setTypingUsers] = useState([]); // [{id, name}]
+  const typingTimers = useRef({});
+  const [emojiPickerFor, setEmojiPickerFor] = useState(null); // commentId | null
+
+  const QUICK_EMOJIS = ["👍", "❤️", "😄", "🎉", "🚀", "👀"];
+
   const [commentBody, setCommentBody] = useState("");
   const [newSubtask, setNewSubtask] = useState("");
   const [newChildTitle, setNewChildTitle] = useState("");
@@ -143,6 +167,31 @@ export default function TaskDetailPanel({
   useEffect(() => {
     if (editingTitle && titleRef.current) titleRef.current.focus();
   }, [editingTitle]);
+
+  // Listen for typing events from other users on this task
+  useEffect(() => {
+    const handler = (e) => {
+      const { task_id, user_id, user_name, is_typing } = e.detail;
+      if (task_id !== taskId || user_id === user?.id) return;
+      setTypingUsers((prev) => {
+        if (is_typing) {
+          return prev.some((u) => u.id === user_id)
+            ? prev
+            : [...prev, { id: user_id, name: user_name }];
+        }
+        return prev.filter((u) => u.id !== user_id);
+      });
+      // Auto-clear after 4s in case "stop" event is missed
+      if (is_typing) {
+        clearTimeout(typingTimers.current[user_id]);
+        typingTimers.current[user_id] = setTimeout(() => {
+          setTypingUsers((prev) => prev.filter((u) => u.id !== user_id));
+        }, 4000);
+      }
+    };
+    window.addEventListener("jcn:typing", handler);
+    return () => window.removeEventListener("jcn:typing", handler);
+  }, [taskId, user?.id]);
 
   // Close on Escape
   useEffect(() => {
@@ -176,7 +225,15 @@ export default function TaskDetailPanel({
 
   const handleTitleSave = () => {
     if (titleDraft.trim() && titleDraft !== task.title)
-      update.mutate({ title: titleDraft.trim() });
+      update.mutate(
+        { title: titleDraft.trim(), version: task.version },
+        {
+          onError: (err) => {
+            if (err?.response?.status === 409)
+              setConflict(err.response.data);
+          },
+        },
+      );
     setEditingTitle(false);
   };
 
@@ -265,6 +322,26 @@ export default function TaskDetailPanel({
               </Tooltip>
             )}
 
+            {/* v3.6.0 — request approval */}
+            {canEdit && (
+              <Tooltip content="Request approval">
+                <button
+                  onClick={() => setApprovalModal(true)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors active:scale-[0.97]",
+                    approvals.some((a) => a.status === "pending")
+                      ? "bg-amber-500/15 text-amber-600 hover:bg-amber-500/25"
+                      : "bg-accent/60 text-foreground/70 hover:text-foreground hover:bg-accent",
+                  )}
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  {approvals.length > 0
+                    ? `${approvals.filter((a) => a.status === "approved").length}/${approvals.length} approved`
+                    : "Request approval"}
+                </button>
+              </Tooltip>
+            )}
+
             {/* Timer button */}
             <Tooltip
               content={isTimerRunningOnThisTask ? "Stop timer" : "Start timer"}
@@ -317,6 +394,51 @@ export default function TaskDetailPanel({
             </Tooltip>
           </div>
         </div>
+
+        {/* v3.5.0 — editing banner: show other active viewers */}
+        {otherViewers.length > 0 && (
+          <div className="flex items-center gap-2 px-5 py-1.5 bg-blue-500/8 border-b border-blue-500/20 flex-shrink-0">
+            <div className="flex -space-x-1">
+              {otherViewers.slice(0, 3).map((v) => (
+                <Avatar
+                  key={v.user.id}
+                  name={v.user.display_name || v.user.full_name || v.user.email}
+                  src={v.user.avatar}
+                  size="xs"
+                  className="ring-1 ring-background"
+                />
+              ))}
+            </div>
+            <span className="text-xs text-blue-600">
+              {otherViewers.length === 1
+                ? `${otherViewers[0].user.full_name || otherViewers[0].user.email} is viewing this task`
+                : `${otherViewers.length} people are viewing this task`}
+            </span>
+          </div>
+        )}
+
+        {/* v3.5.0 — conflict banner */}
+        {conflict && (
+          <div className="flex items-center justify-between gap-3 px-5 py-2 bg-amber-500/10 border-b border-amber-500/25 flex-shrink-0">
+            <span className="text-xs text-amber-700 font-medium">
+              This task was saved {formatDistanceToNow(new Date(conflict.updated_at))} ago. Your version may differ.
+            </span>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setConflict(null)}
+                className="text-xs px-2.5 py-1 rounded-md bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 font-medium transition-colors"
+              >
+                Dismiss
+              </button>
+              <button
+                onClick={() => { setConflict(null); window.location.reload(); }}
+                className="text-xs px-2.5 py-1 rounded-md bg-amber-500 text-white hover:bg-amber-600 font-medium transition-colors"
+              >
+                Reload latest
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ── Two-column body ── */}
         <div className="flex-1 flex overflow-hidden min-h-0">
@@ -551,6 +673,37 @@ export default function TaskDetailPanel({
             />
 
 
+            {/* ── v3.6.0 Approval section ── */}
+            {approvals.length > 0 && (
+              <div>
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                  Approvals
+                </p>
+                <div className="space-y-3">
+                  {approvals.map((approval) => (
+                    <ApprovalCard
+                      key={approval.id}
+                      approval={approval}
+                      currentUserId={user?.id}
+                      workspaceSlug={workspaceSlug}
+                      projectId={projectId}
+                      taskId={taskId}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── Request approval modal ── */}
+            {approvalModal && (
+              <RequestApprovalModal
+                workspaceSlug={workspaceSlug}
+                requestApproval={requestApproval}
+                onClose={() => setApprovalModal(false)}
+                members={members}
+              />
+            )}
+
             {/* ── Comments + Activity tabs + Time Log ── */}
             <div>
               {/* Tab bar */}
@@ -610,7 +763,7 @@ export default function TaskDetailPanel({
                   {/* Comment input at top (like Jira) */}
                   <form
                     onSubmit={handleCommentSubmit}
-                    className="flex gap-3 items-start mb-5"
+                    className="flex gap-3 items-start mb-1"
                   >
                     <Avatar
                       name={user?.display_name || user?.email || "?"}
@@ -620,7 +773,16 @@ export default function TaskDetailPanel({
                     <div className="flex-1 border border-border rounded-lg overflow-hidden focus-within:ring-1 focus-within:ring-primary focus-within:border-primary transition-all">
                       <MentionTextarea
                         value={commentBody}
-                        onChange={setCommentBody}
+                        onChange={(val) => {
+                          setCommentBody(val);
+                          // Broadcast typing to other users (fire-and-forget)
+                          import("@/lib/api").then(({ default: api }) => {
+                            api.post(`/api/workspaces/${workspaceSlug}/presence/`, {
+                              resource_type: "task",
+                              resource_id: taskId,
+                            }).catch(() => {});
+                          });
+                        }}
                         onSubmit={handleCommentSubmit}
                         members={members}
                       />
@@ -637,6 +799,19 @@ export default function TaskDetailPanel({
                       )}
                     </div>
                   </form>
+
+                  {/* Typing indicators */}
+                  {typingUsers.length > 0 && (
+                    <p className="text-xs text-muted-foreground mb-4 pl-10 flex items-center gap-1">
+                      <span className="inline-flex gap-0.5">
+                        <span className="w-1 h-1 rounded-full bg-muted-foreground animate-bounce [animation-delay:0ms]" />
+                        <span className="w-1 h-1 rounded-full bg-muted-foreground animate-bounce [animation-delay:150ms]" />
+                        <span className="w-1 h-1 rounded-full bg-muted-foreground animate-bounce [animation-delay:300ms]" />
+                      </span>
+                      {typingUsers.map((u) => u.name).join(", ")}{" "}
+                      {typingUsers.length === 1 ? "is" : "are"} typing…
+                    </p>
+                  )}
 
                   {/* Comment list */}
                   {task.comments?.length === 0 ? (
@@ -670,6 +845,55 @@ export default function TaskDetailPanel({
                             </div>
                             <div className="bg-muted/40 rounded-lg px-3 py-2">
                               <p className="text-sm break-words">{c.body}</p>
+                            </div>
+
+                            {/* Reactions row */}
+                            <div className="flex items-center flex-wrap gap-1 mt-1.5 relative">
+                              {Object.entries(c.reactions || {}).map(([emoji, users]) => (
+                                <button
+                                  key={emoji}
+                                  onClick={() => toggleReaction.mutate({ commentId: c.id, emoji })}
+                                  className={cn(
+                                    "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border transition-colors",
+                                    users.some((u) => u.user_id === user?.id)
+                                      ? "bg-primary/10 border-primary/30 text-primary"
+                                      : "bg-muted/60 border-border hover:bg-muted",
+                                  )}
+                                  title={users.map((u) => u.name).join(", ")}
+                                >
+                                  {emoji} <span>{users.length}</span>
+                                </button>
+                              ))}
+
+                              {/* Add reaction button */}
+                              <div className="relative">
+                                <button
+                                  onClick={() => setEmojiPickerFor(emojiPickerFor === c.id ? null : c.id)}
+                                  className="opacity-0 group-hover:opacity-100 inline-flex items-center justify-center w-6 h-6 rounded-full text-xs text-muted-foreground hover:bg-muted border border-dashed border-border transition-all"
+                                  title="Add reaction"
+                                >
+                                  +
+                                </button>
+                                {emojiPickerFor === c.id && (
+                                  <>
+                                    <div className="fixed inset-0 z-40" onClick={() => setEmojiPickerFor(null)} />
+                                    <div className="absolute bottom-full left-0 mb-1 z-50 flex gap-1 bg-popover border border-border rounded-xl shadow-popover px-2 py-1.5">
+                                      {QUICK_EMOJIS.map((e) => (
+                                        <button
+                                          key={e}
+                                          onClick={() => {
+                                            toggleReaction.mutate({ commentId: c.id, emoji: e });
+                                            setEmojiPickerFor(null);
+                                          }}
+                                          className="text-lg hover:scale-125 transition-transform"
+                                        >
+                                          {e}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </>
+                                )}
+                              </div>
                             </div>
                           </div>
                           {c.author?.email === user?.email && (
@@ -1165,6 +1389,27 @@ export default function TaskDetailPanel({
               </div>
             </div>
 
+            {/* v3.8.0 — Contributes to key results */}
+            {task.key_result_links?.length > 0 && (
+              <div className="pt-1">
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+                  Contributes to
+                </p>
+                <div className="flex flex-col gap-1">
+                  {task.key_result_links.map((kr) => (
+                    <span
+                      key={kr.id}
+                      className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-primary/8 text-primary text-xs font-medium"
+                      title={kr.objective_title}
+                    >
+                      <span className="text-[10px]">🎯</span>
+                      <span className="truncate">{kr.title}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Custom Fields */}
             {projectFields.length > 0 && (
               <div className="pt-1">
@@ -1459,6 +1704,260 @@ function MetaField({ label, icon, children }) {
       <div className="flex items-center gap-1.5">
         {icon}
         {children}
+      </div>
+    </div>
+  );
+}
+
+// ── v3.6.0 — Approval helpers ─────────────────────────────────────────────────
+
+const REVIEWER_STATUS_CONFIG = {
+  pending:           { label: "Pending",          cls: "bg-muted text-muted-foreground" },
+  approved:          { label: "Approved",          cls: "bg-emerald-500/10 text-emerald-600" },
+  rejected:          { label: "Rejected",          cls: "bg-destructive/10 text-destructive" },
+  changes_requested: { label: "Changes requested", cls: "bg-amber-500/10 text-amber-700" },
+};
+
+function ApprovalCard({ approval, currentUserId, workspaceSlug, projectId, taskId }) {
+  const [reviewComment, setReviewComment] = useState("");
+  const [showReviewForm, setShowReviewForm] = useState(false);
+  const submitReview = useSubmitReview(workspaceSlug, projectId, taskId, approval.id);
+
+  const myReviewer = approval.reviewers?.find((r) => r.user?.id === currentUserId);
+  const isMyTurn   = myReviewer && myReviewer.status === "pending";
+
+  const overallCfg = REVIEWER_STATUS_CONFIG[approval.status] || REVIEWER_STATUS_CONFIG.pending;
+
+  const handleSubmit = (verdict) => {
+    submitReview.mutate(
+      { status: verdict, comment: reviewComment },
+      { onSuccess: () => { setShowReviewForm(false); setReviewComment(""); } },
+    );
+  };
+
+  return (
+    <div className="border border-border rounded-xl p-3 space-y-3">
+      {/* Header row */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+          <span className="text-sm font-semibold">
+            Approval · {approval.approved_count}/{approval.total_count} approved
+          </span>
+        </div>
+        <span className={cn("text-[11px] font-semibold px-2 py-0.5 rounded-full", overallCfg.cls)}>
+          {overallCfg.label}
+        </span>
+      </div>
+
+      {approval.note && (
+        <p className="text-xs text-muted-foreground italic">{approval.note}</p>
+      )}
+
+      {/* Reviewer list */}
+      <div className="space-y-1.5">
+        {approval.reviewers?.map((r) => {
+          const cfg = REVIEWER_STATUS_CONFIG[r.status] || REVIEWER_STATUS_CONFIG.pending;
+          return (
+            <div key={r.id} className="flex items-center gap-2">
+              <Avatar
+                name={r.user?.display_name || r.user?.full_name || r.user?.email}
+                src={r.user?.avatar}
+                size="xs"
+              />
+              <span className="text-xs font-medium flex-1">{r.user?.full_name || r.user?.email}</span>
+              <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded-full", cfg.cls)}>
+                {cfg.label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Reviewer action buttons — only for the reviewer whose turn it is */}
+      {isMyTurn && (
+        <div>
+          {!showReviewForm ? (
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => handleSubmit("approved")}
+                disabled={submitReview.isPending}
+                className="flex-1 flex items-center justify-center gap-1.5 text-xs py-1.5 rounded-md bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 font-semibold transition-colors"
+              >
+                <Check className="w-3 h-3" /> Approve
+              </button>
+              <button
+                onClick={() => setShowReviewForm("changes")}
+                className="flex-1 flex items-center justify-center gap-1.5 text-xs py-1.5 rounded-md bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 font-semibold transition-colors"
+              >
+                <RotateCcw className="w-3 h-3" /> Request changes
+              </button>
+              <button
+                onClick={() => setShowReviewForm("reject")}
+                className="flex-1 flex items-center justify-center gap-1.5 text-xs py-1.5 rounded-md bg-destructive/10 text-destructive hover:bg-destructive/20 font-semibold transition-colors"
+              >
+                <XCircle className="w-3 h-3" /> Reject
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <textarea
+                autoFocus
+                rows={2}
+                placeholder="Add a comment (optional)…"
+                className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background resize-none focus:outline-none focus:ring-1 focus:ring-ring"
+                value={reviewComment}
+                onChange={(e) => setReviewComment(e.target.value)}
+              />
+              <div className="flex gap-1.5">
+                <button
+                  onClick={() => handleSubmit(showReviewForm === "changes" ? "changes_requested" : "rejected")}
+                  disabled={submitReview.isPending}
+                  className={cn(
+                    "flex-1 text-xs py-1.5 rounded-md font-semibold transition-colors",
+                    showReviewForm === "changes"
+                      ? "bg-amber-500 text-white hover:bg-amber-600"
+                      : "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+                  )}
+                >
+                  {submitReview.isPending ? "Submitting…" : showReviewForm === "changes" ? "Request changes" : "Reject"}
+                </button>
+                <button
+                  onClick={() => setShowReviewForm(false)}
+                  className="px-3 text-xs border rounded-md text-muted-foreground hover:bg-accent transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RequestApprovalModal({ workspaceSlug, requestApproval, onClose, members = [] }) {
+  const [reviewerIds, setReviewerIds] = useState([]);
+  const [dueDate, setDueDate]         = useState("");
+  const [note, setNote]               = useState("");
+  const [search, setSearch]           = useState("");
+
+  const filtered = members.filter((m) =>
+    (m.user?.full_name || m.user?.email || "")
+      .toLowerCase()
+      .includes(search.toLowerCase()),
+  );
+
+  const toggle = (id) =>
+    setReviewerIds((prev) =>
+      prev.includes(id) ? prev.filter((v) => v !== id) : [...prev, id],
+    );
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!reviewerIds.length) return;
+    requestApproval.mutate(
+      { reviewer_ids: reviewerIds, due_date: dueDate || null, note },
+      { onSuccess: onClose },
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-md bg-card border border-border rounded-xl shadow-2xl p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-sm flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-primary" /> Request Approval
+          </h3>
+          <button onClick={onClose} className="p-1 rounded text-muted-foreground hover:text-foreground">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-3">
+          {/* Reviewer search */}
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
+              Reviewers
+            </label>
+            <input
+              placeholder="Search members…"
+              className="w-full text-sm border border-border rounded-lg px-3 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring mb-2"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <div className="max-h-36 overflow-y-auto space-y-0.5 border border-border rounded-lg p-1">
+              {filtered.map((m) => {
+                const id = m.user?.id;
+                const selected = reviewerIds.includes(id);
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => toggle(id)}
+                    className={cn(
+                      "w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-sm transition-colors text-left",
+                      selected ? "bg-primary/10 text-primary" : "hover:bg-accent",
+                    )}
+                  >
+                    <Avatar
+                      name={m.user?.display_name || m.user?.full_name || m.user?.email}
+                      src={m.user?.avatar}
+                      size="xs"
+                    />
+                    <span className="flex-1 truncate">{m.user?.full_name || m.user?.email}</span>
+                    {selected && <Check className="w-3 h-3 flex-shrink-0" />}
+                  </button>
+                );
+              })}
+              {filtered.length === 0 && (
+                <p className="text-xs text-muted-foreground text-center py-2">No members found</p>
+              )}
+            </div>
+          </div>
+
+          {/* Due date */}
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1 block">
+              Due date (optional)
+            </label>
+            <input
+              type="date"
+              className="w-full text-sm border border-border rounded-lg px-3 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+            />
+          </div>
+
+          {/* Note */}
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1 block">
+              Note (optional)
+            </label>
+            <textarea
+              rows={2}
+              placeholder="Context for reviewers…"
+              className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background resize-none focus:outline-none focus:ring-1 focus:ring-ring"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
+          </div>
+
+          <div className="flex gap-2 pt-1">
+            <Button
+              type="submit"
+              disabled={!reviewerIds.length || requestApproval.isPending}
+              className="flex-1"
+            >
+              {requestApproval.isPending ? "Sending…" : "Send request"}
+            </Button>
+            <Button type="button" variant="outline" onClick={onClose} className="flex-1">
+              Cancel
+            </Button>
+          </div>
+        </form>
       </div>
     </div>
   );

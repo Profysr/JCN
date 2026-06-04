@@ -3,8 +3,12 @@ from rest_framework.views import APIView
 from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
-from .models import Workspace, WorkspaceMember, WorkspaceInvite, Notification, OnboardingState
-from .serializers import WorkspaceSerializer, WorkspaceMemberSerializer, WorkspaceInviteSerializer, NotificationSerializer
+from django.utils import timezone
+from .models import Workspace, WorkspaceMember, WorkspaceInvite, Notification, OnboardingState, InboxItem, NotificationPreference
+from .serializers import (
+    WorkspaceSerializer, WorkspaceMemberSerializer, WorkspaceInviteSerializer,
+    NotificationSerializer, InboxItemSerializer, NotificationPreferenceSerializer,
+)
 
 
 class WorkspaceListCreateView(APIView):
@@ -194,6 +198,130 @@ class NotificationMarkReadView(APIView):
         else:
             Notification.objects.filter(recipient=request.user, read=False).update(read=True)
         return Response({"status": "ok"})
+
+
+# ── v3.7.0 — Inbox ────────────────────────────────────────────────────────────
+
+class InboxListView(APIView):
+    """
+    GET /api/inbox/?workspace=<slug>&tab=<for_you|all|done>&event_type=<type>
+    Returns InboxItems for the current user across all (or one) workspace.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        workspace_slug = request.query_params.get("workspace")
+        tab            = request.query_params.get("tab", "for_you")
+        event_type     = request.query_params.get("event_type")
+
+        qs = InboxItem.objects.filter(user=request.user).select_related("workspace")
+
+        if workspace_slug:
+            qs = qs.filter(workspace__slug=workspace_slug)
+
+        if tab == "for_you":
+            qs = qs.filter(status__in=[InboxItem.Status.UNREAD, InboxItem.Status.READ])
+        elif tab == "done":
+            qs = qs.filter(status=InboxItem.Status.ARCHIVED)
+        elif tab == "snoozed":
+            qs = qs.filter(status=InboxItem.Status.SNOOZED)
+        else:  # "all"
+            qs = qs.exclude(status=InboxItem.Status.ARCHIVED)
+
+        # Auto-unsnooze items whose snooze has expired
+        qs.filter(status=InboxItem.Status.SNOOZED, snoozed_until__lte=timezone.now()).update(
+            status=InboxItem.Status.UNREAD, snoozed_until=None
+        )
+
+        if event_type:
+            qs = qs.filter(event_type=event_type)
+
+        return Response(InboxItemSerializer(qs[:100], many=True).data)
+
+
+class InboxItemUpdateView(APIView):
+    """PATCH /api/inbox/<id>/ — update status (read/archived/snoozed) on one item."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def patch(self, request, item_id):
+        from django.shortcuts import get_object_or_404
+        item = get_object_or_404(InboxItem, id=item_id, user=request.user)
+        serializer = InboxItemSerializer(item, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        # Also mark the linked Notification as read when inbox item is read/archived
+        if item.status in [InboxItem.Status.READ, InboxItem.Status.ARCHIVED]:
+            if item.notification_id:
+                Notification.objects.filter(id=item.notification_id).update(read=True)
+        return Response(serializer.data)
+
+
+class InboxBulkUpdateView(APIView):
+    """POST /api/inbox/bulk/ — update status on multiple items at once."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        ids    = request.data.get("ids", [])
+        action = request.data.get("action")  # "read" | "archive" | "snooze"
+        snooze_until = request.data.get("snoozed_until")
+
+        if action not in ["read", "archive", "snooze"]:
+            return Response({"detail": "action must be read, archive, or snooze."}, status=status.HTTP_400_BAD_REQUEST)
+
+        qs = InboxItem.objects.filter(user=request.user, id__in=ids)
+
+        if action == "read":
+            qs.update(status=InboxItem.Status.READ)
+            Notification.objects.filter(
+                inbox_item__in=qs, read=False
+            ).update(read=True)
+        elif action == "archive":
+            qs.update(status=InboxItem.Status.ARCHIVED)
+        elif action == "snooze":
+            if not snooze_until:
+                return Response({"detail": "snoozed_until required."}, status=status.HTTP_400_BAD_REQUEST)
+            qs.update(status=InboxItem.Status.SNOOZED, snoozed_until=snooze_until)
+
+        return Response({"updated": qs.count()})
+
+
+# ── v3.7.0 — Notification Preferences ────────────────────────────────────────
+
+class NotificationPreferenceView(APIView):
+    """
+    GET  /api/workspaces/<slug>/notification-preferences/  — list prefs for workspace
+    PUT  /api/workspaces/<slug>/notification-preferences/  — upsert prefs (accepts list)
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _get_workspace(self, slug, user):
+        return get_object_or_404(Workspace, slug=slug, members__user=user)
+
+    def get(self, request, slug):
+        workspace = self._get_workspace(slug, request.user)
+        prefs = NotificationPreference.objects.filter(user=request.user, workspace=workspace)
+        return Response(NotificationPreferenceSerializer(prefs, many=True).data)
+
+    def put(self, request, slug):
+        workspace = self._get_workspace(slug, request.user)
+        items = request.data if isinstance(request.data, list) else [request.data]
+        result = []
+        for item in items:
+            pref, _ = NotificationPreference.objects.update_or_create(
+                user=request.user,
+                workspace=workspace,
+                event_type=item.get("event_type"),
+                project_id_override=item.get("project_id_override", ""),
+                defaults={
+                    "in_app":            item.get("in_app", True),
+                    "email":             item.get("email", NotificationPreference.Frequency.INSTANT),
+                    "quiet_hours_start": item.get("quiet_hours_start"),
+                    "quiet_hours_end":   item.get("quiet_hours_end"),
+                    "digest_hour":       item.get("digest_hour", 9),
+                },
+            )
+            result.append(pref)
+        return Response(NotificationPreferenceSerializer(result, many=True).data)
 
 
 # ── v2.3.0 — Onboarding ───────────────────────────────────────────────────────

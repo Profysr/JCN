@@ -72,10 +72,15 @@ export const useMoveTask = (workspaceSlug, projectId) => {
 
       return { prev };
     },
-    onError: (_, __, ctx) => {
+    onError: (err, _, ctx) => {
       qc.setQueryData(tasksKey(workspaceSlug, projectId), ctx.prev);
-      // Roll back children caches too
       qc.invalidateQueries({ queryKey: ["children", workspaceSlug, projectId] });
+      // v3.6.0 — surface approval gate error as a toast
+      if (err?.response?.data?.approval_required) {
+        import("@/components/ui/toast").then(({ toast }) => {
+          if (toast?.error) toast.error("Resolve pending approvals before marking this task done.");
+        }).catch(() => {});
+      }
     },
     onSuccess: () => {
       // Server response has the full status_detail (name + color) — invalidate so

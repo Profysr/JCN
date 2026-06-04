@@ -84,6 +84,7 @@ class Task(models.Model):
     estimate_points = models.PositiveIntegerField(null=True, blank=True)  # v2.4.0 story points
     estimate_hours  = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)  # v2.4.0
     order = models.PositiveIntegerField(default=0)
+    version = models.PositiveIntegerField(default=1)  # v3.5.0 optimistic locking
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -654,6 +655,221 @@ class Dashboard(models.Model):
 
     def __str__(self):
         return f"{self.workspace.name} / {self.name}"
+
+
+# ── v3.8.0 — OKR & Goal Tracking ─────────────────────────────────────────────
+
+class Objective(models.Model):
+    """A goal — workspace or project-scoped, optionally nested for org rollup."""
+    class TimePeriod(models.TextChoices):
+        Q1     = "q1",     "Q1"
+        Q2     = "q2",     "Q2"
+        Q3     = "q3",     "Q3"
+        Q4     = "q4",     "Q4"
+        ANNUAL = "annual", "Annual"
+        CUSTOM = "custom", "Custom"
+
+    id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace   = models.ForeignKey("workspaces.Workspace", on_delete=models.CASCADE, related_name="objectives")
+    project     = models.ForeignKey(Project, on_delete=models.SET_NULL, null=True, blank=True, related_name="objectives")
+    parent      = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="children")
+    title       = models.CharField(max_length=500)
+    description = models.TextField(blank=True)
+    owner       = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="owned_objectives")
+    time_period = models.CharField(max_length=10, choices=TimePeriod.choices, default=TimePeriod.Q1)
+    start_date  = models.DateField(null=True, blank=True)
+    end_date    = models.DateField(null=True, blank=True)
+    created_at  = models.DateTimeField(auto_now_add=True)
+    updated_at  = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    @property
+    def progress(self):
+        """Weighted average of all key result completions (0–100)."""
+        krs = list(self.key_results.all())
+        if not krs:
+            return 0
+        return round(sum(kr.progress for kr in krs) / len(krs))
+
+    @property
+    def confidence(self):
+        """on_track / at_risk / off_track based on progress vs time elapsed."""
+        from django.utils import timezone
+        p = self.progress
+        if not (self.start_date and self.end_date):
+            return "on_track" if p >= 70 else "at_risk" if p >= 40 else "off_track"
+        today     = timezone.now().date()
+        total_days   = (self.end_date - self.start_date).days or 1
+        elapsed_days = max(0, (today - self.start_date).days)
+        expected = min(100, round(elapsed_days / total_days * 100))
+        if p >= expected * 0.9:  return "on_track"
+        if p >= expected * 0.5:  return "at_risk"
+        return "off_track"
+
+    def __str__(self):
+        return self.title
+
+
+class KeyResult(models.Model):
+    """A measurable milestone under an Objective."""
+    class MetricType(models.TextChoices):
+        PERCENTAGE = "percentage", "Percentage"
+        NUMBER     = "number",     "Number"
+        CURRENCY   = "currency",   "Currency"
+        MILESTONE  = "milestone",  "Milestone (task-based)"
+
+    id            = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    objective     = models.ForeignKey(Objective, on_delete=models.CASCADE, related_name="key_results")
+    title         = models.CharField(max_length=500)
+    metric_type   = models.CharField(max_length=20, choices=MetricType.choices, default=MetricType.PERCENTAGE)
+    start_value   = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    target_value  = models.DecimalField(max_digits=12, decimal_places=2, default=100)
+    current_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    unit          = models.CharField(max_length=30, blank=True)
+    tasks         = models.ManyToManyField(Task, blank=True, related_name="key_results")
+    # Append-only progress history: [{value, date}]
+    history       = models.JSONField(default=list)
+    created_at    = models.DateTimeField(auto_now_add=True)
+    updated_at    = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    @property
+    def progress(self):
+        """0–100 completion percentage."""
+        if self.metric_type == self.MetricType.MILESTONE:
+            total = self.tasks.count()
+            if total == 0:
+                return 0
+            done = self.tasks.filter(status__is_done=True).count()
+            return round(done / total * 100)
+        span = float(self.target_value - self.start_value)
+        if span == 0:
+            return 100 if self.current_value >= self.target_value else 0
+        return min(100, max(0, round(
+            float(self.current_value - self.start_value) / span * 100
+        )))
+
+    def record_checkin(self, value):
+        """Append a history entry and update current_value."""
+        from django.utils import timezone
+        self.current_value = value
+        entry = {"value": float(value), "date": timezone.now().date().isoformat()}
+        history = list(self.history)
+        history.append(entry)
+        self.history = history
+        self.save(update_fields=["current_value", "history", "updated_at"])
+
+    def __str__(self):
+        return f"{self.objective.title} / {self.title}"
+
+
+# ── v3.6.0 — Approval Workflows ──────────────────────────────────────────────
+
+class Approval(models.Model):
+    """An approval request on a task — has one or more reviewers."""
+    class Status(models.TextChoices):
+        PENDING           = "pending",           "Pending"
+        APPROVED          = "approved",          "Approved"
+        REJECTED          = "rejected",          "Rejected"
+        CHANGES_REQUESTED = "changes_requested", "Changes Requested"
+
+    id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    task         = models.ForeignKey(Task, on_delete=models.CASCADE, related_name="approvals")
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="requested_approvals"
+    )
+    status    = models.CharField(max_length=30, choices=Status.choices, default=Status.PENDING)
+    due_date  = models.DateField(null=True, blank=True)
+    note      = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def recompute_status(self):
+        """Aggregate reviewer verdicts → update overall status."""
+        statuses = list(self.reviewers.values_list("status", flat=True))
+        if not statuses:
+            return
+        if any(s == "rejected" for s in statuses):
+            self.status = self.Status.REJECTED
+        elif any(s == "changes_requested" for s in statuses):
+            self.status = self.Status.CHANGES_REQUESTED
+        elif all(s == "approved" for s in statuses):
+            self.status = self.Status.APPROVED
+        else:
+            self.status = self.Status.PENDING
+        self.save(update_fields=["status", "updated_at"])
+
+    def __str__(self):
+        return f"Approval for {self.task.title} ({self.status})"
+
+
+class ApprovalReviewer(models.Model):
+    """One reviewer's verdict on an Approval."""
+    class Status(models.TextChoices):
+        PENDING           = "pending",           "Pending"
+        APPROVED          = "approved",          "Approved"
+        REJECTED          = "rejected",          "Rejected"
+        CHANGES_REQUESTED = "changes_requested", "Changes Requested"
+
+    id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    approval    = models.ForeignKey(Approval, on_delete=models.CASCADE, related_name="reviewers")
+    user        = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="approval_reviews"
+    )
+    status      = models.CharField(max_length=30, choices=Status.choices, default=Status.PENDING)
+    comment     = models.TextField(blank=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = ["approval", "user"]
+        ordering = ["reviewed_at"]
+
+    def __str__(self):
+        return f"{self.user.email} → {self.approval_id} ({self.status})"
+
+
+# ── v3.5.0 — Real-Time Collaboration v2 ──────────────────────────────────────
+
+class UserPresence(models.Model):
+    """Tracks which resource a user is currently viewing (updated every 30s)."""
+    class ResourceType(models.TextChoices):
+        TASK    = "task",    "Task"
+        PROJECT = "project", "Project"
+        BOARD   = "board",   "Board"
+
+    id            = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user          = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="presences")
+    workspace     = models.ForeignKey("workspaces.Workspace", on_delete=models.CASCADE, related_name="presences")
+    resource_type = models.CharField(max_length=20, choices=ResourceType.choices)
+    resource_id   = models.CharField(max_length=100)
+    last_seen     = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ["user", "workspace", "resource_type", "resource_id"]
+
+    def __str__(self):
+        return f"{self.user.email} viewing {self.resource_type}:{self.resource_id}"
+
+
+class CommentReaction(models.Model):
+    """Emoji reaction on a task comment — max 1 of each emoji per user."""
+    id      = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    comment = models.ForeignKey(TaskComment, on_delete=models.CASCADE, related_name="reactions")
+    user    = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="comment_reactions")
+    emoji   = models.CharField(max_length=10)
+
+    class Meta:
+        unique_together = ["comment", "user", "emoji"]
+
+    def __str__(self):
+        return f"{self.user.email} reacted {self.emoji} on comment {self.comment_id}"
 
 
 class AuditEvent(models.Model):

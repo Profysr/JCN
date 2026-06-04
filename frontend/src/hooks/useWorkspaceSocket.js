@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { notificationsKey } from "@/hooks/useNotifications";
+import { presenceKey } from "@/hooks/usePresence";
 
 export function useWorkspaceSocket(workspaceSlug) {
   const qc = useQueryClient();
@@ -85,6 +86,54 @@ export function useWorkspaceSocket(workspaceSlug) {
           const exists = old.some((n) => n.id === payload.id);
           return exists ? old : [payload, ...old];
         });
+      }
+
+      // ── Inbox: invalidate on new notification ──────────────────
+      if (type === "notification.created") {
+        qc.invalidateQueries({ queryKey: ["inbox", workspaceSlug] });
+      }
+
+      // ── Approval events ────────────────────────────────────────
+      if (type === "approval.created" || type === "approval.updated") {
+        qc.invalidateQueries({
+          queryKey: ["approvals", workspaceSlug, payload.project_id, payload.task_id],
+        });
+        // Also refresh task list so approval badge updates
+        qc.invalidateQueries({ queryKey: ["tasks", workspaceSlug, payload.project_id] });
+      }
+
+      // ── Typing indicators — forwarded to a custom event for TaskDetailPanel ──
+      if (type === "typing.update") {
+        window.dispatchEvent(new CustomEvent("jcn:typing", { detail: payload }));
+      }
+
+      // ── Presence events ────────────────────────────────────────
+      if (type === "presence.updated") {
+        const { resource_type, resource_id } = payload;
+        // Invalidate so the next refetch shows the fresh list
+        qc.invalidateQueries({
+          queryKey: presenceKey(workspaceSlug, resource_type, resource_id),
+        });
+        // Also invalidate the workspace-wide "all" list
+        qc.invalidateQueries({ queryKey: ["presence", workspaceSlug, "all"] });
+      }
+
+      // ── Comment reaction events ────────────────────────────────
+      if (type === "reaction.updated") {
+        qc.setQueryData(
+          ["task-detail", workspaceSlug, payload.project_id, payload.task_id],
+          (old) => {
+            if (!old) return old;
+            return {
+              ...old,
+              comments: old.comments?.map((c) =>
+                c.id === payload.comment_id
+                  ? { ...c, reactions: payload.reactions }
+                  : c
+              ) || [],
+            };
+          }
+        );
       }
     };
 

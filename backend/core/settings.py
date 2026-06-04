@@ -177,6 +177,8 @@ REST_AUTH = {
     # Point to our custom serializers so register/login returns our User shape
     "REGISTER_SERIALIZER": "accounts.serializers.RegisterSerializer",
     "USER_DETAILS_SERIALIZER": "accounts.serializers.UserSerializer",
+    # Password reset confirm URL — frontend route that handles uid/token from the email link
+    "PASSWORD_RESET_CONFIRM_URL": "reset-password/{uid}/{token}",
 }
 
 # allauth account behaviour

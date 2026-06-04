@@ -2,14 +2,16 @@
 Automation engine — evaluates AutomationRule conditions and runs actions
 when task events fire. Called from Django signals in signals.py.
 
-Supported triggers (v2.7.0 Phase 2 scope):
+Supported triggers:
   task.created, task.status_changed, task.assigned, task.overdue
+  approval.approved, approval.rejected  (v3.6.0)
 
 Supported conditions:
   priority equals/not_equals, assignee is_set/is_not_set, status equals
 
 Supported actions:
-  change_status, set_assignee, add_label, send_notification, post_comment
+  change_status, change_priority, set_assignee, add_label,
+  send_notification, post_comment
 """
 import time
 import logging
@@ -103,12 +105,29 @@ def _run_action(task, action, actor):
         if recipient_id:
             try:
                 recipient = User.objects.get(id=recipient_id)
-                Notification.objects.create(
-                    workspace=task.project.workspace,
+                workspace = task.project.workspace
+                meta = {"task_id": str(task.id), "task_title": task.title, "message": payload.get("message", "")}
+                notif = Notification.objects.create(
+                    workspace=workspace,
                     recipient=recipient,
                     actor=actor,
                     verb=Notification.Verb.TASK_ASSIGNED,
-                    meta={"task_id": str(task.id), "task_title": task.title, "message": payload.get("message", "")},
+                    meta=meta,
+                )
+                # v3.7.0 — also create InboxItem for automation-triggered notifications
+                from workspaces.models import InboxItem
+                InboxItem.objects.create(
+                    user=recipient,
+                    workspace=workspace,
+                    notification=notif,
+                    actor_id=str(actor.id) if actor else "",
+                    actor_name=(actor.full_name or actor.email) if actor else "Automation",
+                    verb=Notification.Verb.TASK_ASSIGNED,
+                    event_type="automated",
+                    resource_name=task.title,
+                    project_id=str(task.project_id),
+                    project_name=task.project.name,
+                    meta=meta,
                 )
                 return True, "send_notification: ok"
             except User.DoesNotExist:
