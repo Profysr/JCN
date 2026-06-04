@@ -69,6 +69,8 @@ class DashboardSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "is_builtin", "created_at", "updated_at"]
 
 
+
+
 class SavedViewSerializer(serializers.ModelSerializer):
     board_id = serializers.UUIDField(allow_null=True, required=False)
 
@@ -187,6 +189,20 @@ class TaskSerializer(serializers.ModelSerializer):
         return instance
 
 
+class MyWorkTaskSerializer(TaskSerializer):
+    """Extends TaskSerializer with project + workspace info needed for navigation."""
+    project_id     = serializers.SerializerMethodField()
+    project_name   = serializers.SerializerMethodField()
+    workspace_slug = serializers.SerializerMethodField()
+
+    class Meta(TaskSerializer.Meta):
+        fields = TaskSerializer.Meta.fields + ["project_id", "project_name", "workspace_slug"]
+
+    def get_project_id(self, obj):     return str(obj.project.id)
+    def get_project_name(self, obj):   return obj.project.name
+    def get_workspace_slug(self, obj): return obj.project.workspace.slug
+
+
 class TaskAttachmentSerializer(serializers.ModelSerializer):
     uploaded_by  = UserSerializer(read_only=True)
     url          = serializers.SerializerMethodField()
@@ -278,14 +294,21 @@ class TaskSearchSerializer(serializers.ModelSerializer):
     project_id     = serializers.SerializerMethodField()
     project_name   = serializers.CharField(source="project.name", read_only=True)
     status_name    = serializers.SerializerMethodField()
+    assignee_name  = serializers.SerializerMethodField()
+    due_date       = serializers.DateField(read_only=True)
 
     class Meta:
         model = Task
-        fields = ["id", "title", "priority", "workspace_slug", "project_id", "project_name", "status_name"]
+        fields = [
+            "id", "title", "priority", "task_type",
+            "workspace_slug", "project_id", "project_name",
+            "status_name", "assignee_name", "due_date",
+        ]
 
     def get_workspace_slug(self, obj): return obj.project.workspace.slug
     def get_project_id(self, obj):     return str(obj.project.id)
     def get_status_name(self, obj):    return obj.status.name if obj.status else None
+    def get_assignee_name(self, obj):  return obj.assignee.full_name or obj.assignee.email if obj.assignee else None
 
 
 class ProjectSearchSerializer(serializers.ModelSerializer):

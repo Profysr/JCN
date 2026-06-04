@@ -1,157 +1,215 @@
-import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { useMyWork } from "@/hooks/useMyWork";
-import { useUpdateTask } from "@/hooks/useTasks";
-import { AlertCircle, ArrowUp, Minus, ArrowDown, Calendar, Check, Timer } from "lucide-react";
+import { Calendar, ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PRIORITIES, getPriority, APP_COLORS, pickColor } from "@/lib/constants";
 
-const PRI_ICON = {
-  urgent:      { icon: AlertCircle, cls: "text-red-500"    },
-  high:        { icon: ArrowUp,     cls: "text-orange-500" },
-  medium:      { icon: Minus,       cls: "text-yellow-500" },
-  low:         { icon: ArrowDown,   cls: "text-blue-400"   },
-  no_priority: { icon: Minus,       cls: "text-muted-foreground/40" },
-};
+const PRI = Object.fromEntries(PRIORITIES.map(p => [p.value, { icon: p.icon, cls: p.textCls, dot: p.dotCls }]));
 
-function sectionFor(task) {
+// Deterministic color from project name so the same project always gets the same badge colour
+// pickColor from constants replaces the local projectColor function
+
+// ── Urgency bucketing ─────────────────────────────────────────────────────────
+export function sectionFor(task) {
   if (!task.due_date) return "no_date";
-  const today   = new Date(); today.setHours(0,0,0,0);
+  const today   = new Date(); today.setHours(0, 0, 0, 0);
   const weekEnd = new Date(today); weekEnd.setDate(today.getDate() + 7);
   const d = new Date(task.due_date + "T00:00:00");
-  if (d < today)        return "overdue";
+  if (d < today)                 return "overdue";
   if (d.getTime() === today.getTime()) return "today";
-  if (d <= weekEnd)     return "this_week";
+  if (d <= weekEnd)              return "this_week";
   return "later";
 }
 
 const SECTIONS = [
-  { id: "overdue",   label: "Overdue",       labelCls: "text-red-500"    },
-  { id: "today",     label: "Due Today",     labelCls: "text-orange-500" },
-  { id: "this_week", label: "This Week",     labelCls: "text-foreground"  },
-  { id: "later",     label: "Later",         labelCls: "text-muted-foreground" },
-  { id: "no_date",   label: "No Due Date",   labelCls: "text-muted-foreground" },
+  { id: "overdue",   label: "Overdue",      headerCls: "text-red-500",           countCls: "bg-red-500/10 text-red-500"          },
+  { id: "today",     label: "Due Today",    headerCls: "text-orange-500",        countCls: "bg-orange-500/10 text-orange-500"    },
+  { id: "this_week", label: "This Week",    headerCls: "text-foreground",        countCls: "bg-muted text-muted-foreground"      },
+  { id: "later",     label: "Later",        headerCls: "text-muted-foreground",  countCls: "bg-muted text-muted-foreground"      },
+  { id: "no_date",   label: "No Due Date",  headerCls: "text-muted-foreground",  countCls: "bg-muted text-muted-foreground"      },
 ];
 
-function TaskRow({ task, onComplete, onOpen }) {
-  const [completing, setCompleting] = useState(false);
-  const p    = PRI_ICON[task.priority] || PRI_ICON.no_priority;
-  const Icon = p.icon;
+function formatDate(str) {
+  if (!str) return null;
+  const d = new Date(str + "T00:00:00");
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+// ── Task row ──────────────────────────────────────────────────────────────────
+function TaskRow({ task, sectionId, onOpen }) {
+  const p      = PRI[task.priority] || PRI.no_priority;
+  const Icon   = p.icon;
+  const color  = pickColor(task.project_name);
+  const status = task.status_detail;
+  const isOverdue = sectionId === "overdue";
 
   return (
     <div
-      className={cn(
-        "flex items-center gap-3 px-4 py-2.5 border-b border-border/50 hover:bg-accent/40 transition-colors cursor-pointer group",
-        completing && "opacity-40",
-      )}
       onClick={() => onOpen(task)}
+      className="group flex items-center gap-3 px-4 py-2.5 hover:bg-accent/50 cursor-pointer transition-colors rounded-lg"
     >
-      {/* Complete checkbox */}
-      <button
-        onClick={e => { e.stopPropagation(); setCompleting(true); onComplete(task); }}
-        className="w-4 h-4 rounded-full border border-border hover:border-primary flex items-center justify-center flex-shrink-0 transition-colors"
-        title="Mark complete"
-      >
-        {completing && <Check className="w-2.5 h-2.5 text-primary" />}
-      </button>
-
+      {/* Priority icon */}
       <Icon className={cn("w-3.5 h-3.5 flex-shrink-0", p.cls)} />
 
-      <span className="flex-1 text-sm truncate">{task.title}</span>
+      {/* Task title */}
+      <span className="flex-1 text-sm text-foreground truncate group-hover:text-primary transition-colors">
+        {task.title}
+      </span>
 
       {/* Project badge */}
-      <span className="text-[11px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded truncate max-w-[120px] flex-shrink-0">
-        {task.project_name || ""}
-      </span>
+      {task.project_name && (
+        <span
+          className="flex-shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full"
+          style={{ backgroundColor: color + "18", color }}
+        >
+          {task.project_name}
+        </span>
+      )}
+
+      {/* Status chip */}
+      {status && (
+        <span
+          className="flex-shrink-0 text-[11px] font-medium px-2 py-0.5 rounded hidden sm:inline"
+          style={{ backgroundColor: status.color + "20", color: status.color }}
+        >
+          {status.name}
+        </span>
+      )}
 
       {/* Due date */}
       {task.due_date && (
         <span className={cn(
-          "flex items-center gap-1 text-[11px] flex-shrink-0",
-          sectionFor(task) === "overdue" ? "text-red-500 font-medium" : "text-muted-foreground",
+          "flex-shrink-0 flex items-center gap-1 text-[11px] font-medium",
+          isOverdue ? "text-red-500" : "text-muted-foreground",
         )}>
           <Calendar className="w-3 h-3" />
-          {new Date(task.due_date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+          {formatDate(task.due_date)}
         </span>
       )}
     </div>
   );
 }
 
+// ── Section ───────────────────────────────────────────────────────────────────
+function Section({ id, label, headerCls, countCls, tasks, onOpen }) {
+  const [open, setOpen] = useState(true);
+
+  return (
+    <div className="mb-1">
+      {/* Section header */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-accent/40 transition-colors group"
+      >
+        {open
+          ? <ChevronDown  className="w-3.5 h-3.5 text-muted-foreground" />
+          : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />}
+        <span className={cn("text-xs font-semibold uppercase tracking-wider", headerCls)}>
+          {label}
+        </span>
+        <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-full ml-0.5", countCls)}>
+          {tasks.length}
+        </span>
+      </button>
+
+      {/* Task rows */}
+      {open && (
+        <div className="mt-0.5">
+          {tasks.map(t => (
+            <TaskRow key={t.id} task={t} sectionId={id} onOpen={onOpen} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
 export default function MyWorkPage() {
   const navigate = useNavigate();
   const { data: tasks = [], isLoading } = useMyWork();
-  const [focusMode, setFocusMode]       = useState(false);
-  const [groupByProject, setGroupByProject] = useState(false);
 
-  const grouped = SECTIONS.map(s => ({
-    ...s,
-    tasks: tasks.filter(t => sectionFor(t) === s.id),
-  })).filter(s => s.tasks.length > 0);
+  const grouped = useMemo(() =>
+    SECTIONS.map(s => ({ ...s, tasks: tasks.filter(t => sectionFor(t) === s.id) }))
+             .filter(s => s.tasks.length > 0),
+  [tasks]);
 
   const handleOpen = (task) => {
-    if (task.project_id && task.workspace_slug) {
+    if (task.workspace_slug && task.project_id) {
       navigate(`/w/${task.workspace_slug}/projects/${task.project_id}?task=${task.id}`);
     }
   };
 
   if (isLoading) {
     return (
-      <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
-        Loading your tasks…
+      <div className="flex-1 flex items-center justify-center">
+        <div className="w-5 h-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className={cn("flex-1 flex flex-col overflow-hidden", focusMode && "bg-background")}>
+    <div className="flex-1 flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="flex items-center gap-3 px-6 py-4 border-b border-border bg-card flex-shrink-0">
-        <h1 className="text-base font-semibold flex-1">My Work</h1>
-        <button
-          onClick={() => setGroupByProject(g => !g)}
-          className={cn("text-xs px-2.5 py-1 rounded border transition-colors",
-            groupByProject ? "bg-primary/10 border-primary/30 text-primary" : "border-border text-muted-foreground hover:text-foreground"
+      <div className="px-6 py-4 border-b border-border bg-card flex-shrink-0">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="font-bold text-base">My Work</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Tasks assigned to you across all projects
+            </p>
+          </div>
+          {tasks.length > 0 && (
+            <span className="text-xs font-semibold text-muted-foreground bg-muted px-2.5 py-1 rounded-full">
+              {tasks.length} task{tasks.length !== 1 ? "s" : ""}
+            </span>
           )}
-        >
-          Group by project
-        </button>
-        <button
-          onClick={() => setFocusMode(f => !f)}
-          title="Focus mode"
-          className={cn("p-1.5 rounded border transition-colors",
-            focusMode ? "bg-primary/10 border-primary/30 text-primary" : "border-border text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <Timer className="w-4 h-4" />
-        </button>
+        </div>
+
+        {/* Quick stats */}
+        {tasks.length > 0 && (
+          <div className="flex items-center gap-3 mt-3">
+            {SECTIONS.filter(s => tasks.filter(t => sectionFor(t) === s.id).length > 0).map(s => {
+              const count = tasks.filter(t => sectionFor(t) === s.id).length;
+              return (
+                <div key={s.id} className="flex items-center gap-1.5">
+                  <span className={cn("w-1.5 h-1.5 rounded-full", {
+                    overdue:   "bg-red-500",
+                    today:     "bg-orange-500",
+                    this_week: "bg-primary",
+                    later:     "bg-muted-foreground",
+                    no_date:   "bg-muted-foreground/50",
+                  }[s.id])} />
+                  <span className="text-xs text-muted-foreground">
+                    {count} {s.label.toLowerCase()}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {/* Task sections */}
-      <div className="flex-1 overflow-auto">
+      {/* Task list */}
+      <div className="flex-1 overflow-auto px-4 py-3">
         {tasks.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="text-4xl mb-3">🎉</div>
-            <p className="font-semibold">You're all caught up!</p>
-            <p className="text-sm text-muted-foreground mt-1">No tasks assigned to you right now</p>
+          <div className="flex flex-col items-center justify-center h-full text-center py-20">
+            <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center text-2xl mb-4">🎉</div>
+            <p className="font-semibold text-foreground">You're all caught up!</p>
+            <p className="text-sm text-muted-foreground mt-1">No tasks assigned to you right now.</p>
           </div>
         ) : (
-          grouped.map(section => (
-            <div key={section.id}>
-              <div className="flex items-center gap-2 px-6 py-2 bg-muted/20 border-b border-border sticky top-0">
-                <span className={cn("text-xs font-semibold uppercase tracking-wider", section.labelCls)}>
-                  {section.label}
-                </span>
-                <span className="text-xs text-muted-foreground">· {section.tasks.length}</span>
-              </div>
-              {section.tasks.map(t => (
-                <TaskRow
-                  key={t.id}
-                  task={t}
-                  onComplete={() => {/* optimistic complete handled by navigate + cache */}}
-                  onOpen={handleOpen}
-                />
-              ))}
-            </div>
+          grouped.map(s => (
+            <Section
+              key={s.id}
+              id={s.id}
+              label={s.label}
+              headerCls={s.headerCls}
+              countCls={s.countCls}
+              tasks={s.tasks}
+              onOpen={handleOpen}
+            />
           ))
         )}
       </div>

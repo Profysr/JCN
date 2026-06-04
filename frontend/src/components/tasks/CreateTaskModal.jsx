@@ -6,24 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import * as Dialog from "@radix-ui/react-dialog";
 import { X, ChevronDown, LayoutTemplate, Plus } from "lucide-react";
-import { TASK_TYPES } from "@/lib/taskTypes";
+import { PRIORITIES, TASK_TYPES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
-const PRIORITIES = [
-  { value: "no_priority", label: "None" },
-  { value: "low",         label: "Low" },
-  { value: "medium",      label: "Medium" },
-  { value: "high",        label: "High" },
-  { value: "urgent",      label: "Urgent" },
-];
-
-const PRIORITY_COLORS = {
-  no_priority: "border-input text-muted-foreground",
-  low:         "border-blue-300   text-blue-600   bg-blue-50",
-  medium:      "border-yellow-300 text-yellow-600 bg-yellow-50",
-  high:        "border-orange-300 text-orange-600 bg-orange-50",
-  urgent:      "border-red-300    text-red-600    bg-red-50",
-};
+// Map priority value → button CSS classes for the modal pill buttons
+const PRIORITY_COLORS = Object.fromEntries(PRIORITIES.map(p => [p.value, p.modalBtnCls]));
 
 export default function CreateTaskModal({
   open, onClose, workspaceSlug, projectId,

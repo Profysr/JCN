@@ -4,12 +4,12 @@ import { useSprints, useCreateSprint, useUpdateSprint, useDeleteSprint, useSprin
 import BurndownChart from "@/components/projects/BurndownChart";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { SPRINT_STATUSES } from "@/lib/constants";
 
-const STATUS_CONFIG = {
-  planning:  { label: "Planning",   color: "text-muted-foreground bg-muted border-border" },
-  active:    { label: "Active",     color: "text-blue-600 bg-blue-50 border-blue-200" },
-  completed: { label: "Completed",  color: "text-green-600 bg-green-50 border-green-200" },
-};
+// Local alias matching old shape so the rest of the file is unchanged
+const STATUS_CONFIG = Object.fromEntries(
+  Object.values(SPRINT_STATUSES).map(s => [s.value, { label: s.label, color: s.badgeCls }])
+);
 
 const STEPS = [
   { n: 1, text: "Click + to create a sprint — give it a name and optional dates" },

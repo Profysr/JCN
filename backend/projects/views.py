@@ -41,6 +41,7 @@ from .serializers import (
     ProjectMemberSerializer, GuestTokenSerializer,
     BoardSerializer,
     DashboardSerializer,
+    MyWorkTaskSerializer,
 )
 from .permissions import has_project_permission, get_effective_role, log_audit
 
@@ -558,30 +559,56 @@ class GlobalSearchView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        q = request.query_params.get("q", "").strip()
-        if len(q) < 2:
+        # ── Query params ──────────────────────────────────────────────────────
+        q         = request.query_params.get("q",         "").strip()
+        task_type = request.query_params.get("task_type", "").strip()
+        assignee  = request.query_params.get("assignee",  "").strip()
+        priority  = request.query_params.get("priority",  "").strip()
+        overdue   = request.query_params.get("overdue",   "").lower() == "true"
+        today_only = request.query_params.get("today",   "").lower() == "true"
+
+        has_any = len(q) >= 2 or task_type or assignee or priority or overdue or today_only
+        if not has_any:
             return Response({"tasks": [], "projects": []})
 
         workspace_ids = WorkspaceMember.objects.filter(
             user=request.user
         ).values_list("workspace_id", flat=True)
 
-        # v3.2.0 — search across title AND description
-        tasks = (
-            Task.objects.filter(
-                project__workspace_id__in=workspace_ids,
-            ).filter(
-                django_models.Q(title__icontains=q) | django_models.Q(description__icontains=q)
+        tasks = Task.objects.filter(
+            project__workspace_id__in=workspace_ids,
+        ).select_related("project__workspace", "status", "assignee")
+
+        # Text search — title + description
+        if len(q) >= 2:
+            tasks = tasks.filter(
+                django_models.Q(title__icontains=q)
+                | django_models.Q(description__icontains=q)
             )
-            .select_related("project__workspace", "status")[:8]
-        )
+
+        # Dedicated filters
+        if task_type:
+            tasks = tasks.filter(task_type__icontains=task_type)
+        if assignee:
+            tasks = tasks.filter(
+                django_models.Q(assignee__full_name__icontains=assignee)
+                | django_models.Q(assignee__email__icontains=assignee)
+            )
+        if priority:
+            tasks = tasks.filter(priority__icontains=priority)
+        if overdue:
+            today = timezone.now().date()
+            tasks = tasks.filter(due_date__lt=today, status__is_done=False)
+        if today_only:
+            today = timezone.now().date()
+            tasks = tasks.filter(due_date=today)
+
+        tasks = tasks[:15]
+
         projects = (
-            Project.objects.filter(
-                workspace_id__in=workspace_ids,
-                name__icontains=q,
-            )
+            Project.objects.filter(workspace_id__in=workspace_ids, name__icontains=q)
             .select_related("workspace")[:5]
-        )
+        ) if len(q) >= 2 else []
 
         return Response({
             "tasks":    TaskSearchSerializer(tasks, many=True).data,
@@ -2051,7 +2078,7 @@ class MyWorkView(APIView):
             return score
 
         sorted_tasks = sorted(tasks, key=lambda t: -urgency(t))
-        return Response(TaskSerializer(sorted_tasks, many=True, context={"request": request}).data)
+        return Response(MyWorkTaskSerializer(sorted_tasks, many=True, context={"request": request}).data)
 
 
 # ── v3.4.0 — Portfolio ────────────────────────────────────────────────────────

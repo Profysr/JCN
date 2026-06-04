@@ -4,11 +4,7 @@ import { useProjects } from "@/hooks/useProjects";
 import { Button } from "@/components/ui/button";
 import CreateProjectModal from "@/components/projects/CreateProjectModal";
 import { FolderKanban, Plus, ArrowRight } from "lucide-react";
-
-const PROJECT_COLORS = [
-  "#6366f1", "#ec4899", "#f59e0b", "#22c55e",
-  "#3b82f6", "#8b5cf6", "#14b8a6", "#ef4444",
-];
+import { APP_COLORS as PROJECT_COLORS } from "@/lib/constants";
 
 export default function ProjectsPage() {
   const { workspaceSlug } = useParams();

@@ -1,16 +1,16 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
-  Search, LayoutDashboard, FolderKanban, Users, Settings, Map, BarChart2,
-  CheckSquare, ArrowRight, Loader2, Hash, Clock, Plus, UserPlus,
+  Search, CheckSquare, ArrowRight, Loader2, Hash, Clock, Plus, UserPlus,
 } from "lucide-react";
 import { useSearch } from "@/hooks/useSearch";
+import { NAV_ITEMS, workspaceUrl } from "@/lib/navLinks";
 import { cn } from "@/lib/utils";
 
-const PRIORITY_COLOR = {
-  urgent: "text-red-500", high: "text-orange-500", medium: "text-yellow-500",
-  low: "text-blue-400",   no_priority: "text-muted-foreground",
-};
+import { getPriority } from "@/lib/constants";
+const PRIORITY_COLOR = Object.fromEntries(
+  ["urgent","high","medium","low","no_priority"].map(v => [v, getPriority(v).textCls])
+);
 
 // ── Recently viewed (localStorage) ────────────────────────────────────────────
 const RV_KEY = "jcn_recently_viewed";
@@ -47,29 +47,18 @@ function parseShortcuts(raw) {
   return { cleanQuery: rest.join(" "), filters };
 }
 
-function applyShortcutFilters(tasks, filters) {
-  let result = tasks;
-  if (filters.type)     result = result.filter(t => t.task_type?.toLowerCase().includes(filters.type.toLowerCase()));
-  if (filters.priority) result = result.filter(t => t.priority?.toLowerCase().includes(filters.priority.toLowerCase()));
-  if (filters.assignee) result = result.filter(t =>
-    (t.assignee_name || "").toLowerCase().includes(filters.assignee.toLowerCase()),
-  );
-  if (filters.special === "overdue") {
-    const today = new Date().toISOString().slice(0, 10);
-    result = result.filter(t => t.due_date && t.due_date < today);
-  }
-  if (filters.special === "today") {
-    const today = new Date().toISOString().slice(0, 10);
-    result = result.filter(t => t.due_date === today);
-  }
-  return result;
+// All shortcut filters are now applied server-side via query params.
+// This function is kept only as a safety net — the server already
+// pre-filters results, so this is a no-op in normal usage.
+function applyShortcutFilters(tasks) {
+  return tasks;
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function CommandPalette({ open, onClose }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const [query,         setQuery]         = useState("");
+  const [query, setQuery]         = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef(null);
   const listRef  = useRef(null);
@@ -79,9 +68,15 @@ export default function CommandPalette({ open, onClose }) {
   // Parse shortcuts from raw query
   const { cleanQuery, filters: shortcutFilters } = useMemo(() => parseShortcuts(query), [query]);
 
-  // Search against actual text (without shortcut tokens)
-  const { data: results, isFetching } = useSearch(cleanQuery || (Object.keys(shortcutFilters).length ? " " : ""));
-
+  // All shortcuts map 1-to-1 to server-side query params — no client-side
+  // hacks needed. The server handles filtering; results come back pre-filtered.
+  const { data: results, isFetching } = useSearch(cleanQuery.trim(), {
+    task_type: shortcutFilters.type,
+    assignee:  shortcutFilters.assignee,
+    priority:  shortcutFilters.priority,
+    overdue:   shortcutFilters.special === "overdue",
+    today:     shortcutFilters.special === "today",
+  });
   const recentlyViewed = useMemo(() => open ? getRecentlyViewed() : [], [open]);
 
   // Quick actions
@@ -94,17 +89,16 @@ export default function CommandPalette({ open, onClose }) {
     ];
   }, [workspaceSlug, navigate]);
 
-  // Navigation links
+  // Navigation links — derived from the same NAV_ITEMS used by AppLayout
   const navLinks = useMemo(() => {
     if (!workspaceSlug) return [];
-    return [
-      { type: "nav", icon: LayoutDashboard, label: "Dashboard",  desc: "Workspace overview",       action: () => navigate(`/w/${workspaceSlug}`) },
-      { type: "nav", icon: FolderKanban,    label: "Projects",   desc: "All projects",             action: () => navigate(`/w/${workspaceSlug}/projects`) },
-      { type: "nav", icon: Map,             label: "Roadmap",    desc: "Sprint timeline",          action: () => navigate(`/w/${workspaceSlug}/roadmap`) },
-      { type: "nav", icon: BarChart2,       label: "Analytics",  desc: "Team & project metrics",   action: () => navigate(`/w/${workspaceSlug}/analytics`) },
-      { type: "nav", icon: Users,           label: "Members",    desc: "Manage team members",      action: () => navigate(`/w/${workspaceSlug}/members`) },
-      { type: "nav", icon: Settings,        label: "Settings",   desc: "Workspace settings",       action: () => navigate(`/w/${workspaceSlug}/settings`) },
-    ];
+    return NAV_ITEMS.map(item => ({
+      type:   "nav",
+      icon:   item.icon,
+      label:  item.label,
+      desc:   item.desc,
+      action: () => navigate(workspaceUrl(workspaceSlug, item.path)),
+    }));
   }, [workspaceSlug, navigate]);
 
   const sections = useMemo(() => {
@@ -128,36 +122,25 @@ export default function CommandPalette({ open, onClose }) {
       ].filter(Boolean);
     }
 
-    // Shortcut-only (e.g. "#bug" with no text) — show hint
-    if (hasShortcuts && !hasTextQuery && !isFetching) {
-      const hint = [
-        shortcutFilters.type     && `type: ${shortcutFilters.type}`,
-        shortcutFilters.assignee && `assignee: @${shortcutFilters.assignee}`,
-        shortcutFilters.priority && `priority: !${shortcutFilters.priority}`,
-        shortcutFilters.special  && `filter: >${shortcutFilters.special}`,
-      ].filter(Boolean).join(", ");
-      return [{ title: `Filters active — ${hint}`, items: navLinks }];
-    }
-
     if (!hasTextQuery && !hasShortcuts) return [{ title: "Navigation", items: navLinks }];
 
-    // Search results with shortcut filtering
+    // Build task items — raw results from the API
     let taskItems = (results?.tasks || []).map(t => ({
       type: "task", icon: CheckSquare,
       label: t.title,
       meta: `${t.project_name} · ${t.status_name || "No status"}`,
       priority: t.priority,
+      // keep all raw fields for shortcut filtering
+      task_type:     t.task_type,
+      assignee_name: t.assignee_name,
+      due_date:      t.due_date,
       action: () => navigate(`/w/${t.workspace_slug}/projects/${t.project_id}?task=${t.id}`),
-      raw: t,
     }));
 
-    if (hasShortcuts) taskItems = applyShortcutFilters(taskItems.map(i => ({ ...i, ...i.raw })), shortcutFilters).map(t => ({
-      type: "task", icon: CheckSquare,
-      label: t.title || t.label,
-      meta: t.meta || `${t.project_name} · ${t.status_name || ""}`,
-      priority: t.priority,
-      action: t.action || (() => navigate(`/w/${t.workspace_slug}/projects/${t.project_id}?task=${t.id}`)),
-    }));
+    // Apply shortcut filters client-side
+    if (hasShortcuts) {
+      taskItems = applyShortcutFilters(taskItems, shortcutFilters);
+    }
 
     const projectItems = (results?.projects || []).map(p => ({
       type: "project", icon: Hash,
@@ -221,13 +204,13 @@ export default function CommandPalette({ open, onClose }) {
 
       {/* Panel */}
       <div
-        className="relative w-full max-w-xl mx-4 bg-card border rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-scale-in"
+        className="relative w-full max-w-xl mx-4 bg-card border rounded-md shadow-2xl overflow-hidden flex flex-col animate-scale-in"
         style={{ maxHeight: "min(600px, 80vh)" }}
         onClick={e => e.stopPropagation()}
       >
         {/* Input */}
         <div className="flex items-center gap-3 px-4 py-3.5 border-b flex-shrink-0">
-          {isFetching && cleanQuery.length >= 2
+          {isFetching && (cleanQuery.trim().length >= 2 || Object.keys(shortcutFilters).length > 0)
             ? <Loader2 className="w-4 h-4 text-muted-foreground animate-spin flex-shrink-0" />
             : <Search className="w-4 h-4 text-muted-foreground flex-shrink-0" />}
           <input
@@ -254,7 +237,7 @@ export default function CommandPalette({ open, onClose }) {
         {/* Shortcut legend (shown when no query) */}
         {!query.trim() && (
           <div className="flex items-center gap-4 px-4 py-2 border-b bg-muted/20 flex-shrink-0">
-            {[["#type", "Filter type"], ["@name", "By assignee"], ["!priority", "By priority"], [">overdue", "Overdue"]].map(([key, label]) => (
+            {[["#bug", "Filter type"], ["@name", "By assignee"], ["!urgent", "By priority"], [">overdue", "Overdue"]].map(([key, label]) => (
               <button
                 key={key}
                 onClick={() => { setQuery(key + " "); inputRef.current?.focus(); }}
@@ -269,7 +252,7 @@ export default function CommandPalette({ open, onClose }) {
 
         {/* Results */}
         <div ref={listRef} className="flex-1 overflow-y-auto py-1.5">
-          {cleanQuery.length >= 2 && !isFetching && flatItems.length === 0 ? (
+          {(cleanQuery.trim().length >= 2 || Object.keys(shortcutFilters).length > 0) && !isFetching && flatItems.length === 0 ? (
             <div className="px-4 py-10 text-center">
               <p className="text-sm text-muted-foreground">No results for <span className="font-medium text-foreground">"{cleanQuery}"</span></p>
               <p className="text-xs text-muted-foreground mt-1">Try searching by task title, description, or project name</p>
@@ -327,7 +310,7 @@ export default function CommandPalette({ open, onClose }) {
             <span className="flex items-center gap-1"><Kbd>↵</Kbd> Open</span>
             <span className="flex items-center gap-1"><Kbd>Esc</Kbd> Close</span>
           </div>
-          <span className="text-[11px] text-muted-foreground"><Kbd>⌘K</Kbd></span>
+          <span className="text-[11px] text-muted-foreground"><Kbd>⌘ + K</Kbd></span>
         </div>
       </div>
     </div>

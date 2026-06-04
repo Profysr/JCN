@@ -8,10 +8,11 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "@/store/authStore";
 import api from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { PRIORITIES, APP_COLORS, pickColor } from "@/lib/constants";
 import GettingStartedChecklist from "@/components/dashboard/GettingStartedChecklist";
 
 // ── Built-in: Overview tab ───────────────────────────────────────────────────
-const PROJECT_COLORS = ["#6366f1","#ec4899","#f59e0b","#22c55e","#3b82f6","#8b5cf6","#14b8a6","#ef4444"];
+const PROJECT_COLORS = APP_COLORS; // canonical — from constants.js
 
 function OverviewTab({ workspaceSlug }) {
   const { user } = useAuthStore();
@@ -79,13 +80,7 @@ function OverviewTab({ workspaceSlug }) {
 }
 
 // ── Built-in: Analytics tab ──────────────────────────────────────────────────
-const PRI_CONFIG = {
-  urgent:      { label: "Urgent",      color: "#ef4444" },
-  high:        { label: "High",        color: "#f97316" },
-  medium:      { label: "Medium",      color: "#eab308" },
-  low:         { label: "Low",         color: "#60a5fa" },
-  no_priority: { label: "No Priority", color: "#94a3b8" },
-};
+const PRI_CONFIG = Object.fromEntries(PRIORITIES.map(p => [p.value, { label: p.label, color: p.hex }]));
 
 function Bar({ label, value, max, color }) {
   const pct = max > 0 ? Math.round((value / max) * 100) : 0;

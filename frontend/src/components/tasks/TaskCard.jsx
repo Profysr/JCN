@@ -1,25 +1,27 @@
 import { Draggable } from "@hello-pangea/dnd";
 import { cn } from "@/lib/utils";
-import { AlertCircle, ArrowUp, ArrowDown, Minus, Calendar, MessageSquare, CheckSquare } from "lucide-react";
-import { getTaskType } from "@/lib/taskTypes";
+import { Calendar, MessageSquare, CheckSquare } from "lucide-react";
+import { getPriority, getTaskType } from "@/lib/constants";
 import { Avatar } from "@/components/ui/avatar";
 
-const PRIORITY_CONFIG = {
-  urgent:      { icon: AlertCircle, dot: "bg-red-500",    label: "Urgent" },
-  high:        { icon: ArrowUp,     dot: "bg-orange-500", label: "High" },
-  medium:      { icon: Minus,       dot: "bg-yellow-400", label: "Medium" },
-  low:         { icon: ArrowDown,   dot: "bg-blue-400",   label: "Low" },
-  no_priority: { icon: Minus,       dot: "bg-muted-foreground/30", label: "" },
-};
-
-export default function TaskCard({ task, index, onClick, isSelected, isBulkSelected, onToggleSelect, canEdit = true }) {
-  const priority = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.no_priority;
+export default function TaskCard({
+  task,
+  index,
+  onClick,
+  isSelected,
+  isBulkSelected,
+  onToggleSelect,
+  canEdit = true,
+}) {
+  const _p = getPriority(task.priority);
+  const priority = { ..._p, dot: _p.dotCls, cls: _p.textCls }; // shape compat
   const typeConfig = getTaskType(task.task_type);
   const TypeIcon = typeConfig.icon;
 
-  const subtaskPct = task.subtask_count > 0
-    ? Math.round((task.done_subtask_count / task.subtask_count) * 100)
-    : 0;
+  const subtaskPct =
+    task.subtask_count > 0
+      ? Math.round((task.done_subtask_count / task.subtask_count) * 100)
+      : 0;
 
   return (
     <Draggable draggableId={task.id} index={index} isDragDisabled={!canEdit}>
@@ -33,45 +35,65 @@ export default function TaskCard({ task, index, onClick, isSelected, isBulkSelec
             "bg-card border border-border rounded-md p-2.5 cursor-pointer select-none relative group",
             "transition-colors duration-100",
             "hover:border-primary/40 hover:bg-accent/40",
-            snapshot.isDragging && "shadow-lg border-primary/30 rotate-[0.5deg] opacity-95",
+            snapshot.isDragging &&
+              "shadow-lg border-primary/30 rotate-[0.5deg] opacity-95",
             isSelected && "border-primary bg-primary/5",
-            isBulkSelected && "border-primary bg-primary/10 ring-1 ring-primary/30"
+            isBulkSelected &&
+              "border-primary bg-primary/10 ring-1 ring-primary/30",
           )}
         >
           {/* Bulk-select checkbox (hover or selected) */}
           {onToggleSelect && (
             <button
-              onClick={(e) => { e.stopPropagation(); onToggleSelect(task.id); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleSelect(task.id);
+              }}
               className={cn(
                 "absolute top-2 left-2 w-4 h-4 rounded border-2 flex items-center justify-center transition-all z-10",
                 isBulkSelected
                   ? "bg-primary border-primary opacity-100 scale-100"
-                  : "bg-card/80 border-border/60 opacity-30 group-hover:opacity-100 group-hover:border-primary/60"
+                  : "bg-card/80 border-border/60 opacity-50 group-hover:opacity-100 group-hover:border-primary/60",
               )}
             >
               {isBulkSelected && (
-                <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 10 8" fill="none">
-                  <path d="M1 4l3 3 5-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                <svg
+                  className="w-2.5 h-2.5 text-white"
+                  viewBox="0 0 10 8"
+                  fill="none"
+                >
+                  <path
+                    d="M1 4l3 3 5-6"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
                 </svg>
               )}
             </button>
           )}
 
           {/* Type badge (only for non-default types) + Priority dot + Labels */}
-          <div className={cn("flex items-center gap-1.5 mb-2 flex-wrap", onToggleSelect && "pl-5")}>
-            {/* Only render type badge when it's not the plain "task" default */}
-            {task.task_type && task.task_type !== "task" && (
+          <div
+            className={cn(
+              "flex items-center gap-1.5 mb-2 flex-wrap",
+              onToggleSelect && "pl-5",
+            )}
+          >
+            {task.task_type && (
               <span
-                className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold leading-none flex-shrink-0", typeConfig.bg, typeConfig.color)}
+                className={cn(
+                  "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold leading-none flex-shrink-0",
+                  typeConfig.bg,
+                  typeConfig.color,
+                )}
               >
                 <TypeIcon className="w-2.5 h-2.5" />
                 {typeConfig.label}
               </span>
             )}
-            {/* Priority dot — only shown when priority is set */}
-            {task.priority && task.priority !== "no_priority" && (
-              <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", priority.dot)} />
-            )}
+
             {task.labels?.map((l) => (
               <span
                 key={l.id}
@@ -81,6 +103,15 @@ export default function TaskCard({ task, index, onClick, isSelected, isBulkSelec
                 {l.name}
               </span>
             ))}
+
+            {/* Priority dot — only shown when priority is set */}
+            {task.priority && (
+              <span className={cn("self-end ml-auto")}>
+                {priority.icon && (
+                  <priority.icon className={cn("w-3.5 h-3.5", priority.cls)} />
+                )}
+              </span>
+            )}
           </div>
 
           {/* Title */}
@@ -106,10 +137,13 @@ export default function TaskCard({ task, index, onClick, isSelected, isBulkSelec
               {task.due_date && (
                 <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
                   <Calendar className="w-3 h-3" />
-                  {new Date(task.due_date + "T00:00:00").toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                  })}
+                  {new Date(task.due_date + "T00:00:00").toLocaleDateString(
+                    "en-US",
+                    {
+                      month: "short",
+                      day: "numeric",
+                    },
+                  )}
                 </span>
               )}
             </div>
@@ -129,7 +163,11 @@ export default function TaskCard({ task, index, onClick, isSelected, isBulkSelec
               )}
               {task.assignee && (
                 <Avatar
-                  name={task.assignee.display_name || task.assignee.full_name || task.assignee.email}
+                  name={
+                    task.assignee.display_name ||
+                    task.assignee.full_name ||
+                    task.assignee.email
+                  }
                   src={task.assignee.avatar}
                   size="xs"
                 />

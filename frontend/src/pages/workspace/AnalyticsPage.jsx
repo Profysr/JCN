@@ -2,14 +2,9 @@ import { useParams } from "react-router-dom";
 import { useAnalytics } from "@/hooks/useAnalytics";
 import { BarChart2, Users, CheckSquare, FolderKanban, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PRIORITIES } from "@/lib/constants";
 
-const PRIORITY_CONFIG = {
-  urgent:      { label: "Urgent",      color: "#ef4444" },
-  high:        { label: "High",        color: "#f97316" },
-  medium:      { label: "Medium",      color: "#eab308" },
-  low:         { label: "Low",         color: "#60a5fa" },
-  no_priority: { label: "No Priority", color: "#94a3b8" },
-};
+const PRIORITY_CONFIG = Object.fromEntries(PRIORITIES.map(p => [p.value, { label: p.label, color: p.hex }]));
 
 function HorizontalBar({ label, value, max, color }) {
   const pct = max > 0 ? Math.round((value / max) * 100) : 0;

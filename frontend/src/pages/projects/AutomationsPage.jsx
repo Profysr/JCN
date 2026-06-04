@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Plus, Zap, ToggleLeft, ToggleRight, Trash2, ChevronDown, ChevronRight, Check, X, ArrowLeft, LayoutTemplate } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { PRIORITIES } from "@/lib/constants";
 import { useAutomations, useCreateAutomation, useUpdateAutomation, useDeleteAutomation } from "@/hooks/useAutomations";
 import { format } from "date-fns";
 
@@ -36,13 +37,7 @@ const ACTION_TYPES = [
   { value: "send_notification", label: "Send notification" },
 ];
 
-const PRIORITY_OPTIONS = [
-  { value: "urgent", label: "Urgent" },
-  { value: "high",   label: "High" },
-  { value: "medium", label: "Medium" },
-  { value: "low",    label: "Low" },
-  { value: "no_priority", label: "No Priority" },
-];
+const PRIORITY_OPTIONS = PRIORITIES.map(p => ({ value: p.value, label: p.label }));
 
 const AUTOMATION_TEMPLATES = [
   {

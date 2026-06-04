@@ -1,19 +1,16 @@
 import { useState, useRef, useCallback, useMemo } from "react";
 import {
-  AlertCircle, ArrowUp, ArrowDown, Minus, Calendar, ChevronDown,
-  ChevronRight, Settings2, Check, ChevronsUpDown,
+  Calendar, ChevronDown, ChevronRight, Settings2, Check, ChevronsUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PRIORITIES, PRIORITY_ORDER } from "@/lib/constants";
 
-// ── Priority config ────────────────────────────────────────────────────────────
-const PRI = {
-  urgent:      { icon: AlertCircle, cls: "text-red-500",             dot: "bg-red-500"             },
-  high:        { icon: ArrowUp,     cls: "text-orange-500",          dot: "bg-orange-500"          },
-  medium:      { icon: Minus,       cls: "text-yellow-500",          dot: "bg-yellow-400"          },
-  low:         { icon: ArrowDown,   cls: "text-blue-400",            dot: "bg-blue-400"            },
-  no_priority: { icon: Minus,       cls: "text-muted-foreground/40", dot: "bg-muted-foreground/30" },
-};
-const PRI_ORDER = { urgent: 0, high: 1, medium: 2, low: 3, no_priority: 4 };
+// Keyed map for O(1) lookup by priority value
+const PRI = Object.fromEntries(
+  PRIORITIES.map(p => [p.value, { icon: p.icon, cls: p.textCls, dot: p.dotCls, label: p.label }])
+);
 
 // ── Column definitions ─────────────────────────────────────────────────────────
 const ALL_COLUMNS = [
@@ -22,9 +19,9 @@ const ALL_COLUMNS = [
   { id: "priority",        label: "Priority", sortable: true,  defaultVisible: true  },
   { id: "assignee",        label: "Assignee", sortable: true,  defaultVisible: true  },
   { id: "due_date",        label: "Due Date", sortable: true,  defaultVisible: true  },
-  { id: "labels",          label: "Labels",   sortable: false, defaultVisible: true  },
   { id: "estimate_points", label: "Points",   sortable: true,  defaultVisible: false },
   { id: "sprint",          label: "Sprint",   sortable: true,  defaultVisible: false },
+  { id: "labels",          label: "Labels",   sortable: false, defaultVisible: false  },
 ];
 
 // ── Sort helpers ───────────────────────────────────────────────────────────────
@@ -53,37 +50,65 @@ function applySort(tasks, sorts) {
 }
 
 // ── Grouping ───────────────────────────────────────────────────────────────────
+// Hex colours for groupBy=priority colour dots — derived from constants
+const PRIORITY_COLORS = Object.fromEntries(PRIORITIES.map(p => [p.value, p.hex]));
+
+function getGroupKey(task, groupBy, statuses) {
+  switch (groupBy) {
+    case "status": {
+      const s = statuses.find(s => s.id === (task.status_detail?.id ?? task.status_id));
+      return {
+        id:    s?.id    || "none",
+        label: s?.name  || "No Status",
+        color: s?.color || "#94a3b8",
+      };
+    }
+    case "assignee": {
+      return {
+        id:    task.assignee?.id || "unassigned",
+        label: task.assignee
+          ? (task.assignee.full_name || task.assignee.email)
+          : "Unassigned",
+        color: "#6366f1",
+      };
+    }
+    case "priority": {
+      const key = task.priority || "no_priority";
+      return {
+        id:    key,
+        label: key.replace(/_/g, " "),
+        color: PRIORITY_COLORS[key] || "#94a3b8",
+      };
+    }
+    default: { // sprint
+      return {
+        id:    task.sprint_detail?.id   || "none",
+        label: task.sprint_detail?.name || "No Sprint",
+        color: "#8b5cf6",
+      };
+    }
+  }
+}
+
 function groupTasks(tasks, groupBy, statuses) {
   if (!groupBy) return [{ id: "__all__", label: null, tasks }];
+
   const groups = new Map();
-  for (const t of tasks) {
-    let id, label, color;
-    if (groupBy === "status") {
-      const s = statuses.find(s => s.id === (t.status_detail?.id ?? t.status_id));
-      id = s?.id || "none"; label = s?.name || "No Status"; color = s?.color || "#94a3b8";
-    } else if (groupBy === "assignee") {
-      id = t.assignee?.id || "unassigned";
-      label = t.assignee ? (t.assignee.full_name || t.assignee.email) : "Unassigned";
-      color = "#6366f1";
-    } else if (groupBy === "priority") {
-      id = t.priority || "no_priority"; label = (t.priority || "no_priority").replace(/_/g," ");
-      color = { urgent: "#ef4444", high: "#f97316", medium: "#eab308", low: "#60a5fa", no_priority: "#94a3b8" }[id] || "#94a3b8";
-    } else {
-      id = t.sprint_detail?.id || "none"; label = t.sprint_detail?.name || "No Sprint"; color = "#8b5cf6";
-    }
+
+  for (const task of tasks) {
+    const { id, label, color } = getGroupKey(task, groupBy, statuses);
     if (!groups.has(id)) groups.set(id, { id, label, color, tasks: [] });
-    groups.get(id).tasks.push(t);
+    groups.get(id).tasks.push(task);
   }
+
   return Array.from(groups.values());
 }
 
 // ── Column-visibility popover ─────────────────────────────────────────────────
 function ColumnToggle({ visible, onChange }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative">
       <button
         onClick={() => setOpen(o => !o)}
         className="p-1.5 rounded hover:bg-accent transition-colors"
@@ -154,54 +179,18 @@ function GroupByPicker({ value, onChange }) {
   );
 }
 
-// ── Inline cell editors ────────────────────────────────────────────────────────
-function InlineSelect({ value, options, onSave, onCancel }) {
-  return (
-    <select
-      autoFocus
-      defaultValue={value}
-      onBlur={e => onSave(e.target.value)}
-      onKeyDown={e => { if (e.key === "Escape") onCancel(); if (e.key === "Enter") onSave(e.target.value); }}
-      className="w-full text-xs bg-background border border-ring rounded px-1 py-0.5 focus:outline-none"
-      onClick={e => e.stopPropagation()}
-    >
-      {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-    </select>
-  );
-}
-
-function InlineInput({ value, onSave, onCancel, type = "text" }) {
-  const ref = useRef(null);
-  return (
-    <input
-      ref={ref}
-      autoFocus
-      type={type}
-      defaultValue={value || ""}
-      onBlur={e => onSave(e.target.value)}
-      onKeyDown={e => { if (e.key === "Escape") onCancel(); if (e.key === "Enter") { e.target.blur(); } }}
-      onClick={e => e.stopPropagation()}
-      className="w-full text-xs bg-background border border-ring rounded px-1.5 py-0.5 focus:outline-none"
-    />
-  );
-}
-
 // ── Sort header ────────────────────────────────────────────────────────────────
 function SortHeader({ label, colId, sorts, onSort }) {
   const sort = sorts.find(s => s.col === colId);
   return (
-    <button
-      onClick={(e) => onSort(colId, e.shiftKey)}
-      className="flex items-center gap-1 group"
-    >
+    <button onClick={(e) => onSort(colId, e.shiftKey)} className="flex items-center gap-1 group">
       {label}
-      {sort ? (
-        sort.dir === "asc"
+      {sort
+        ? sort.dir === "asc"
           ? <ArrowUp   className="w-3 h-3 text-primary" />
           : <ArrowDown className="w-3 h-3 text-primary" />
-      ) : (
-        <ArrowUp className="w-3 h-3 text-muted-foreground/0 group-hover:text-muted-foreground/50 transition-opacity" />
-      )}
+        : <ArrowUp className="w-3 h-3 text-muted-foreground/0 group-hover:text-muted-foreground/50 transition-opacity" />
+      }
       {sorts.length > 1 && sort && (
         <span className="text-[9px] text-primary font-bold">{sorts.findIndex(s => s.col === colId) + 1}</span>
       )}
@@ -212,14 +201,12 @@ function SortHeader({ label, colId, sorts, onSort }) {
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function ListView({
   tasks = [], statuses = [], members = [],
-  onTaskClick, onUpdateTask,
+  onTaskClick,
   selectedTaskId, selectedIds = new Set(), onToggleSelect,
-  canEdit = false,
 }) {
-  const [sorts,    setSorts]    = useState([]);
-  const [groupBy,  setGroupBy]  = useState(null);
+  const [sorts,     setSorts]     = useState([]);
+  const [groupBy,   setGroupBy]   = useState(null);
   const [collapsed, setCollapsed] = useState(new Set());
-  const [editCell, setEditCell] = useState(null); // { taskId, col }
   const [visibleCols, setVisibleCols] = useState(
     () => new Set(ALL_COLUMNS.filter(c => c.defaultVisible).map(c => c.id))
   );
@@ -245,44 +232,23 @@ export default function ListView({
   const sortedTasks = useMemo(() => applySort(tasks, sorts), [tasks, sorts]);
   const groups      = useMemo(() => groupTasks(sortedTasks, groupBy, statuses), [sortedTasks, groupBy, statuses]);
 
-  const startEdit = (taskId, col, e) => {
-    if (!canEdit || !onUpdateTask) return;
-    e.stopPropagation();
-    setEditCell({ taskId, col });
-  };
-  const saveCell = (task, col, rawValue) => {
-    if (!onUpdateTask) return;
-    let updates = {};
-    if (col === "title")           updates = { title: rawValue };
-    else if (col === "status")     updates = { status_id: rawValue };
-    else if (col === "priority")   updates = { priority: rawValue };
-    else if (col === "assignee")   updates = { assignee_id: rawValue || null };
-    else if (col === "due_date")   updates = { due_date: rawValue || null };
-    else if (col === "estimate_points") updates = { estimate_points: rawValue ? parseInt(rawValue) : null };
-    if (Object.keys(updates).length) onUpdateTask({ taskId: task.id, ...updates });
-    setEditCell(null);
-  };
-
   const visibleColumns = ALL_COLUMNS.filter(c => visibleCols.has(c.id));
   const TH = "px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap";
 
   const renderCell = (task, col) => {
-    const isEditing = editCell?.taskId === task.id && editCell?.col === col;
-
     if (col === "title") {
       const p = PRI[task.priority] || PRI.no_priority;
-      if (isEditing) {
-        return (
-          <td className="pl-4 pr-3 py-1.5 w-[40%]">
-            <InlineInput value={task.title} onSave={v => saveCell(task, "title", v)} onCancel={() => setEditCell(null)} />
-          </td>
-        );
-      }
       return (
-        <td className="pl-4 pr-3 py-2" onDoubleClick={e => startEdit(task.id, "title", e)}>
-          <div className="flex items-center gap-2">
+        <td
+          key="title"
+          className="pl-4 pr-3 py-2 w-[40%] cursor-pointer"
+          onClick={() => onTaskClick(task.id)}
+        >
+          <div className="flex items-center gap-2 group/title">
             <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", p.dot)} />
-            <span className="font-medium text-[13px] line-clamp-1">{task.title}</span>
+            <span className="font-medium text-[13px] line-clamp-1 group-hover/title:text-primary group-hover/title:underline underline-offset-2 transition-colors">
+              {task.title}
+            </span>
           </div>
         </td>
       );
@@ -290,22 +256,11 @@ export default function ListView({
 
     if (col === "status") {
       const s = statuses.find(s => s.id === (task.status_detail?.id ?? task.status_id));
-      if (isEditing) {
-        return (
-          <td className="px-3 py-1.5">
-            <InlineSelect
-              value={task.status_detail?.id || ""}
-              options={statuses.map(s => ({ value: s.id, label: s.name }))}
-              onSave={v => saveCell(task, "status", v)}
-              onCancel={() => setEditCell(null)}
-            />
-          </td>
-        );
-      }
       return (
-        <td className="px-3 py-2" onDoubleClick={e => startEdit(task.id, "status", e)}>
+        <td key="status" className="px-3 py-2">
           {s ? (
-            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium whitespace-nowrap" style={{ backgroundColor: s.color + "20", color: s.color }}>
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium whitespace-nowrap"
+              style={{ backgroundColor: s.color + "20", color: s.color }}>
               <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: s.color }} />
               {s.name}
             </span>
@@ -317,46 +272,19 @@ export default function ListView({
     if (col === "priority") {
       const p = PRI[task.priority] || PRI.no_priority;
       const Icon = p.icon;
-      if (isEditing) {
-        return (
-          <td className="px-3 py-1.5">
-            <InlineSelect
-              value={task.priority || "no_priority"}
-              options={[
-                { value: "no_priority", label: "None" },
-                { value: "low",    label: "Low"    },
-                { value: "medium", label: "Medium" },
-                { value: "high",   label: "High"   },
-                { value: "urgent", label: "Urgent" },
-              ]}
-              onSave={v => saveCell(task, "priority", v)}
-              onCancel={() => setEditCell(null)}
-            />
-          </td>
-        );
-      }
       return (
-        <td className="px-3 py-2" onDoubleClick={e => startEdit(task.id, "priority", e)}>
-          <Icon className={cn("w-3.5 h-3.5", p.cls)} />
+        <td key="priority" className="px-3 py-2">
+          <div className="flex items-center gap-1.5">
+            <Icon className={cn("w-3.5 h-3.5 flex-shrink-0", p.cls)} />
+            <span className={cn("text-xs", p.cls)}>{p.label}</span>
+          </div>
         </td>
       );
     }
 
     if (col === "assignee") {
-      if (isEditing) {
-        return (
-          <td className="px-3 py-1.5">
-            <InlineSelect
-              value={task.assignee?.id || ""}
-              options={[{ value: "", label: "Unassigned" }, ...members.map(m => ({ value: m.user.id, label: m.user.full_name || m.user.email }))]}
-              onSave={v => saveCell(task, "assignee", v)}
-              onCancel={() => setEditCell(null)}
-            />
-          </td>
-        );
-      }
       return (
-        <td className="px-3 py-2" onDoubleClick={e => startEdit(task.id, "assignee", e)}>
+        <td key="assignee" className="px-3 py-2">
           {task.assignee ? (
             <div className="flex items-center gap-2">
               <div className="w-5 h-5 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold flex-shrink-0">
@@ -372,15 +300,8 @@ export default function ListView({
     }
 
     if (col === "due_date") {
-      if (isEditing) {
-        return (
-          <td className="px-3 py-1.5">
-            <InlineInput type="date" value={task.due_date || ""} onSave={v => saveCell(task, "due_date", v)} onCancel={() => setEditCell(null)} />
-          </td>
-        );
-      }
       return (
-        <td className="px-3 py-2" onDoubleClick={e => startEdit(task.id, "due_date", e)}>
+        <td key="due_date" className="px-3 py-2">
           {task.due_date ? (
             <span className="flex items-center gap-1 text-[12px] text-muted-foreground whitespace-nowrap">
               <Calendar className="w-3 h-3 flex-shrink-0" />
@@ -393,10 +314,11 @@ export default function ListView({
 
     if (col === "labels") {
       return (
-        <td className="px-3 py-2 pr-4">
+        <td key="labels" className="px-3 py-2 pr-4">
           <div className="flex flex-wrap gap-1">
             {task.labels?.map(l => (
-              <span key={l.id} className="px-1.5 py-0 rounded text-[10px] font-semibold leading-4" style={{ backgroundColor: l.color + "22", color: l.color }}>
+              <span key={l.id} className="px-1.5 py-0 rounded text-[10px] font-semibold leading-4"
+                style={{ backgroundColor: l.color + "22", color: l.color }}>
                 {l.name}
               </span>
             ))}
@@ -406,15 +328,8 @@ export default function ListView({
     }
 
     if (col === "estimate_points") {
-      if (isEditing) {
-        return (
-          <td className="px-3 py-1.5">
-            <InlineInput type="number" value={task.estimate_points} onSave={v => saveCell(task, "estimate_points", v)} onCancel={() => setEditCell(null)} />
-          </td>
-        );
-      }
       return (
-        <td className="px-3 py-2 text-center" onDoubleClick={e => startEdit(task.id, "estimate_points", e)}>
+        <td key="estimate_points" className="px-3 py-2">
           {task.estimate_points != null
             ? <span className="text-xs font-semibold text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{task.estimate_points}</span>
             : <span className="text-muted-foreground/50 text-xs">—</span>}
@@ -424,34 +339,36 @@ export default function ListView({
 
     if (col === "sprint") {
       return (
-        <td className="px-3 py-2">
-          {task.sprint_detail ? (
-            <span className="text-[11px] text-muted-foreground">{task.sprint_detail.name}</span>
-          ) : <span className="text-muted-foreground/50 text-xs">—</span>}
+        <td key="sprint" className="px-3 py-2">
+          {task.sprint_detail
+            ? <span className="text-[11px] text-muted-foreground">{task.sprint_detail.name}</span>
+            : <span className="text-muted-foreground/50 text-xs">—</span>}
         </td>
       );
     }
 
-    return <td className="px-3 py-2" />;
+    return <td key={col} className="px-3 py-2" />;
   };
 
   const renderRow = (task) => {
-    const isSelected    = selectedTaskId === task.id;
+    const isSelected     = selectedTaskId === task.id;
     const isBulkSelected = selectedIds.has(task.id);
     return (
       <tr
         key={task.id}
-        onClick={() => onTaskClick(task.id)}
         className={cn(
-          "cursor-pointer transition-colors duration-75",
-          isBulkSelected ? "bg-primary/[0.08]" : isSelected ? "bg-primary/5 border-l-2 border-l-primary" : "hover:bg-accent/60 bg-card",
+          "transition-colors duration-75",
+          isBulkSelected ? "bg-primary/[0.08]"
+          : isSelected   ? "bg-primary/5 border-l-2 border-l-primary"
+          :                 "hover:bg-accent/40 bg-card",
         )}
       >
         {onToggleSelect && (
           <td className="pl-3 py-2.5" onClick={e => e.stopPropagation()}>
             <button
               onClick={() => onToggleSelect(task.id)}
-              className={cn("w-4 h-4 rounded border flex items-center justify-center transition-all", isBulkSelected ? "bg-primary border-primary" : "border-border hover:border-primary bg-background")}
+              className={cn("w-4 h-4 rounded border flex items-center justify-center transition-all",
+                isBulkSelected ? "bg-primary border-primary" : "border-border hover:border-primary bg-background")}
             >
               {isBulkSelected && (
                 <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 10 8" fill="none">
@@ -468,7 +385,7 @@ export default function ListView({
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Table toolbar */}
+      {/* Toolbar */}
       <div className="flex items-center gap-3 px-4 py-2 border-b border-border bg-card flex-shrink-0">
         <GroupByPicker value={groupBy} onChange={setGroupBy} />
         {sorts.length > 0 && (
@@ -488,10 +405,7 @@ export default function ListView({
             <tr className="border-b bg-secondary">
               {onToggleSelect && <th className="w-8 pl-3 py-2" />}
               {visibleColumns.map(c => (
-                <th
-                  key={c.id}
-                  className={cn(TH, c.id === "title" ? "pl-4 w-[38%]" : "", c.id === "labels" ? "pr-4" : "")}
-                >
+                <th key={c.id} className={cn(TH, c.id === "title" ? "pl-4 w-[38%]" : "", c.id === "labels" ? "pr-4" : "")}>
                   {c.sortable
                     ? <SortHeader label={c.label} colId={c.id} sorts={sorts} onSort={handleSort} />
                     : c.label}
@@ -502,15 +416,14 @@ export default function ListView({
           <tbody className="divide-y divide-border">
             {tasks.length === 0 && (
               <tr>
-                <td colSpan={visibleColumns.length + (onToggleSelect ? 1 : 0)} className="px-4 py-14 text-center text-sm text-muted-foreground">
+                <td colSpan={visibleColumns.length + (onToggleSelect ? 1 : 0)}
+                  className="px-4 py-14 text-center text-sm text-muted-foreground">
                   No tasks match your filters.
                 </td>
               </tr>
             )}
-
             {groups.map(group => (
               <>
-                {/* Group header */}
                 {group.label && (
                   <tr
                     key={`grp-${group.id}`}
@@ -529,14 +442,12 @@ export default function ListView({
                     </td>
                   </tr>
                 )}
-
-                {/* Task rows */}
                 {!collapsed.has(group.id) && group.tasks.map(renderRow)}
               </>
             ))}
           </tbody>
 
-          {/* Footer aggregate */}
+          {/* Footer */}
           {tasks.length > 0 && (
             <tfoot>
               <tr className="border-t-2 border-border bg-secondary/50">

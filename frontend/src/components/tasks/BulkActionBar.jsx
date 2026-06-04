@@ -1,14 +1,7 @@
 import { X, Trash2, Tag, User, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-
-const PRIORITIES = [
-  { value: "urgent", label: "Urgent",      color: "text-red-500" },
-  { value: "high",   label: "High",         color: "text-orange-500" },
-  { value: "medium", label: "Medium",       color: "text-yellow-500" },
-  { value: "low",    label: "Low",          color: "text-blue-400" },
-  { value: "no_priority", label: "None",    color: "text-muted-foreground" },
-];
+import { PRIORITIES } from "@/lib/constants";
 
 export default function BulkActionBar({ count, statuses, members, onUpdate, onDelete, onClear }) {
   const [showStatus,   setShowStatus]   = useState(false);
@@ -67,7 +60,7 @@ export default function BulkActionBar({ count, statuses, members, onUpdate, onDe
                   onClick={() => { onUpdate({ priority: p.value }); close(); }}
                   className={cn(
                     "w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent transition-colors text-foreground",
-                    p.color
+                    p.textCls
                   )}
                 >
                   {p.label}

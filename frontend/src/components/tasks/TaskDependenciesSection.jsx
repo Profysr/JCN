@@ -1,18 +1,20 @@
 import { useState } from "react";
 import { useDependencies, useAddDependency, useRemoveDependency } from "@/hooks/useDependencies";
 import { useTasks } from "@/hooks/useTasks";
-import { Link2, X, AlertCircle, ChevronRight, Plus } from "lucide-react";
+import { Link2, X, ChevronRight, Plus, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getPriority } from "@/lib/constants";
 
-const PRIORITY_DOT = {
-  urgent: "bg-red-500", high: "bg-orange-500",
-  medium: "bg-yellow-400", low: "bg-blue-400", no_priority: "bg-muted-foreground/30",
-};
+function PriorityIcon({ value, className }) {
+  const p = getPriority(value);
+  const Icon = p.icon;
+  return <Icon className={cn("w-3.5 h-3.5 flex-shrink-0", p.textCls, className)} />;
+}
 
 function TaskChip({ taskData, onRemove }) {
   return (
     <div className="flex items-center gap-2 group px-2.5 py-1.5 rounded-md border bg-card hover:bg-accent/50 transition-colors text-xs">
-      <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", PRIORITY_DOT[taskData.priority] || "bg-muted-foreground/30")} />
+      <PriorityIcon value={taskData.priority} />
       <span className="font-medium truncate flex-1 max-w-[180px]">{taskData.title}</span>
       {taskData.status_detail && (
         <span
@@ -24,7 +26,7 @@ function TaskChip({ taskData, onRemove }) {
       )}
       <button
         onClick={onRemove}
-        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive flex-shrink-0 transition-opacity"
+        className="opacity-0 ml-auto group-hover:opacity-100 text-muted-foreground hover:text-destructive flex-shrink-0 transition-opacity"
       >
         <X className="w-3 h-3" />
       </button>
@@ -63,7 +65,7 @@ function AddDependencyPicker({ tasks, onAdd, onClose, label }) {
               onClick={() => { onAdd(t.id); onClose(); }}
               className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-accent transition-colors text-left"
             >
-              <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", PRIORITY_DOT[t.priority])} />
+              <PriorityIcon value={t.priority} />
               <span className="truncate">{t.title}</span>
             </button>
           ))

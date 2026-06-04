@@ -6,10 +6,10 @@ import { useThemeStore } from "@/store/themeStore";
 import api from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
-  LayoutDashboard, FolderKanban, Users, Settings, LogOut,
-  ChevronDown, Search, Map, BarChart2, Plus, Check, Clock, Square,
-  Inbox, Briefcase,
+  Users, Settings, LogOut,
+  ChevronDown, Search, BarChart2, Plus, Check, Square,
 } from "lucide-react";
+import { NAV_ITEMS, workspaceUrl } from "@/lib/navLinks";
 import { useActiveTimer, useStopTimer, formatDuration } from "@/hooks/useTimeTracking";
 import NotificationBell from "@/components/layout/NotificationBell";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
@@ -39,23 +39,18 @@ export default function AppLayout({ onOpenPalette }) {
     if (meData.theme)        setTheme(meData.theme);
     if (meData.accent_color) setAccent(meData.accent_color);
     if (meData.density_mode) setDensity(meData.density_mode);
-  }, [meData]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [meData]);
 
   const handleLogout = async () => {
-    await logout(); // authStore.logout() now calls queryClient.clear() internally
+    await logout();
     navigate("/login");
   };
 
-  const navLinks = [
-    { to: `/w/${workspaceSlug}/dashboards`,  icon: LayoutDashboard,    label: "Dashboards"  },
-    { to: `/w/${workspaceSlug}/projects`,    icon: FolderKanban,       label: "Projects"    },
-    { to: `/w/${workspaceSlug}/my-work`,     icon: Inbox,     label: "My Work"  },
-    { to: `/w/${workspaceSlug}/portfolio`,   icon: Briefcase, label: "Portfolio" },
-    { to: `/w/${workspaceSlug}/roadmap`,     icon: Map,                label: "Roadmap"     },
-    { to: `/w/${workspaceSlug}/timesheets`,  icon: Clock,              label: "Timesheets"  },
-    { to: `/w/${workspaceSlug}/members`,     icon: Users,              label: "Members"     },
-    { to: `/w/${workspaceSlug}/settings`,    icon: Settings,           label: "Settings"    },
-  ];
+  const navLinks = NAV_ITEMS.map(item => ({
+    to:    workspaceUrl(workspaceSlug, item.path),
+    icon:  item.icon,
+    label: item.label,
+  }));
 
   const initials    = workspace?.name?.[0]?.toUpperCase() || "W";
   const userInitial = user?.display_name?.[0]?.toUpperCase() || "U";
@@ -85,8 +80,8 @@ export default function AppLayout({ onOpenPalette }) {
           >
             <Search className="w-3.5 h-3.5 flex-shrink-0" />
             <span className="flex-1 text-left">Search…</span>
-            <kbd className="text-[10px] bg-muted border border-border rounded px-1 py-0.5 leading-none font-mono">
-              ⌘K
+            <kbd className="text-[10px] font-semibold bg-muted border border-border rounded px-1 py-0.5 leading-none font-mono">
+              ⌘ + K
             </kbd>
           </button>
         </div>

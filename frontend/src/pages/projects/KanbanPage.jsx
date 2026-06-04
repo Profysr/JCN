@@ -27,6 +27,7 @@ import { Plus, ArrowLeft, Download, Settings2, Users, Lock, LayoutGrid, List, Za
 import CalendarView from "@/components/tasks/CalendarView";
 import GanttView from "@/components/tasks/GanttView";
 import { cn } from "@/lib/utils";
+import { APP_COLORS } from "@/lib/constants";
 import { useBulkUpdateTasks } from "@/hooks/useBulkActions";
 import api from "@/lib/api";
 
@@ -40,7 +41,7 @@ const VIEW_OPTIONS = [
   { id: "timeline", icon: GanttChartSquare, label: "Timeline" },
 ];
 
-const COLUMN_COLORS = ["#94a3b8","#6366f1","#8b5cf6","#ec4899","#f59e0b","#22c55e","#3b82f6"];
+const COLUMN_COLORS = ["#94a3b8", ...APP_COLORS];
 
 function AddColumnButton({ workspaceSlug, projectId }) {
   const [adding, setAdding] = useState(false);
@@ -126,6 +127,7 @@ export default function KanbanPage() {
     const param = searchParams.get("task") || null;
     setSelectedTaskId(param);
   }, [searchParams]);
+
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [activeSprint, setActiveSprint] = useState(() => sprints.find(s => s.status === "active") || null);
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -228,18 +230,24 @@ export default function KanbanPage() {
             </button>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="font-bold text-base leading-tight">{project?.name}</h1>
+                <h1 className="font-bold text-base leading-tight">
+                  {project?.name}
+                </h1>
                 {project?.is_private && (
                   <Tooltip content="Private project">
                     <Lock className="w-3.5 h-3.5 text-amber-500" />
                   </Tooltip>
                 )}
                 {perms.isLoaded && (
-                  <Badge variant="muted" size="sm" className="capitalize">{perms.role}</Badge>
+                  <Badge variant="muted" size="sm" className="capitalize">
+                    {perms.role}
+                  </Badge>
                 )}
               </div>
               {project?.description && (
-                <p className="text-xs text-muted-foreground leading-tight mt-0.5">{project.description}</p>
+                <p className="text-xs text-muted-foreground leading-tight mt-0.5">
+                  {project.description}
+                </p>
               )}
             </div>
           </div>
@@ -248,7 +256,9 @@ export default function KanbanPage() {
             <div className="flex items-center gap-0.5 bg-muted/60 rounded-lg p-0.5 mr-1">
               <Tooltip content="Wiki">
                 <button
-                  onClick={() => navigate(`/w/${workspaceSlug}/projects/${projectId}/wiki`)}
+                  onClick={() =>
+                    navigate(`/w/${workspaceSlug}/projects/${projectId}/wiki`)
+                  }
                   className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-background transition-colors active:scale-[0.97]"
                 >
                   <BookOpen className="w-4 h-4" />
@@ -256,7 +266,9 @@ export default function KanbanPage() {
               </Tooltip>
               <Tooltip content="Forms">
                 <button
-                  onClick={() => navigate(`/w/${workspaceSlug}/projects/${projectId}/forms`)}
+                  onClick={() =>
+                    navigate(`/w/${workspaceSlug}/projects/${projectId}/forms`)
+                  }
                   className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-background transition-colors active:scale-[0.97]"
                 >
                   <FormInput className="w-4 h-4" />
@@ -264,7 +276,11 @@ export default function KanbanPage() {
               </Tooltip>
               <Tooltip content="Automations">
                 <button
-                  onClick={() => navigate(`/w/${workspaceSlug}/projects/${projectId}/automations`)}
+                  onClick={() =>
+                    navigate(
+                      `/w/${workspaceSlug}/projects/${projectId}/automations`,
+                    )
+                  }
                   className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-background transition-colors active:scale-[0.97]"
                 >
                   <Zap className="w-4 h-4" />
@@ -302,7 +318,15 @@ export default function KanbanPage() {
             </Tooltip>
 
             {perms.canEdit && (
-              <Button size="sm" onClick={() => setCreateModal({ open: true, statusId: project?.statuses?.[0]?.id })}>
+              <Button
+                size="sm"
+                onClick={() =>
+                  setCreateModal({
+                    open: true,
+                    statusId: project?.statuses?.[0]?.id,
+                  })
+                }
+              >
                 <Plus className="w-3.5 h-3.5 mr-1.5" /> Add Task
               </Button>
             )}
@@ -311,27 +335,6 @@ export default function KanbanPage() {
 
         {/* View toggle + filter bar — single row */}
         <div className="flex items-center gap-2 px-5 border-b bg-background flex-shrink-0 min-h-[46px]">
-          {/* View selector */}
-          <div className="flex items-center bg-muted rounded-lg p-0.5 gap-0.5 flex-shrink-0">
-            {VIEW_OPTIONS.map(({ id, icon: Icon, label }) => (
-              <button
-                key={id}
-                onClick={() => setView(id)}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all",
-                  view === id
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">{label}</span>
-              </button>
-            ))}
-          </div>
-
-          <div className="w-px h-4 bg-border/60 flex-shrink-0" />
-
           {/* Filter controls */}
           <FilterBar
             filters={filters}
@@ -343,6 +346,27 @@ export default function KanbanPage() {
             onDeleteView={(id) => deleteView.mutate(id)}
             inline
           />
+
+          <div className="w-px h-4 bg-border/60 flex-shrink-0" />
+
+          {/* View selector */}
+          <div className="flex items-center bg-muted rounded-lg p-0.5 gap-0.5 flex-shrink-0">
+            {VIEW_OPTIONS.map(({ id, icon: Icon, label }) => (
+              <button
+                key={id}
+                onClick={() => setView(id)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all",
+                  view === id
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">{label}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Board */}
@@ -350,16 +374,29 @@ export default function KanbanPage() {
           <div className="flex-1 overflow-x-auto p-6">
             <DragDropContext onDragEnd={handleDragEnd}>
               <div className="flex gap-5 h-full items-start">
-                {project?.statuses?.map(col => (
-                  <KanbanColumn key={col.id} column={col} tasks={tasksByStatus(col.id)}
-                    onAddTask={statusId => setCreateModal({ open: true, statusId })}
-                    onTaskClick={task => openTask(task.id)} selectedTaskId={selectedTaskId}
-                    selectedIds={selectedIds} onToggleSelect={toggleSelect}
-                    workspaceSlug={workspaceSlug} projectId={projectId} canEdit={perms.canEdit} />
+                {project?.statuses?.map((col) => (
+                  <KanbanColumn
+                    key={col.id}
+                    column={col}
+                    tasks={tasksByStatus(col.id)}
+                    onAddTask={(statusId) =>
+                      setCreateModal({ open: true, statusId })
+                    }
+                    onTaskClick={(task) => openTask(task.id)}
+                    selectedTaskId={selectedTaskId}
+                    selectedIds={selectedIds}
+                    onToggleSelect={toggleSelect}
+                    workspaceSlug={workspaceSlug}
+                    projectId={projectId}
+                    canEdit={perms.canEdit}
+                  />
                 ))}
                 {/* Add column button */}
                 {perms.canEdit && (
-                  <AddColumnButton workspaceSlug={workspaceSlug} projectId={projectId} />
+                  <AddColumnButton
+                    workspaceSlug={workspaceSlug}
+                    projectId={projectId}
+                  />
                 )}
               </div>
             </DragDropContext>
@@ -372,11 +409,9 @@ export default function KanbanPage() {
             statuses={project?.statuses || []}
             members={members}
             onTaskClick={(id) => openTask(id)}
-            onUpdateTask={(data) => updateTask.mutate(data)}
             selectedTaskId={selectedTaskId}
             selectedIds={selectedIds}
             onToggleSelect={toggleSelect}
-            canEdit={perms.canEdit}
           />
         )}
 
@@ -386,12 +421,22 @@ export default function KanbanPage() {
             <div className="flex-1 overflow-x-auto p-6">
               <DragDropContext onDragEnd={handleDragEnd}>
                 <div className="flex gap-5 h-full">
-                  {project?.statuses?.map(col => (
-                    <KanbanColumn key={col.id} column={col} tasks={tasksByStatus(col.id)}
-                      onAddTask={statusId => setCreateModal({ open: true, statusId })}
-                      onTaskClick={task => openTask(task.id)} selectedTaskId={selectedTaskId}
-                      selectedIds={selectedIds} onToggleSelect={toggleSelect}
-                      workspaceSlug={workspaceSlug} projectId={projectId} canEdit={perms.canEdit} />
+                  {project?.statuses?.map((col) => (
+                    <KanbanColumn
+                      key={col.id}
+                      column={col}
+                      tasks={tasksByStatus(col.id)}
+                      onAddTask={(statusId) =>
+                        setCreateModal({ open: true, statusId })
+                      }
+                      onTaskClick={(task) => openTask(task.id)}
+                      selectedTaskId={selectedTaskId}
+                      selectedIds={selectedIds}
+                      onToggleSelect={toggleSelect}
+                      workspaceSlug={workspaceSlug}
+                      projectId={projectId}
+                      canEdit={perms.canEdit}
+                    />
                   ))}
                 </div>
               </DragDropContext>
@@ -399,10 +444,15 @@ export default function KanbanPage() {
             {/* Backlog — tasks not in sprint */}
             {backlogTasks.length > 0 && (
               <div className="border-t px-6 py-3 flex-shrink-0 max-h-52 overflow-y-auto">
-                <p className="text-xs font-medium text-muted-foreground mb-2">Backlog ({backlogTasks.length})</p>
+                <p className="text-xs font-medium text-muted-foreground mb-2">
+                  Backlog ({backlogTasks.length})
+                </p>
                 <div className="space-y-1">
-                  {backlogTasks.map(task => (
-                    <div key={task.id} className="flex items-center gap-3 text-sm py-1 px-2 rounded hover:bg-accent group">
+                  {backlogTasks.map((task) => (
+                    <div
+                      key={task.id}
+                      className="flex items-center gap-3 text-sm py-1 px-2 rounded hover:bg-accent group"
+                    >
                       <span className="flex-1 truncate">{task.title}</span>
                       {activeSprint && (
                         <button
@@ -426,7 +476,9 @@ export default function KanbanPage() {
             tasks={filteredTasks}
             statuses={project?.statuses || []}
             onTaskClick={openTask}
-            onCreateTask={(date) => setCreateModal({ open: true, statusId: null, date })}
+            onCreateTask={(date) =>
+              setCreateModal({ open: true, statusId: null, date })
+            }
             workspaceSlug={workspaceSlug}
             projectId={projectId}
             canEdit={perms.canEdit}
@@ -463,8 +515,17 @@ export default function KanbanPage() {
         count={selectedIds.size}
         statuses={project?.statuses || []}
         members={members}
-        onUpdate={(updates) => bulkUpdate.mutate({ task_ids: [...selectedIds], action: "update", updates })}
-        onDelete={() => { bulkUpdate.mutate({ task_ids: [...selectedIds], action: "delete" }); setSelectedIds(new Set()); }}
+        onUpdate={(updates) =>
+          bulkUpdate.mutate({
+            task_ids: [...selectedIds],
+            action: "update",
+            updates,
+          })
+        }
+        onDelete={() => {
+          bulkUpdate.mutate({ task_ids: [...selectedIds], action: "delete" });
+          setSelectedIds(new Set());
+        }}
         onClear={() => setSelectedIds(new Set())}
       />
 
@@ -483,7 +544,9 @@ export default function KanbanPage() {
 
       <CreateTaskModal
         open={createModal.open}
-        onClose={() => setCreateModal({ open: false, statusId: null, date: null })}
+        onClose={() =>
+          setCreateModal({ open: false, statusId: null, date: null })
+        }
         workspaceSlug={workspaceSlug}
         projectId={projectId}
         defaultStatusId={createModal.statusId}
@@ -508,7 +571,6 @@ export default function KanbanPage() {
         project={project}
         canAdmin={perms.canAdmin}
       />
-
     </div>
   );
 }

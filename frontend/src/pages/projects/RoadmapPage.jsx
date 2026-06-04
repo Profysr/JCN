@@ -4,17 +4,21 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { useUpdateSprint } from "@/hooks/useSprints";
 import { cn } from "@/lib/utils";
+import { getSprintStatus } from "@/lib/constants";
 
-// ── Layout constants ──────────────────────────────────────────────────────────
-const LEFT_W        = 220;   // project + sprint name column
-const SPRINT_H      = 36;    // height of each sprint bar row
-const PRJ_HDR_H     = 28;    // project name header row
-const HDR_H         = 48;    // date header (year row + month row)
-const PX_PER_DAY    = 14;    // default: month-zoom
-const EDGE_ZONE     = 60;    // px from edge that triggers auto-scroll
-const MAX_SPEED     = 12;    // max auto-scroll px/frame
+// ── Constants ─────────────────────────────────────────────────────────────────
+const LEFT_W         = 220;
+const SPRINT_H       = 40;
+const PRJ_HDR_H      = 30;
+const HDR_H          = 52;
+const EDGE_ZONE      = 60;
+const MAX_SPEED      = 12;
+const DRAG_THRESHOLD = 4;
 
-const MONTHS  = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+// Zoom levels — Day omitted: sprint-level view is too wide at 44px/day
+const ZOOM_PX = { week: 20, month: 10, quarter: 4 };
+
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const COLORS  = ["#6366f1","#ec4899","#f59e0b","#22c55e","#3b82f6","#8b5cf6","#14b8a6","#ef4444"];
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
@@ -33,25 +37,75 @@ function addDays(d, n) {
   const r = new Date(d); r.setDate(r.getDate() + n); return r;
 }
 
-function computeRange(allSprints) {
-  const dates = allSprints.flatMap(s => [parseDate(s.start_date), parseDate(s.end_date)]).filter(Boolean);
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  if (dates.length === 0) return { start: addDays(today, -30), end: addDays(today, 120) };
+function computeRange(sprints) {
+  const dates = sprints.flatMap(s => [parseDate(s.start_date), parseDate(s.end_date)]).filter(Boolean);
+  const today = new Date(); today.setHours(0,0,0,0);
+  if (!dates.length) return { start: addDays(today, -30), end: addDays(today, 120) };
   const min = new Date(Math.min(...dates.map(d => d.getTime())));
   const max = new Date(Math.max(...dates.map(d => d.getTime())));
   return { start: addDays(min, -14), end: addDays(max, 90) };
 }
 
-function buildHeader(rangeStart, rangeEnd, pxPerDay) {
+function buildHeader(rangeStart, rangeEnd, pxPerDay, zoom) {
   const total = daysBetween(rangeStart, rangeEnd);
+  const now   = new Date();
   const top = [], bottom = [];
+
+  if (zoom === "week") {
+    // top: months  bottom: week-start dates
+    let m = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), 1);
+    while (m <= rangeEnd) {
+      const next = new Date(m.getFullYear(), m.getMonth() + 1, 1);
+      const sx = Math.max(0, daysBetween(rangeStart, m)) * pxPerDay;
+      const ex = Math.min(total, daysBetween(rangeStart, next)) * pxPerDay;
+      if (ex > sx) top.push({ label: `${MONTHS[m.getMonth()]} ${m.getFullYear()}`, x: sx, w: ex - sx });
+      m = next;
+    }
+    let ws = new Date(rangeStart); ws.setDate(ws.getDate() - ws.getDay());
+    const nowM = now.getMonth(), nowY = now.getFullYear();
+    while (ws <= rangeEnd) {
+      const x      = Math.max(0, daysBetween(rangeStart, ws)) * pxPerDay;
+      const ref    = ws < rangeStart ? rangeStart : ws;
+      const wsEnd  = addDays(ws, 6);
+      const isCur  = (ref.getMonth() === nowM && ref.getFullYear() === nowY)
+                  || (wsEnd.getMonth() === nowM && wsEnd.getFullYear() === nowY);
+      bottom.push({ label: `${MONTHS[ref.getMonth()]} ${ref.getDate()}`, x, w: 7 * pxPerDay, current: isCur, monthBoundary: ref.getDate() <= 7 });
+      ws = addDays(ws, 7);
+    }
+    return { top, bottom };
+  }
+
+  const nowM = now.getMonth(), nowY = now.getFullYear();
+
+  if (zoom === "quarter") {
+    let yearStart = -1, yearX = 0;
+    let q = new Date(rangeStart.getFullYear(), Math.floor(rangeStart.getMonth() / 3) * 3, 1);
+    while (q <= rangeEnd) {
+      const next  = new Date(q.getFullYear(), q.getMonth() + 3, 1);
+      const sx    = Math.max(0, daysBetween(rangeStart, q)) * pxPerDay;
+      const ex    = Math.min(total, daysBetween(rangeStart, next)) * pxPerDay;
+      const qEnd  = addDays(next, -1);
+      const isCur = q.getFullYear() === nowY && q.getMonth() <= nowM && qEnd.getMonth() >= nowM;
+      bottom.push({ label: `Q${Math.floor(q.getMonth()/3)+1}`, x: sx, w: ex - sx, current: isCur, monthBoundary: true });
+      if (q.getFullYear() !== yearStart) {
+        if (yearStart !== -1) top.push({ label: String(yearStart), x: yearX, w: sx - yearX });
+        yearStart = q.getFullYear(); yearX = sx;
+      }
+      q = next;
+    }
+    top.push({ label: String(yearStart), x: yearX, w: total * pxPerDay - yearX });
+    return { top, bottom };
+  }
+
+  // month (default)
   let yearStart = -1, yearX = 0;
   let m = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), 1);
   while (m <= rangeEnd) {
-    const next = new Date(m.getFullYear(), m.getMonth() + 1, 1);
-    const sx = Math.max(0, daysBetween(rangeStart, m)) * pxPerDay;
-    const w  = daysBetween(m, next) * pxPerDay;
-    bottom.push({ label: MONTHS[m.getMonth()], x: sx, w });
+    const next  = new Date(m.getFullYear(), m.getMonth() + 1, 1);
+    const sx    = Math.max(0, daysBetween(rangeStart, m)) * pxPerDay;
+    const w     = daysBetween(m, next) * pxPerDay;
+    const isCur = m.getMonth() === nowM && m.getFullYear() === nowY;
+    bottom.push({ label: MONTHS[m.getMonth()], x: sx, w, current: isCur, monthBoundary: true });
     if (m.getFullYear() !== yearStart) {
       if (yearStart !== -1) top.push({ label: String(yearStart), x: yearX, w: sx - yearX });
       yearStart = m.getFullYear(); yearX = sx;
@@ -62,7 +116,7 @@ function buildHeader(rangeStart, rangeEnd, pxPerDay) {
   return { top, bottom };
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+// ── Page ──────────────────────────────────────────────────────────────────────
 export default function RoadmapPage() {
   const { workspaceSlug } = useParams();
 
@@ -72,7 +126,6 @@ export default function RoadmapPage() {
     enabled: !!workspaceSlug,
   });
 
-  // Fetch sprints for every project in parallel
   const sprintResults = useQueries({
     queries: projects.map(p => ({
       queryKey: ["sprints", workspaceSlug, p.id],
@@ -81,7 +134,6 @@ export default function RoadmapPage() {
     })),
   });
 
-  // Map project → its sprints
   const sprintsByProject = useMemo(() =>
     projects.reduce((acc, p, i) => {
       acc[p.id] = (sprintResults[i]?.data || []).filter(s => s.start_date && s.end_date);
@@ -91,70 +143,72 @@ export default function RoadmapPage() {
 
   const allSprints = useMemo(() => Object.values(sprintsByProject).flat(), [sprintsByProject]);
 
-  // ── Shared timeline state ──────────────────────────────────────────────────
+  const [zoom, setZoom] = useState("week");
   const [dragPreview, setDragPreview] = useState(null);
-  // { sprintId, projectId, type: "move"|"resize", deltaDays }
 
-  const { start: baseRangeStart, end: baseRangeEnd } = useMemo(() => computeRange(allSprints), [allSprints]);
+  const pxPerDay = ZOOM_PX[zoom];
 
-  // Extend range live when dragging past the end
+  const { start: baseStart, end: baseEnd } = useMemo(() => computeRange(allSprints), [allSprints]);
+
+  // Extend canvas when drag preview goes past the current end
   const rangeEnd = useMemo(() => {
-    if (!dragPreview) return baseRangeEnd;
-    const sprint = allSprints.find(s => s.id === dragPreview.sprintId);
-    if (!sprint) return baseRangeEnd;
-    const ref = parseDate(dragPreview.type === "resize" ? (sprint.end_date || sprint.start_date) : (sprint.end_date || sprint.start_date));
-    if (!ref) return baseRangeEnd;
+    if (!dragPreview) return baseEnd;
+    const s = allSprints.find(sp => sp.id === dragPreview.sprintId);
+    if (!s) return baseEnd;
+    const ref = parseDate(s.end_date || s.start_date);
+    if (!ref) return baseEnd;
     const projected = addDays(ref, dragPreview.deltaDays);
-    return projected > baseRangeEnd ? addDays(projected, 90) : baseRangeEnd;
-  }, [baseRangeEnd, dragPreview, allSprints]);
+    return projected > baseEnd ? addDays(projected, 90) : baseEnd;
+  }, [baseEnd, dragPreview, allSprints]);
 
-  const rangeStart = baseRangeStart;
+  const rangeStart = baseStart;
   const totalDays  = daysBetween(rangeStart, rangeEnd);
-  const totalWidth = totalDays * PX_PER_DAY;
+  const totalWidth = totalDays * pxPerDay;
+  const header     = useMemo(() => buildHeader(rangeStart, rangeEnd, pxPerDay, zoom), [rangeStart, rangeEnd, pxPerDay, zoom]);
 
-  const header = useMemo(() => buildHeader(rangeStart, rangeEnd, PX_PER_DAY), [rangeStart, rangeEnd]);
-
-  // Scroll container — shared for header + all rows
   const rightRef    = useRef(null);
   const leftBodyRef = useRef(null);
-  const syncingRef  = useRef(false);
+  const syncRef     = useRef(false);
 
   const onRightScroll = () => {
-    if (syncingRef.current || !leftBodyRef.current) return;
-    syncingRef.current = true;
+    if (syncRef.current || !leftBodyRef.current) return;
+    syncRef.current = true;
     leftBodyRef.current.scrollTop = rightRef.current.scrollTop;
-    syncingRef.current = false;
+    syncRef.current = false;
   };
   const onLeftScroll = () => {
-    if (syncingRef.current || !rightRef.current) return;
-    syncingRef.current = true;
+    if (syncRef.current || !rightRef.current) return;
+    syncRef.current = true;
     rightRef.current.scrollTop = leftBodyRef.current.scrollTop;
-    syncingRef.current = false;
+    syncRef.current = false;
   };
 
-  // Scroll to today on mount
-  useEffect(() => {
+  const scrollToToday = useCallback(() => {
     if (!rightRef.current) return;
     const today = new Date(); today.setHours(0,0,0,0);
-    const x = daysBetween(rangeStart, today) * PX_PER_DAY;
-    rightRef.current.scrollLeft = Math.max(0, x - 200);
-  }, [rangeStart]);
+    const x = daysBetween(rangeStart, today) * pxPerDay;
+    rightRef.current.scrollLeft = Math.max(0, x - 260);
+  }, [rangeStart, pxPerDay]);
 
-  // Today line
+  // On mount: scroll to today once
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { scrollToToday(); }, []);
+
+  // On zoom change: re-center on today so the new scale makes sense
+  useEffect(() => { scrollToToday(); }, [zoom]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const today    = useMemo(() => { const d = new Date(); d.setHours(0,0,0,0); return d; }, []);
-  const todayX   = daysBetween(rangeStart, today) * PX_PER_DAY;
+  const todayX   = daysBetween(rangeStart, today) * pxPerDay;
   const todayVis = todayX >= 0 && todayX <= totalWidth;
 
-  // Compute total left-panel + right-panel height for each project
   const projectLayout = useMemo(() =>
     projects.map(p => {
       const sprints = sprintsByProject[p.id] || [];
-      const rows    = sprints.length;
-      return { project: p, sprints, totalH: PRJ_HDR_H + rows * SPRINT_H + 8 };
+      return { project: p, sprints, totalH: PRJ_HDR_H + sprints.length * SPRINT_H };
     }),
   [projects, sprintsByProject]);
 
-  const totalBodyH = projectLayout.reduce((sum, pl) => sum + pl.totalH, 0);
+  const totalBodyH = projectLayout.reduce((s, pl) => s + pl.totalH + 8, 0);
 
   if (projects.length === 0) {
     return (
@@ -166,131 +220,173 @@ export default function RoadmapPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Page header */}
-      <div className="px-6 py-3.5 border-b flex-shrink-0 bg-card/60 flex items-center justify-between">
-        <div>
+      {/* Header */}
+      <div className="px-6 py-3 border-b flex-shrink-0 bg-card/60 flex items-center gap-4">
+        <div className="flex-1">
           <h1 className="font-bold text-base">Roadmap</h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Drag sprint bars to move · drag right edge to resize
+            Sprint timeline across all projects · drag to move · drag right edge to extend
           </p>
         </div>
+
+        {/* Zoom switcher */}
+        <div className="flex items-center bg-muted rounded-lg p-0.5">
+          {Object.keys(ZOOM_PX).map(z => (
+            <button
+              key={z}
+              onClick={() => setZoom(z)}
+              className={cn(
+                "px-2.5 py-1 rounded-md capitalize text-xs font-medium transition-colors",
+                zoom === z ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {z}
+            </button>
+          ))}
+        </div>
+
+        {/* Today */}
+        <button
+          onClick={scrollToToday}
+          className="px-2.5 py-1 text-xs font-medium rounded border border-border hover:bg-accent transition-colors"
+        >
+          Today
+        </button>
       </div>
 
-      {/* Body */}
       <div className="flex-1 min-h-0 flex overflow-hidden">
 
-        {/* ── Left panel ── */}
-        <div className="flex-shrink-0 flex flex-col border-r border-border bg-card z-10" style={{ width: LEFT_W }}>
-          {/* Header spacer */}
+        {/* Left panel */}
+        <div className="flex-shrink-0 flex flex-col border-r border-border bg-card z-10 shadow-sm" style={{ width: LEFT_W }}>
           <div className="flex-shrink-0 border-b border-border bg-muted/40" style={{ height: HDR_H }} />
-          {/* Project + sprint labels */}
           <div ref={leftBodyRef} className="flex-1 overflow-y-auto overflow-x-hidden" onScroll={onLeftScroll}>
             <div className="relative" style={{ height: totalBodyH }}>
-              {projectLayout.reduce((acc, pl, pi) => {
-                const yOffset = projectLayout.slice(0, pi).reduce((s, l) => s + l.totalH, 0);
-                acc.push(
-                  // Project name
-                  <div key={`p-${pl.project.id}`}
-                    className="absolute flex items-center px-3 font-semibold text-xs text-muted-foreground uppercase tracking-wide border-b border-border bg-muted/20"
-                    style={{ top: yOffset, height: PRJ_HDR_H, width: LEFT_W - 1 }}>
-                    {pl.project.name}
-                  </div>
-                );
-                pl.sprints.forEach((s, si) => {
-                  const y = yOffset + PRJ_HDR_H + si * SPRINT_H;
-                  acc.push(
-                    <div key={`s-${s.id}`}
-                      className="absolute flex items-center px-3 gap-2 border-b border-border/50 hover:bg-accent/30 cursor-pointer text-xs"
-                      style={{ top: y, height: SPRINT_H, width: LEFT_W - 1 }}>
-                      <span className="w-2 h-2 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: COLORS[(pi + si) % COLORS.length] }} />
-                      <span className="truncate text-foreground">{s.name}</span>
-                      <span className={cn("flex-shrink-0 text-[10px] font-medium px-1 py-0.5 rounded",
-                        s.status === "active" ? "bg-emerald-500/15 text-emerald-500" :
-                        s.status === "completed" ? "bg-muted text-muted-foreground" :
-                        "bg-blue-500/15 text-blue-500")}>
-                        {s.status}
-                      </span>
+              {(() => {
+                let y = 0;
+                return projectLayout.map(({ project, sprints, totalH }) => {
+                  const yStart = y;
+                  y += totalH + 8;
+                  return (
+                    <div key={project.id}>
+                      {/* Project name row */}
+                      <div
+                        className="absolute flex items-center px-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider bg-muted/30 border-b border-border"
+                        style={{ top: yStart, height: PRJ_HDR_H, width: LEFT_W - 1 }}
+                      >
+                        {project.name}
+                      </div>
+                      {/* Sprint label rows */}
+                      {sprints.map((s, si) => (
+                        <div key={s.id}
+                          className="absolute flex items-center gap-2 px-3 border-b border-border/40 text-xs"
+                          style={{ top: yStart + PRJ_HDR_H + si * SPRINT_H, height: SPRINT_H, width: LEFT_W - 1 }}
+                        >
+                          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[(sprints.indexOf(s)) % COLORS.length] }} />
+                          <span className="truncate flex-1 text-foreground">{s.name}</span>
+                          <StatusChip status={s.status} />
+                        </div>
+                      ))}
                     </div>
                   );
                 });
-                return acc;
-              }, [])}
+              })()}
             </div>
           </div>
         </div>
 
-        {/* ── Right panel — single scrollable container ── */}
+        {/* Right: unified scroll container */}
         <div
           ref={rightRef}
           className="flex-1 overflow-auto"
           onScroll={onRightScroll}
-          style={{ cursor: dragPreview ? (dragPreview.type === "resize" ? "ew-resize" : "grabbing") : "default" }}
         >
           {/* Sticky date header */}
-          <div className="sticky top-0 z-20 bg-muted/40 border-b border-border" style={{ height: HDR_H, width: totalWidth }}>
-            {header.top.map((seg, i) => (
-              <div key={i}
-                className="absolute top-0 flex items-center px-2 border-r border-border/40 text-[11px] font-semibold text-muted-foreground overflow-hidden"
-                style={{ left: seg.x, width: seg.w, height: HDR_H / 2 }}>
-                {seg.label}
-              </div>
-            ))}
-            {header.bottom.map((seg, i) => (
-              <div key={i}
-                className="absolute bottom-0 flex items-center justify-center border-r border-border/40 text-[11px] text-muted-foreground font-medium"
-                style={{ left: seg.x, width: seg.w, height: HDR_H / 2 }}>
-                {seg.label}
-              </div>
-            ))}
+          <div
+            className="sticky top-0 z-20 border-b border-border bg-muted/50 backdrop-blur-sm"
+            style={{ height: HDR_H, width: totalWidth, minWidth: "100%" }}
+          >
+            <div className="relative h-full" style={{ width: totalWidth }}>
+              {header.top.map((seg, i) => (
+                <div key={i}
+                  className="absolute top-0 flex items-center px-2 border-r border-border/40 text-[11px] font-bold text-muted-foreground overflow-hidden"
+                  style={{ left: seg.x, width: seg.w, height: HDR_H / 2 }}>
+                  {seg.label}
+                </div>
+              ))}
+              {header.bottom.map((seg, i) => (
+                <div key={i}
+                  className={cn(
+                    "absolute bottom-0 flex items-center justify-center border-r border-border/30 text-[11px]",
+                    seg.current ? "text-primary font-semibold" : "text-muted-foreground",
+                  )}
+                  style={{ left: seg.x, width: seg.w, height: HDR_H / 2 }}>
+                  {seg.label}
+                </div>
+              ))}
+            </div>
           </div>
 
-          {/* Bars area */}
-          <div className="relative" style={{ width: totalWidth, height: totalBodyH }}>
+          {/* Bars canvas */}
+          <div className="relative" style={{ width: totalWidth, height: totalBodyH, minWidth: "100%" }}>
+            {/* Current-period shading */}
+            {header.bottom.filter(seg => seg.current).map((seg, i) => (
+              <div
+                key={`cur-${i}`}
+                className="absolute top-0 bottom-0 bg-primary/10 pointer-events-none"
+                style={{ left: seg.x, width: seg.w }}
+              />
+            ))}
 
-            {/* Vertical grid lines */}
+            {/* Vertical grid lines — month boundaries stronger than inner lines */}
             {header.bottom.map((seg, i) => (
-              <div key={i} className="absolute top-0 bottom-0 border-r border-border/20" style={{ left: seg.x, width: seg.w }} />
+              <div
+                key={i}
+                className={seg.monthBoundary
+                  ? "absolute top-0 bottom-0 border-r border-border/70"
+                  : "absolute top-0 bottom-0 border-r border-border/35"}
+                style={{ left: seg.x }}
+              />
             ))}
 
             {/* Today line */}
             {todayVis && (
-              <div className="absolute top-0 bottom-0 w-px bg-red-400/60 z-10 pointer-events-none" style={{ left: todayX }}>
+              <div className="absolute top-0 bottom-0 w-px bg-red-400/70 z-10 pointer-events-none" style={{ left: todayX }}>
                 <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-red-400" />
               </div>
             )}
 
-            {/* Project group bands + sprint bars */}
-            {projectLayout.reduce((acc, pl, pi) => {
-              const yOffset = projectLayout.slice(0, pi).reduce((s, l) => s + l.totalH, 0);
-
-              // Project header band
-              acc.push(
-                <div key={`band-${pl.project.id}`}
-                  className="absolute left-0 right-0 bg-muted/15 border-b border-border"
-                  style={{ top: yOffset, height: PRJ_HDR_H }} />
-              );
-
-              // Sprint bars
-              pl.sprints.forEach((sprint, si) => {
-                const y = yOffset + PRJ_HDR_H + si * SPRINT_H;
-                acc.push(
-                  <SprintBar
-                    key={sprint.id}
-                    sprint={sprint}
-                    y={y}
-                    rangeStart={rangeStart}
-                    color={COLORS[(pi + si) % COLORS.length]}
-                    dragPreview={dragPreview?.sprintId === sprint.id ? dragPreview : null}
-                    onDragStart={(type) => startSprintDrag(sprint, pl.project.id, type, rightRef, setDragPreview)}
-                    workspaceSlug={workspaceSlug}
-                    projectId={pl.project.id}
-                  />
+            {/* Sprint bars */}
+            {(() => {
+              let y = 0;
+              return projectLayout.map(({ project, sprints, totalH }, pi) => {
+                const yStart = y;
+                y += totalH + 8;
+                return (
+                  <div key={project.id}>
+                    {/* Project band */}
+                    <div
+                      className="absolute left-0 bg-muted/10 border-b border-border/30"
+                      style={{ top: yStart, height: PRJ_HDR_H, width: totalWidth }}
+                    />
+                    {sprints.map((sprint, si) => (
+                      <SprintBar
+                        key={sprint.id}
+                        sprint={sprint}
+                        y={yStart + PRJ_HDR_H + si * SPRINT_H}
+                        rangeStart={rangeStart}
+                        pxPerDay={pxPerDay}
+                        color={COLORS[si % COLORS.length]}
+                        dragPreview={dragPreview?.sprintId === sprint.id ? dragPreview : null}
+                        setDragPreview={setDragPreview}
+                        rightRef={rightRef}
+                        workspaceSlug={workspaceSlug}
+                        projectId={project.id}
+                      />
+                    ))}
+                  </div>
                 );
               });
-
-              return acc;
-            }, [])}
+            })()}
           </div>
         </div>
       </div>
@@ -298,176 +394,220 @@ export default function RoadmapPage() {
   );
 }
 
-// ── Sprint drag starter (lives outside component to avoid re-creating) ────────
-function startSprintDrag(sprint, projectId, type, rightRef, setDragPreview) {
-  // Returns a mousedown handler bound to this sprint
-  return (e) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    e.stopPropagation();
-
-    const dragState = {
-      sprintId:  sprint.id,
-      projectId,
-      type,
-      startX:    e.clientX,
-      origStart: sprint.start_date,
-      origEnd:   sprint.end_date,
-      lastClientX: e.clientX,
-    };
-
-    const rafRef = { current: null };
-
-    const scrollLoop = () => {
-      if (!rightRef.current) return;
-      const rect      = rightRef.current.getBoundingClientRect();
-      const mouseX    = dragState.lastClientX;
-      const fromRight = rect.right - mouseX;
-      const fromLeft  = mouseX - rect.left;
-
-      let scrollDelta = 0;
-      if (fromRight < EDGE_ZONE) scrollDelta =  Math.round((1 - fromRight / EDGE_ZONE) * MAX_SPEED);
-      if (fromLeft  < EDGE_ZONE) scrollDelta = -Math.round((1 - fromLeft  / EDGE_ZONE) * MAX_SPEED);
-
-      if (scrollDelta !== 0) {
-        rightRef.current.scrollLeft += scrollDelta;
-        dragState.startX -= scrollDelta;
-      }
-
-      const dx        = dragState.lastClientX - dragState.startX;
-      const deltaDays = Math.round(dx / PX_PER_DAY);
-      setDragPreview({ sprintId: sprint.id, projectId, type, deltaDays });
-
-      rafRef.current = requestAnimationFrame(scrollLoop);
-    };
-
-    rafRef.current = requestAnimationFrame(scrollLoop);
-
-    const onMove = (ev) => { dragState.lastClientX = ev.clientX; };
-
-    const onUp = (ev) => {
-      cancelAnimationFrame(rafRef.current);
-      setDragPreview(null);
-
-      const dx        = ev.clientX - dragState.startX;
-      const deltaDays = Math.round(dx / PX_PER_DAY);
-
-      if (Math.abs(deltaDays) > 0) {
-        // Commit is handled by SprintBar via the onCommit callback
-        dragState.onCommit?.(deltaDays);
-      }
-
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup",   onUp);
-    };
-
-    dragState.onCommit = null; // will be set by SprintBar
-    window._roadmapDragState = dragState; // pass to SprintBar
-
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup",   onUp);
-  };
+// ── Status chip ───────────────────────────────────────────────────────────────
+function StatusChip({ status }) {
+  const s = getSprintStatus(status);
+  return (
+    <span className={cn("flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded border", s.badgeCls)}>
+      {s.label}
+    </span>
+  );
 }
 
 // ── SprintBar ─────────────────────────────────────────────────────────────────
-function SprintBar({ sprint, y, rangeStart, color, dragPreview, onDragStart, workspaceSlug, projectId }) {
-  const updateSprint = useUpdateSprint(workspaceSlug, projectId);
-  const rafRef       = useRef(null);
+function SprintBar({ sprint, y, rangeStart, pxPerDay, color, dragPreview, setDragPreview, rightRef, workspaceSlug, projectId }) {
+  const updateSprint  = useUpdateSprint(workspaceSlug, projectId);
+  const dragRef       = useRef(null);
+  const rafRef        = useRef(null);
+  const didDragRef    = useRef(false);
+  const [hovered, setHovered] = useState(false);
 
-  const dd    = dragPreview?.deltaDays ?? 0;
-  const dType = dragPreview?.type      ?? "move";
+  // Cleanup on unmount
+  useEffect(() => () => cancelAnimationFrame(rafRef.current), []);
 
   const startDate = parseDate(sprint.start_date);
   const endDate   = parseDate(sprint.end_date);
   if (!startDate || !endDate) return null;
 
-  const baseX = daysBetween(rangeStart, startDate) * PX_PER_DAY;
-  const baseW = Math.max(PX_PER_DAY, daysBetween(startDate, endDate) * PX_PER_DAY);
+  const baseX = daysBetween(rangeStart, startDate) * pxPerDay;
+  const baseW = Math.max(pxPerDay, daysBetween(startDate, endDate) * pxPerDay);
 
-  const x = dType === "move"   ? baseX + dd * PX_PER_DAY : baseX;
-  const w = dType === "resize" ? Math.max(PX_PER_DAY, baseW + dd * PX_PER_DAY) : baseW;
-
-  // Display dates for tooltip
-  const previewStart = dType === "move"   ? dateKey(addDays(startDate, dd)) : sprint.start_date;
-  const previewEnd   = dType === "resize" ? dateKey(addDays(endDate,   dd)) : (dType === "move" ? dateKey(addDays(endDate, dd)) : sprint.end_date);
+  // Apply drag preview
+  const dd    = dragPreview?.deltaDays ?? 0;
+  const dType = dragPreview?.type ?? "move";
+  const x = dType === "move"   ? baseX + dd * pxPerDay : baseX;
+  const w = dType === "resize" ? Math.max(pxPerDay, baseW + dd * pxPerDay) : baseW;
 
   const isDragging = !!dragPreview;
 
-  const handleMouseDown = useCallback((type) => (e) => {
+  // Live dates for tooltip
+  const previewStart = dType === "move"   ? dateKey(addDays(startDate, dd)) : sprint.start_date;
+  const previewEnd   = dType === "resize" ? dateKey(addDays(endDate,   dd)) : (dType === "move" ? dateKey(addDays(endDate, dd)) : sprint.end_date);
+
+  // Progress fill (completed tasks / total)
+  const total     = sprint.task_count      || 0;
+  const completed = sprint.completed_count || 0;
+  const pct       = total > 0 ? Math.round(completed / total * 100) : 0;
+
+  const opacity = sprint.status === "completed" ? 0.65 : sprint.status === "planning" ? 0.7 : 1;
+
+  const startDrag = useCallback((type) => (e) => {
     if (e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
 
-    const startX  = e.clientX;
-    const origStart = sprint.start_date;
-    const origEnd   = sprint.end_date;
-
-    // We handle commit locally since we have direct access to updateSprint
-    const commitFn = (deltaDays) => {
-      if (type === "move") {
-        updateSprint.mutate({
-          sprintId:   sprint.id,
-          start_date: dateKey(addDays(parseDate(origStart), deltaDays)),
-          end_date:   dateKey(addDays(parseDate(origEnd),   deltaDays)),
-        });
-      } else {
-        const newEnd = addDays(parseDate(origEnd), deltaDays);
-        if (newEnd > parseDate(origStart)) {
-          updateSprint.mutate({ sprintId: sprint.id, end_date: dateKey(newEnd) });
-        }
-      }
+    didDragRef.current = false;
+    dragRef.current = {
+      type,
+      startX:      e.clientX,
+      lastClientX: e.clientX,
+      origStart:   sprint.start_date,
+      origEnd:     sprint.end_date,
     };
 
-    // Store commit fn so the global mouseup can call it
-    if (window._roadmapDragState) window._roadmapDragState.onCommit = commitFn;
+    const loop = () => {
+      if (!dragRef.current) return;
 
-    // Trigger the parent's drag starter
-    onDragStart(type)(e);
-  }, [sprint, updateSprint, onDragStart]);
+      const dx = dragRef.current.lastClientX - dragRef.current.startX;
 
-  const opacity = sprint.status === "planning" ? 0.6 : sprint.status === "completed" ? 0.7 : 1;
+      // Only activate scroll + preview once mouse has crossed the movement threshold.
+      // Without this gate the loop fires on the initial click and auto-scrolls to
+      // the edge if the bar happens to be near the viewport boundary (jumps to "today").
+      if (Math.abs(dx) > DRAG_THRESHOLD) {
+        didDragRef.current = true;
+
+        // Edge auto-scroll
+        const rc     = rightRef.current?.getBoundingClientRect();
+        const mouseX = dragRef.current.lastClientX;
+        if (rc && rightRef.current) {
+          let vel = 0;
+          if (rc.right - mouseX < EDGE_ZONE) vel =  Math.round((1 - (rc.right - mouseX) / EDGE_ZONE) * MAX_SPEED);
+          if (mouseX - rc.left  < EDGE_ZONE) vel = -Math.round((1 - (mouseX - rc.left)  / EDGE_ZONE) * MAX_SPEED);
+          if (vel !== 0) {
+            rightRef.current.scrollLeft += vel;
+            dragRef.current.startX      -= vel;
+          }
+        }
+
+        const deltaDays = Math.round(dx / pxPerDay);
+        setDragPreview({ sprintId: sprint.id, type, deltaDays });
+      }
+
+      rafRef.current = requestAnimationFrame(loop);
+    };
+    rafRef.current = requestAnimationFrame(loop);
+
+    const onMove = (ev) => {
+      if (!dragRef.current) return;
+      dragRef.current.lastClientX = ev.clientX;
+    };
+
+    const onUp = (ev) => {
+      cancelAnimationFrame(rafRef.current);
+
+      if (didDragRef.current) {
+        const dx        = ev.clientX - dragRef.current.startX;
+        const deltaDays = Math.round(dx / pxPerDay);
+        if (deltaDays !== 0) {
+          if (type === "move") {
+            updateSprint.mutate({
+              sprintId:   sprint.id,
+              start_date: dateKey(addDays(parseDate(dragRef.current.origStart), deltaDays)),
+              end_date:   dateKey(addDays(parseDate(dragRef.current.origEnd),   deltaDays)),
+            });
+          } else {
+            const newEnd = addDays(parseDate(dragRef.current.origEnd), deltaDays);
+            if (newEnd > parseDate(dragRef.current.origStart)) {
+              updateSprint.mutate({ sprintId: sprint.id, end_date: dateKey(newEnd) });
+            }
+          }
+        }
+      }
+
+      dragRef.current = null;
+      setDragPreview(null);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup",   onUp);
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup",   onUp);
+  }, [sprint, updateSprint, setDragPreview, rightRef]);
 
   return (
     <div
-      className="absolute group"
-      style={{ top: y, height: SPRINT_H, left: Math.max(0, x), width: w }}
+      className="absolute"
+      style={{
+        top:    y,
+        height: SPRINT_H,
+        left:   Math.max(0, x),
+        width:  Math.max(pxPerDay, w),
+        // Float above the sticky left panel (z-10) while being dragged
+        zIndex: isDragging ? 50 : 1,
+      }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
-      {/* Bar */}
+      {/* ── Bar ── */}
       <div
         className={cn(
-          "absolute inset-y-2 rounded-md flex items-center overflow-hidden select-none",
-          isDragging ? "shadow-lg ring-2 ring-white/30" : "cursor-grab hover:brightness-110",
+          "absolute rounded-lg flex items-center overflow-hidden select-none",
+          isDragging ? "shadow-xl z-20" : "cursor-grab hover:brightness-[1.08]",
         )}
         style={{
-          left:            0,
-          width:           w,
+          inset:           "5px 0",
           backgroundColor: color,
           opacity,
-          // Only animate when NOT dragging (snapping back after commit)
-          transition: isDragging ? "none" : "left 120ms ease, width 120ms ease",
+          transition:      isDragging ? "none" : "box-shadow 150ms",
+          boxShadow:       hovered && !isDragging ? `0 2px 8px ${color}66` : undefined,
         }}
-        onMouseDown={handleMouseDown("move")}
+        onMouseDown={startDrag("move")}
       >
-        <span className="flex-1 truncate px-2.5 text-[11px] font-semibold text-white pointer-events-none leading-none">
+        {/* Progress fill */}
+        {pct > 0 && (
+          <div
+            className="absolute inset-0 rounded-lg"
+            style={{ width: `${pct}%`, backgroundColor: "rgba(255,255,255,0.18)", pointerEvents: "none" }}
+          />
+        )}
+
+        {/* Sprint name */}
+        <span className="relative z-10 flex-1 truncate px-2.5 text-[11px] font-semibold text-white pointer-events-none leading-none">
           {sprint.name}
         </span>
-        <span className="text-white/70 text-[10px] pr-5 flex-shrink-0 pointer-events-none">
-          {sprint.completed_count ?? 0}/{sprint.task_count ?? 0}
-        </span>
 
-        {/* Resize handle */}
+        {/* Task count */}
+        {total > 0 && (
+          <span className="relative z-10 text-white/70 text-[10px] font-medium pr-5 flex-shrink-0 pointer-events-none">
+            {completed}/{total}
+          </span>
+        )}
+
+        {/* Right-edge resize handle — always inside the bar, no independent positioning */}
         <div
-          className="absolute right-0 top-0 bottom-0 w-3.5 flex items-center justify-center gap-0.5 cursor-col-resize opacity-0 group-hover:opacity-100 transition-opacity"
-          onMouseDown={(e) => { e.stopPropagation(); handleMouseDown("resize")(e); }}
+          className={cn(
+            "absolute right-0 top-0 bottom-0 w-4 flex items-center justify-center gap-px z-20 cursor-col-resize transition-opacity",
+            hovered || isDragging ? "opacity-100" : "opacity-0",
+          )}
+          onMouseDown={(e) => { e.stopPropagation(); startDrag("resize")(e); }}
         >
-          <div className="w-px h-3.5 bg-white/60 rounded-full" />
-          <div className="w-px h-3.5 bg-white/60 rounded-full" />
+          <div className="w-px h-4 bg-white/70 rounded-full pointer-events-none" />
+          <div className="w-px h-4 bg-white/70 rounded-full pointer-events-none" />
         </div>
       </div>
 
-      {/* Live date tooltip while dragging */}
+      {/* ── Hover tooltip (only when not dragging) ── */}
+      {hovered && !isDragging && (
+        <div className="absolute left-0 bottom-full mb-2 z-30 bg-popover border border-border rounded-xl shadow-xl px-3 py-2.5 min-w-[200px] pointer-events-none">
+          <p className="text-xs font-semibold text-foreground mb-1">{sprint.name}</p>
+          <p className="text-[11px] text-muted-foreground">
+            {sprint.start_date} → {sprint.end_date}
+          </p>
+          <div className="flex items-center justify-between mt-1.5">
+            <StatusChip status={sprint.status} />
+            <span className="text-[11px] text-muted-foreground">{completed}/{total} tasks</span>
+          </div>
+          {total > 0 && (
+            <div className="mt-1.5 h-1 bg-muted rounded-full overflow-hidden">
+              <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${pct}%` }} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Drag tooltip (replaces hover tooltip while dragging) ── */}
       {isDragging && (
-        <div className="absolute -top-6 left-0 bg-foreground text-background text-[10px] font-semibold px-2 py-0.5 rounded shadow-md whitespace-nowrap z-30 pointer-events-none">
+        <div className="absolute left-0 -top-8 z-30 bg-foreground text-background text-[11px] font-semibold px-2 py-1 rounded-lg shadow-lg whitespace-nowrap pointer-events-none">
           {previewStart} → {previewEnd}
         </div>
       )}

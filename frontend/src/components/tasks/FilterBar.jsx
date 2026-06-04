@@ -2,21 +2,17 @@ import { useState, useRef, useEffect } from "react";
 import { Search, X, Bookmark, BookmarkPlus, SlidersHorizontal, ChevronDown, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/avatar";
+import { PRIORITIES, TASK_TYPES } from "@/lib/constants";
 
-const PRIORITY_OPTIONS = [
-  { value: "urgent", label: "Urgent", active: "text-red-600 bg-red-500/10 border-red-400/50",    idle: "border-border text-muted-foreground" },
-  { value: "high",   label: "High",   active: "text-orange-500 bg-orange-500/10 border-orange-400/50", idle: "border-border text-muted-foreground" },
-  { value: "medium", label: "Medium", active: "text-yellow-500 bg-yellow-500/10 border-yellow-400/50", idle: "border-border text-muted-foreground" },
-  { value: "low",    label: "Low",    active: "text-blue-500 bg-blue-500/10 border-blue-400/50",  idle: "border-border text-muted-foreground" },
-];
-
-const TASK_TYPES = [
-  { value: "task",        label: "Task" },
-  { value: "bug",         label: "Bug" },
-  { value: "feature",     label: "Feature" },
-  { value: "story",       label: "Story" },
-  { value: "improvement", label: "Improvement" },
-];
+// FilterBar needs active/idle chip classes — derive from PRIORITIES
+const PRIORITY_OPTIONS = PRIORITIES
+  .filter(p => p.value !== "no_priority")
+  .map(p => ({
+    value:  p.value,
+    label:  p.label,
+    active: p.filterActiveCls,
+    idle:   "border-border text-muted-foreground",
+  }));
 
 const DUE_OPTIONS = [
   { value: "overdue",    label: "Overdue" },

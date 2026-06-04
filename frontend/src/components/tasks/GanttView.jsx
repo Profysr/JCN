@@ -46,38 +46,64 @@ function computeRange(tasks) {
 }
 
 // ── Header builder ────────────────────────────────────────────────────────────
+// Each bottom segment carries:
+//   current        — true when this segment falls inside the current month
+//   monthBoundary  — true when this segment starts a new calendar month
+//                    (used in week/day zoom to draw a stronger separator)
 function buildHeader(rangeStart, rangeEnd, zoom, pxPerDay) {
-  const total = daysBetween(rangeStart, rangeEnd);
+  const total   = daysBetween(rangeStart, rangeEnd);
+  const now     = new Date();
+  const nowM    = now.getMonth();
+  const nowY    = now.getFullYear();
   const top = [], bottom = [];
 
   if (zoom === "day") {
-    let monthStart = 0, curMonth = -1;
+    let monthStart = 0, curMonth = -1, curYear = -1;
     for (let i = 0; i <= total; i++) {
       const d = addDays(rangeStart, i);
       if (d.getMonth() !== curMonth) {
-        if (curMonth !== -1) top.push({ label: `${MONTHS[curMonth]} ${addDays(rangeStart, monthStart).getFullYear()}`, x: monthStart * pxPerDay, w: (i - monthStart) * pxPerDay });
-        curMonth = d.getMonth(); monthStart = i;
+        if (curMonth !== -1) top.push({ label: `${MONTHS[curMonth]} ${curYear}`, x: monthStart * pxPerDay, w: (i - monthStart) * pxPerDay });
+        curMonth = d.getMonth(); curYear = d.getFullYear(); monthStart = i;
       }
-      bottom.push({ label: String(d.getDate()), x: i * pxPerDay, w: pxPerDay, muted: d.getDay() === 0 || d.getDay() === 6 });
+      bottom.push({
+        label:         String(d.getDate()),
+        x:             i * pxPerDay,
+        w:             pxPerDay,
+        muted:         d.getDay() === 0 || d.getDay() === 6,
+        current:       d.getMonth() === nowM && d.getFullYear() === nowY,
+        monthBoundary: d.getDate() === 1,
+      });
     }
-    top.push({ label: `${MONTHS[curMonth]} ${addDays(rangeStart, monthStart).getFullYear()}`, x: monthStart * pxPerDay, w: (total + 1 - monthStart) * pxPerDay });
+    top.push({ label: `${MONTHS[curMonth]} ${curYear}`, x: monthStart * pxPerDay, w: (total + 1 - monthStart) * pxPerDay });
     return { top, bottom };
   }
 
   if (zoom === "week") {
+    // build month-level band info so we can compute current & monthBoundary per week
+    const monthBands = [];
     let m = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), 1);
     while (m <= rangeEnd) {
       const next = new Date(m.getFullYear(), m.getMonth() + 1, 1);
       const sx = Math.max(0, daysBetween(rangeStart, m)) * pxPerDay;
       const ex = Math.min(total, daysBetween(rangeStart, next)) * pxPerDay;
-      if (ex > sx) top.push({ label: `${MONTHS[m.getMonth()]} ${m.getFullYear()}`, x: sx, w: ex - sx });
+      if (ex > sx) {
+        top.push({ label: `${MONTHS[m.getMonth()]} ${m.getFullYear()}`, x: sx, w: ex - sx });
+        monthBands.push({ month: m.getMonth(), year: m.getFullYear(), x: sx });
+      }
       m = next;
     }
+
     let ws = new Date(rangeStart); ws.setDate(ws.getDate() - ws.getDay());
     while (ws <= rangeEnd) {
-      const x = Math.max(0, daysBetween(rangeStart, ws)) * pxPerDay;
-      const d = ws < rangeStart ? rangeStart : ws;
-      bottom.push({ label: `${MONTHS[d.getMonth()]} ${d.getDate()}`, x, w: 7 * pxPerDay });
+      const x   = Math.max(0, daysBetween(rangeStart, ws)) * pxPerDay;
+      const ref = ws < rangeStart ? rangeStart : ws;
+      // week is "current" if any of its 7 days falls in the current month
+      const weekEnd = addDays(ws, 6);
+      const isCur   = (ref.getMonth() === nowM && ref.getFullYear() === nowY)
+                   || (weekEnd.getMonth() === nowM && weekEnd.getFullYear() === nowY);
+      // monthBoundary: this week's Sunday falls on the 1st, or the ref date is the 1st
+      const isBound = ref.getDate() === 1 || ws.getDate() === 1;
+      bottom.push({ label: `${MONTHS[ref.getMonth()]} ${ref.getDate()}`, x, w: 7 * pxPerDay, current: isCur, monthBoundary: isBound });
       ws = addDays(ws, 7);
     }
     return { top, bottom };
@@ -88,9 +114,15 @@ function buildHeader(rangeStart, rangeEnd, zoom, pxPerDay) {
     let m = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), 1);
     while (m <= rangeEnd) {
       const next = new Date(m.getFullYear(), m.getMonth() + 1, 1);
-      const sx = Math.max(0, daysBetween(rangeStart, m)) * pxPerDay;
-      const w  = daysBetween(m, next) * pxPerDay;
-      bottom.push({ label: MONTHS[m.getMonth()], x: sx, w });
+      const sx   = Math.max(0, daysBetween(rangeStart, m)) * pxPerDay;
+      const w    = daysBetween(m, next) * pxPerDay;
+      bottom.push({
+        label:         MONTHS[m.getMonth()],
+        x:             sx,
+        w,
+        current:       m.getMonth() === nowM && m.getFullYear() === nowY,
+        monthBoundary: true, // every segment IS a month boundary in month zoom
+      });
       if (m.getFullYear() !== yearStart) {
         if (yearStart !== -1) top.push({ label: String(yearStart), x: yearX, w: sx - yearX });
         yearStart = m.getFullYear(); yearX = sx;
@@ -105,10 +137,12 @@ function buildHeader(rangeStart, rangeEnd, zoom, pxPerDay) {
   let yearStart = -1, yearX = 0;
   let q = new Date(rangeStart.getFullYear(), Math.floor(rangeStart.getMonth() / 3) * 3, 1);
   while (q <= rangeEnd) {
-    const next = new Date(q.getFullYear(), q.getMonth() + 3, 1);
-    const sx = Math.max(0, daysBetween(rangeStart, q)) * pxPerDay;
-    const ex = Math.min(total, daysBetween(rangeStart, next)) * pxPerDay;
-    bottom.push({ label: `Q${Math.floor(q.getMonth()/3)+1}`, x: sx, w: ex - sx });
+    const next    = new Date(q.getFullYear(), q.getMonth() + 3, 1);
+    const sx      = Math.max(0, daysBetween(rangeStart, q)) * pxPerDay;
+    const ex      = Math.min(total, daysBetween(rangeStart, next)) * pxPerDay;
+    const qEnd    = addDays(next, -1);
+    const isCur   = (q.getMonth() <= nowM && qEnd.getMonth() >= nowM && q.getFullYear() === nowY);
+    bottom.push({ label: `Q${Math.floor(q.getMonth()/3)+1}`, x: sx, w: ex - sx, current: isCur, monthBoundary: true });
     if (q.getFullYear() !== yearStart) {
       if (yearStart !== -1) top.push({ label: String(yearStart), x: yearX, w: sx - yearX });
       yearStart = q.getFullYear(); yearX = sx;
@@ -193,7 +227,7 @@ export default function GanttView({
   tasks = [], statuses = [], sprints = [],
   onTaskClick, workspaceSlug, projectId, canEdit = false,
 }) {
-  const [zoom,       setZoom]      = useState("month");
+  const [zoom,       setZoom]      = useState("week");
   const [groupBy,    setGroupBy]   = useState("status");
   const [collapsed,  setCollapsed] = useState(new Set());
   // Live drag preview: { taskId, type: "move"|"resize", deltaDays }
@@ -239,6 +273,7 @@ export default function GanttView({
     leftBodyRef.current.scrollTop = rightRef.current.scrollTop;
     syncingRef.current = false;
   };
+
   const onLeftScroll = () => {
     if (syncingRef.current || !rightRef.current) return;
     syncingRef.current = true;
@@ -246,13 +281,20 @@ export default function GanttView({
     syncingRef.current = false;
   };
 
-  // Scroll to today on mount
-  useEffect(() => {
+  const scrollToToday = useCallback(() => {
     if (!rightRef.current) return;
     const today = new Date(); today.setHours(0,0,0,0);
     const x = daysBetween(rangeStart, today) * pxPerDay;
     rightRef.current.scrollLeft = Math.max(0, x - 200);
   }, [rangeStart, pxPerDay]);
+
+  // On mount: center on today once.
+  useEffect(() => { scrollToToday(); }, []);
+
+  // On zoom change: re-center on today so the new scale makes sense visually.
+  // Intentionally NOT including rangeStart — task saves change rangeStart but
+  // must never scroll the viewport (the date change is off-screen, not "today").
+  useEffect(() => { scrollToToday(); }, [zoom]);
 
   const goToday = () => {
     if (!rightRef.current) return;
@@ -276,7 +318,8 @@ export default function GanttView({
   };
 
   // ── Drag with live preview and edge auto-scroll ──────────────────────────
-  const drag     = useRef(null);   // raw drag state (mutable, no re-render)
+  const drag           = useRef(null);   // raw drag state (mutable, no re-render)
+  const didDragRef     = useRef(false);  // true when mouse moved enough — suppresses the following click
   const rafRef   = useRef(null);   // requestAnimationFrame handle
 
   const startDrag = useCallback((e, task, type) => {
@@ -294,27 +337,34 @@ export default function GanttView({
     };
 
     // Auto-scroll loop: runs every animation frame while dragging
+    // Small movement threshold — prevents auto-scroll firing on the initial click
+    // (which would race to scrollLeft=0 if the cursor was near the left edge).
+    const MOVE_THRESHOLD = 4;
+
     const scrollLoop = () => {
       if (!drag.current || !rightRef.current) return;
-      const rect     = rightRef.current.getBoundingClientRect();
-      const mouseX   = drag.current.lastClientX ?? drag.current.startX;
-      const fromLeft  = mouseX - rect.left;
-      const fromRight = rect.right - mouseX;
 
-      let scrollDelta = 0;
-      if (fromRight < EDGE_ZONE) scrollDelta =  Math.round((1 - fromRight / EDGE_ZONE) * MAX_SCROLL_SPEED);
-      if (fromLeft  < EDGE_ZONE) scrollDelta = -Math.round((1 - fromLeft  / EDGE_ZONE) * MAX_SCROLL_SPEED);
+      const dx    = drag.current.lastClientX != null ? drag.current.lastClientX - drag.current.startX : 0;
+      const moved = Math.abs(dx) > MOVE_THRESHOLD;
 
-      if (scrollDelta !== 0) {
-        rightRef.current.scrollLeft += scrollDelta;
-        // Adjust startX so the preview delta stays correct after scroll
-        drag.current.startX -= scrollDelta;
+      if (moved) {
+        const rect      = rightRef.current.getBoundingClientRect();
+        const mouseX    = drag.current.lastClientX ?? drag.current.startX;
+        const fromLeft  = mouseX - rect.left;
+        const fromRight = rect.right - mouseX;
+
+        let scrollDelta = 0;
+        if (fromRight < EDGE_ZONE) scrollDelta =  Math.round((1 - fromRight / EDGE_ZONE) * MAX_SCROLL_SPEED);
+        if (fromLeft  < EDGE_ZONE) scrollDelta = -Math.round((1 - fromLeft  / EDGE_ZONE) * MAX_SCROLL_SPEED);
+
+        if (scrollDelta !== 0) {
+          rightRef.current.scrollLeft += scrollDelta;
+          drag.current.startX         -= scrollDelta;
+        }
+
+        const deltaDays = Math.round(dx / pxPerDay);
+        setDragPreview({ taskId: drag.current.taskId, type: drag.current.type, deltaDays });
       }
-
-      // Recompute preview after potential scroll
-      const dx         = drag.current.lastClientX != null ? drag.current.lastClientX - drag.current.startX : 0;
-      const deltaDays  = Math.round(dx / pxPerDay);
-      setDragPreview({ taskId: drag.current.taskId, type: drag.current.type, deltaDays });
 
       rafRef.current = requestAnimationFrame(scrollLoop);
     };
@@ -342,7 +392,10 @@ export default function GanttView({
             const base = drag.current.origDue || drag.current.origStart;
             if (base) updates.due_date = dateKey(addDays(parseDate(base), deltaDays));
           }
-          if (Object.keys(updates).length) updateTask.mutate({ taskId: drag.current.taskId, ...updates });
+          if (Object.keys(updates).length) {
+            updateTask.mutate({ taskId: drag.current.taskId, ...updates });
+            didDragRef.current = true;  // suppress the following click event
+          }
         }
       }
 
@@ -475,7 +528,9 @@ export default function GanttView({
               <div key={i}
                 className={cn(
                   "absolute bottom-0 flex items-center justify-center border-r border-border/40 text-[11px] select-none",
-                  seg.muted ? "text-muted-foreground/35" : "text-muted-foreground font-medium",
+                  seg.current ? "text-primary font-semibold"
+                  : seg.muted ? "text-muted-foreground/35"
+                  :              "text-muted-foreground font-medium",
                 )}
                 style={{ left: seg.x, width: seg.w, height: HDR_H / 2 }}>
                 {seg.label}
@@ -486,9 +541,24 @@ export default function GanttView({
           {/* ── Gantt bars area ── */}
           <div className="relative" style={{ width: totalWidth, height: totalH }}>
 
-            {/* Vertical grid lines */}
+            {/* Current-period shading — subtle tint on this month's column */}
+            {header.bottom.filter(seg => seg.current).map((seg, i) => (
+              <div
+                key={`cur-${i}`}
+                className="absolute top-0 bottom-0 bg-primary/10 pointer-events-none"
+                style={{ left: seg.x, width: seg.w }}
+              />
+            ))}
+
+            {/* Vertical grid lines — month boundaries are stronger than inner lines */}
             {header.bottom.map((seg, i) => (
-              <div key={i} className="absolute top-0 bottom-0 border-r border-border/25" style={{ left: seg.x, width: seg.w }} />
+              <div
+                key={i}
+                className={seg.monthBoundary
+                  ? "absolute top-0 bottom-0 border-r border-border/70"
+                  : "absolute top-0 bottom-0 border-r border-border/35"}
+                style={{ left: seg.x, width: seg.w }}
+              />
             ))}
 
             {/* Today line */}
@@ -530,7 +600,11 @@ export default function GanttView({
                     )}
                     style={{ width: Math.max(8, w), height: BAR_H, backgroundColor: color }}
                     onMouseDown={e => { if (e.button !== 0) return; startDrag(e, t, "move"); }}
-                    onClick={e => { if (!dragPreview) { e.stopPropagation(); onTaskClick(t.id); } }}
+                    onClick={e => {
+                      if (didDragRef.current) { didDragRef.current = false; return; }
+                      e.stopPropagation();
+                      onTaskClick(t.id);
+                    }}
                     title={t.title}
                   >
                     <span className="text-[11px] font-medium text-white truncate leading-none pointer-events-none">
