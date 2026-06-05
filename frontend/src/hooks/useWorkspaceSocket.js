@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { notificationsKey } from "@/hooks/useNotifications";
 import { presenceKey } from "@/hooks/usePresence";
+import { BACKEND_WS_URL } from "@/lib/env";
 
 export function useWorkspaceSocket(workspaceSlug) {
   const qc = useQueryClient();
@@ -12,7 +13,7 @@ export function useWorkspaceSocket(workspaceSlug) {
 
     const token = localStorage.getItem("access_token");
     const ws = new WebSocket(
-      `ws://localhost:8000/ws/workspaces/${workspaceSlug}/?token=${token}`
+      `${BACKEND_WS_URL}/ws/workspaces/${workspaceSlug}/?token=${token}`
     );
     wsRef.current = ws;
 

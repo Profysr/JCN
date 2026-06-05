@@ -47,9 +47,10 @@ INSTALLED_APPS = [
     # drf-spectacular — auto-generates OpenAPI schema → Swagger UI at /api/docs/
     "drf_spectacular",
     # Our apps
-    "accounts",    # custom User model, profile
-    "workspaces",  # workspaces, members, invites
-    "projects",    # projects, tasks, subtasks, comments
+    "accounts",      # custom User model, profile
+    "workspaces",    # workspaces, members, invites
+    "projects",      # projects, tasks, subtasks, comments
+    "integrations",  # Slack, Teams, Google Chat integrations (v4.3.0)
 ]
 
 MIDDLEWARE = [
@@ -204,3 +205,12 @@ SPECTACULAR_SETTINGS = {
     "DESCRIPTION": "Project Management API",
     "VERSION": "1.0.0",
 }
+
+# ── v4.3.0 — Integration settings ────────────────────────────────────────────
+# Slack — create a Slack App at https://api.slack.com/apps and fill these in .env
+SLACK_CLIENT_ID     = env("SLACK_CLIENT_ID",     default="")
+SLACK_CLIENT_SECRET = env("SLACK_CLIENT_SECRET", default="")
+SLACK_SIGNING_SECRET = env("SLACK_SIGNING_SECRET", default="")
+
+# Frontend URL — used to build deep links sent in integration messages
+FRONTEND_URL = env("FRONTEND_URL", default="http://localhost:5173")

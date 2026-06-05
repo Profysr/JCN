@@ -5,8 +5,8 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from django.shortcuts import get_object_or_404
 from django.db import models as django_models
 from django.http import HttpResponse
-from django.db.models import Count
-from django.db.models.functions import TruncDate
+from django.db.models import Count, Sum, Avg, Min, Max, F, Q
+from django.db.models.functions import TruncDate, TruncWeek, TruncMonth
 from django.utils import timezone
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
@@ -28,6 +28,8 @@ from .models import (
     UserPresence, CommentReaction,
     Approval, ApprovalReviewer,
     Objective, KeyResult,
+    Report, ReportShare, ScheduledReport,
+    ImportJob,
 )
 from .serializers import (
     ProjectSerializer, TaskStatusSerializer,
@@ -48,6 +50,7 @@ from .serializers import (
     UserPresenceSerializer, CommentReactionSerializer,
     ApprovalSerializer, ApprovalReviewerSerializer,
     ObjectiveSerializer, KeyResultSerializer, KeyResultLinkedTaskSerializer,
+    ReportSerializer, ReportShareSerializer, ScheduledReportSerializer,
 )
 from .permissions import has_project_permission, get_effective_role, log_audit
 
@@ -102,6 +105,42 @@ def broadcast(workspace_slug, event_type, data):
         f"workspace_{workspace_slug}",
         {"type": "workspace.event", "data": {"type": event_type, "payload": data}},
     )
+    # v4.5.0 — also fan out to registered webhooks
+    _fire_webhooks(workspace_slug, event_type, data)
+
+
+def _fire_webhooks(workspace_slug, event_type, data):
+    """Queue webhook deliveries for all active webhooks subscribed to this event."""
+    try:
+        from workspaces.models import Webhook
+        from workspaces.tasks import deliver_webhook
+
+        # Map internal event names to public webhook event names
+        _EVENT_MAP = {
+            "task.created":   "task.created",
+            "task.updated":   "task.updated",
+            "task.moved":     "task.updated",
+            "task.deleted":   "task.deleted",
+            "task.commented": "task.commented",
+            "tasks.bulk_updated": "task.updated",
+            "tasks.bulk_deleted": "task.deleted",
+            "sprint.started":    "sprint.started",
+            "sprint.completed":  "sprint.completed",
+        }
+        webhook_event = _EVENT_MAP.get(event_type)
+        if not webhook_event:
+            return
+
+        hooks = Webhook.objects.filter(
+            workspace__slug=workspace_slug,
+            is_active=True,
+        )
+        payload = {"event": webhook_event, "workspace": workspace_slug, "data": data}
+        for hook in hooks:
+            if not hook.events or webhook_event in hook.events:
+                deliver_webhook.delay(str(hook.id), webhook_event, payload)
+    except Exception:
+        pass  # never break the main request path
 
 
 def log_activity(task, actor, verb, meta=None):
@@ -162,6 +201,13 @@ def notify(recipient, actor, verb, workspace, task):
         "read": False,
         "created_at": notif.created_at.isoformat(),
     })
+
+    # v4.3.0 — fan out to Slack / Teams / Google Chat
+    try:
+        from integrations.services import fanout_notification
+        fanout_notification(workspace, verb, task, actor)
+    except Exception:
+        pass  # never break the main request path
 
 
 # ── Projects ──────────────────────────────────────────────────────────────────
@@ -1148,6 +1194,699 @@ class WorkspaceAnalyticsView(APIView):
                 for item in trend_qs
             ],
         })
+
+
+# ── Analytics Engine v2 (v4.0.0) ─────────────────────────────────────────────
+
+def _done_status_names(workspace):
+    """Return list of 'done' status names across all projects in a workspace."""
+    return list(
+        TaskStatus.objects.filter(project__workspace=workspace, is_done=True)
+        .values_list("name", flat=True)
+        .distinct()
+    )
+
+
+def _base_tasks(workspace, project_id=None):
+    qs = Task.objects.filter(project__workspace=workspace)
+    if project_id:
+        qs = qs.filter(project_id=project_id)
+    return qs
+
+
+class VelocityView(APIView):
+    """
+    Sprint velocity: story points + tasks completed per sprint.
+    Returns last N completed sprints (default 8) with rolling average.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, workspace_slug):
+        workspace  = get_workspace_for_user(workspace_slug, request.user)
+        project_id = request.query_params.get("project_id")
+        limit      = int(request.query_params.get("limit", 8))
+
+        sprints_qs = Sprint.objects.filter(
+            project__workspace=workspace,
+            status=Sprint.Status.COMPLETED,
+        ).order_by("-end_date")
+        if project_id:
+            sprints_qs = sprints_qs.filter(project_id=project_id)
+
+        sprints = list(reversed(sprints_qs[:limit]))
+        done_ids = list(
+            TaskStatus.objects.filter(project__workspace=workspace, is_done=True)
+            .values_list("id", flat=True)
+        )
+
+        rows, total_sp, total_tasks = [], 0, 0
+        for sprint in sprints:
+            done_tasks = Task.objects.filter(sprint=sprint, status_id__in=done_ids)
+            tc = done_tasks.count()
+            sp = done_tasks.aggregate(s=Sum("estimate_points"))["s"] or 0
+            total_sp    += sp
+            total_tasks += tc
+            rows.append({
+                "sprint_id":        str(sprint.id),
+                "sprint_name":      sprint.name,
+                "start_date":       str(sprint.start_date) if sprint.start_date else None,
+                "end_date":         str(sprint.end_date)   if sprint.end_date   else None,
+                "tasks_completed":  tc,
+                "story_points":     sp,
+            })
+
+        n = len(rows)
+        return Response({
+            "sprints":            rows,
+            "avg_story_points":   round(total_sp    / n, 1) if n else 0,
+            "avg_tasks_completed": round(total_tasks / n, 1) if n else 0,
+        })
+
+
+class CycleTimeView(APIView):
+    """
+    Cycle time: first active-status move → done per task.
+    Returns scatter-plot points + percentile stats.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, workspace_slug):
+        workspace  = get_workspace_for_user(workspace_slug, request.user)
+        project_id = request.query_params.get("project_id")
+        days       = int(request.query_params.get("days", 90))
+
+        cutoff           = timezone.now() - datetime.timedelta(days=days)
+        done_names       = _done_status_names(workspace)
+
+        acts = (
+            TaskActivity.objects
+            .filter(
+                task__project__workspace=workspace,
+                verb=TaskActivity.Verb.STATUS,
+                meta__to__in=done_names,
+                created_at__gte=cutoff,
+            )
+            .select_related("task")
+            .order_by("task_id", "created_at")
+        )
+        if project_id:
+            acts = acts.filter(task__project_id=project_id)
+
+        # First done-transition per task
+        first_done = {}
+        for act in acts:
+            tid = str(act.task_id)
+            if tid not in first_done:
+                first_done[tid] = act
+
+        points, cycle_times = [], []
+        for tid, act in first_done.items():
+            task     = act.task
+            done_at  = act.created_at
+
+            # First non-done, non-backlog activity before this done event
+            first_active = (
+                TaskActivity.objects
+                .filter(task_id=tid, verb=TaskActivity.Verb.STATUS, created_at__lt=done_at)
+                .exclude(meta__to__in=done_names)
+                .order_by("created_at")
+                .first()
+            )
+            start       = first_active.created_at if first_active else task.created_at
+            cycle_days  = (done_at - start).total_seconds() / 86400
+            if cycle_days < 0:
+                continue
+            cycle_times.append(cycle_days)
+            points.append({
+                "task_id":        tid,
+                "title":          task.title,
+                "cycle_days":     round(cycle_days, 1),
+                "completed_date": done_at.date().isoformat(),
+                "priority":       task.priority,
+                "task_type":      task.task_type,
+            })
+
+        if cycle_times:
+            s = sorted(cycle_times)
+            n = len(s)
+            stats = {
+                "count":  n,
+                "median": round(s[n // 2], 1),
+                "p75":    round(s[min(int(n * 0.75), n - 1)], 1),
+                "p95":    round(s[min(int(n * 0.95), n - 1)], 1),
+                "avg":    round(sum(s) / n, 1),
+            }
+        else:
+            stats = {"count": 0, "median": 0, "p75": 0, "p95": 0, "avg": 0}
+
+        return Response({"data_points": points, "stats": stats})
+
+
+class LeadTimeView(APIView):
+    """
+    Lead time: task creation → done.
+    Returns histogram distribution + scatter points.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, workspace_slug):
+        workspace  = get_workspace_for_user(workspace_slug, request.user)
+        project_id = request.query_params.get("project_id")
+        days       = int(request.query_params.get("days", 90))
+
+        cutoff     = timezone.now() - datetime.timedelta(days=days)
+        done_names = _done_status_names(workspace)
+
+        acts = (
+            TaskActivity.objects
+            .filter(
+                task__project__workspace=workspace,
+                verb=TaskActivity.Verb.STATUS,
+                meta__to__in=done_names,
+                created_at__gte=cutoff,
+            )
+            .select_related("task")
+            .order_by("task_id", "created_at")
+        )
+        if project_id:
+            acts = acts.filter(task__project_id=project_id)
+
+        seen, lead_times, points = set(), [], []
+        for act in acts:
+            tid = str(act.task_id)
+            if tid in seen:
+                continue
+            seen.add(tid)
+            lt = (act.created_at - act.task.created_at).total_seconds() / 86400
+            if lt < 0:
+                continue
+            lead_times.append(lt)
+            points.append({
+                "task_id":        tid,
+                "title":          act.task.title,
+                "lead_days":      round(lt, 1),
+                "completed_date": act.created_at.date().isoformat(),
+            })
+
+        buckets = [
+            {"label": "< 1 day",   "min": 0,  "max": 1,    "count": 0},
+            {"label": "1–3 days",  "min": 1,  "max": 3,    "count": 0},
+            {"label": "3–7 days",  "min": 3,  "max": 7,    "count": 0},
+            {"label": "1–2 weeks", "min": 7,  "max": 14,   "count": 0},
+            {"label": "2–4 weeks", "min": 14, "max": 30,   "count": 0},
+            {"label": "> 30 days", "min": 30, "max": 99999, "count": 0},
+        ]
+        for lt in lead_times:
+            for b in buckets:
+                if b["min"] <= lt < b["max"]:
+                    b["count"] += 1
+                    break
+
+        if lead_times:
+            s = sorted(lead_times)
+            n = len(s)
+            stats = {
+                "count":  n,
+                "median": round(s[n // 2], 1),
+                "avg":    round(sum(s) / n, 1),
+                "min":    round(s[0], 1),
+                "max":    round(s[-1], 1),
+            }
+        else:
+            stats = {"count": 0, "median": 0, "avg": 0, "min": 0, "max": 0}
+
+        histogram = [{"label": b["label"], "count": b["count"]} for b in buckets]
+        return Response({"histogram": histogram, "data_points": points[:100], "stats": stats})
+
+
+class ThroughputView(APIView):
+    """
+    Throughput: tasks completed per day / week / month.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, workspace_slug):
+        workspace  = get_workspace_for_user(workspace_slug, request.user)
+        project_id = request.query_params.get("project_id")
+        period     = request.query_params.get("period", "week")   # day | week | month
+        days       = int(request.query_params.get("days", 90))
+
+        cutoff     = timezone.now() - datetime.timedelta(days=days)
+        done_names = _done_status_names(workspace)
+
+        acts = TaskActivity.objects.filter(
+            task__project__workspace=workspace,
+            verb=TaskActivity.Verb.STATUS,
+            meta__to__in=done_names,
+            created_at__gte=cutoff,
+        )
+        if project_id:
+            acts = acts.filter(task__project_id=project_id)
+
+        trunc_fn = {"day": TruncDate, "week": TruncWeek, "month": TruncMonth}.get(period, TruncWeek)
+
+        rows = (
+            acts
+            .annotate(bucket=trunc_fn("created_at"))
+            .values("bucket")
+            .annotate(count=Count("task", distinct=True))
+            .order_by("bucket")
+        )
+
+        return Response([
+            {"period": str(r["bucket"].date() if hasattr(r["bucket"], "date") else r["bucket"]),
+             "count":  r["count"]}
+            for r in rows
+        ])
+
+
+class CFDView(APIView):
+    """
+    Cumulative Flow Diagram: daily task-count per status for a project.
+    Replays status-change activities to reconstruct per-day snapshots.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, workspace_slug):
+        workspace  = get_workspace_for_user(workspace_slug, request.user)
+        project_id = request.query_params.get("project_id")
+        days       = int(request.query_params.get("days", 30))
+
+        if not project_id:
+            project = workspace.projects.filter(is_archived=False).order_by("created_at").first()
+            if not project:
+                return Response({"statuses": [], "data": []})
+            project_id = str(project.id)
+
+        project  = get_object_or_404(Project, id=project_id, workspace=workspace)
+        statuses = list(project.statuses.order_by("order").values("id", "name", "color"))
+
+        end_date   = datetime.date.today()
+        start_date = end_date - datetime.timedelta(days=days - 1)
+
+        # Build {task_id: [(date, status_id), ...]} from activities
+        name_to_id = {s["name"]: s["id"] for s in statuses}
+        id_set     = {s["id"] for s in statuses}
+
+        acts = list(
+            TaskActivity.objects
+            .filter(task__project=project, verb=TaskActivity.Verb.STATUS)
+            .order_by("task_id", "created_at")
+            .values("task_id", "created_at", "meta")
+        )
+
+        # For each task: list of (date, status_id) transitions
+        task_timeline = {}
+        for act in acts:
+            tid = str(act["task_id"])
+            sid = name_to_id.get((act["meta"] or {}).get("to", ""))
+            if sid:
+                task_timeline.setdefault(tid, []).append(
+                    (act["created_at"].date(), sid)
+                )
+
+        # Also fetch task creation dates and initial statuses
+        tasks_info = Task.objects.filter(project=project).values(
+            "id", "created_at", "status_id"
+        )
+        task_meta = {str(t["id"]): t for t in tasks_info}
+
+        # Fill per-day buckets
+        date_counts = {}
+        cur = start_date
+        while cur <= end_date:
+            date_counts[cur] = {s["id"]: 0 for s in statuses}
+            cur += datetime.timedelta(days=1)
+
+        for tid, meta in task_meta.items():
+            created_day = meta["created_at"].date()
+            initial_sid = meta["status_id"]
+            timeline    = task_timeline.get(tid, [])
+
+            for day in date_counts:
+                if day < created_day:
+                    continue
+                # Walk timeline to find status on this day
+                current_sid = initial_sid
+                for change_day, sid in timeline:
+                    if change_day <= day:
+                        current_sid = sid
+                    else:
+                        break
+                if current_sid in date_counts[day]:
+                    date_counts[day][current_sid] += 1
+
+        data = []
+        cur = start_date
+        while cur <= end_date:
+            row = {"date": cur.isoformat()}
+            for s in statuses:
+                row[s["name"]] = date_counts[cur].get(s["id"], 0)
+            data.append(row)
+            cur += datetime.timedelta(days=1)
+
+        return Response({"statuses": statuses, "data": data})
+
+
+class BurnupView(APIView):
+    """
+    Burnup chart: total scope vs completed tasks day by day.
+    Scope by sprint (sprint_id) or entire project (project_id + days).
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, workspace_slug):
+        workspace  = get_workspace_for_user(workspace_slug, request.user)
+        sprint_id  = request.query_params.get("sprint_id")
+        project_id = request.query_params.get("project_id")
+
+        done_names = _done_status_names(workspace)
+
+        if sprint_id:
+            sprint     = get_object_or_404(Sprint, id=sprint_id, project__workspace=workspace)
+            tasks_qs   = Task.objects.filter(sprint=sprint)
+            start_date = sprint.start_date or (datetime.date.today() - datetime.timedelta(days=14))
+            end_date   = sprint.end_date   or datetime.date.today()
+        elif project_id:
+            project    = get_object_or_404(Project, id=project_id, workspace=workspace)
+            tasks_qs   = Task.objects.filter(project=project)
+            days       = int(request.query_params.get("days", 30))
+            end_date   = datetime.date.today()
+            start_date = end_date - datetime.timedelta(days=days - 1)
+        else:
+            return Response({"error": "Provide sprint_id or project_id"}, status=400)
+
+        today = datetime.date.today()
+        data, cur = [], start_date
+
+        while cur <= end_date:
+            total = tasks_qs.filter(created_at__date__lte=cur).count()
+            completed = (
+                TaskActivity.objects
+                .filter(
+                    task__in=tasks_qs,
+                    verb=TaskActivity.Verb.STATUS,
+                    meta__to__in=done_names,
+                    created_at__date__lte=cur,
+                )
+                .values("task")
+                .distinct()
+                .count()
+            )
+            data.append({
+                "date":      cur.isoformat(),
+                "total":     total,
+                "completed": completed,
+                "is_future": cur > today,
+            })
+            cur += datetime.timedelta(days=1)
+
+        return Response({"data": data})
+
+
+class WorkloadHeatmapView(APIView):
+    """
+    Workload heatmap: member × day grid showing tasks due per day.
+    Default last 14 days.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, workspace_slug):
+        workspace  = get_workspace_for_user(workspace_slug, request.user)
+        days       = int(request.query_params.get("days", 14))
+        project_id = request.query_params.get("project_id")
+
+        end_date   = datetime.date.today()
+        start_date = end_date - datetime.timedelta(days=days - 1)
+        dates      = []
+        cur = start_date
+        while cur <= end_date:
+            dates.append(cur)
+            cur += datetime.timedelta(days=1)
+
+        members = workspace.members.select_related("user").all()
+        rows    = []
+
+        for member in members:
+            user = member.user
+            name = user.full_name or user.email.split("@")[0]
+
+            qs = Task.objects.filter(project__workspace=workspace, assignee=user)
+            if project_id:
+                qs = qs.filter(project_id=project_id)
+
+            # Assigned tasks with due_date in range
+            assigned = list(qs.filter(
+                due_date__gte=start_date, due_date__lte=end_date
+            ).values("due_date"))
+
+            day_counts = {d.isoformat(): 0 for d in dates}
+            for t in assigned:
+                k = t["due_date"].isoformat()
+                if k in day_counts:
+                    day_counts[k] += 1
+
+            total = sum(day_counts.values())
+            if total > 0:
+                rows.append({
+                    "user_id": str(user.id),
+                    "name":    name,
+                    "email":   user.email,
+                    "days":    day_counts,
+                    "total":   total,
+                })
+
+        return Response({
+            "dates":   [d.isoformat() for d in dates],
+            "members": rows,
+        })
+
+
+# ── Report Builder (v4.1.0) ───────────────────────────────────────────────────
+
+_REPORT_DATA_SOURCES = {
+    "tasks":        lambda ws, cfg: _report_tasks(ws, cfg),
+    "time_entries": lambda ws, cfg: _report_time_entries(ws, cfg),
+    "velocity":     lambda ws, cfg: _report_velocity(ws, cfg),
+    "throughput":   lambda ws, cfg: _report_throughput(ws, cfg),
+}
+
+
+def _report_tasks(workspace, cfg):
+    project_id = cfg.get("project_id")
+    group_by   = cfg.get("group_by", "status")
+    days       = int(cfg.get("date_range_days", 30))
+    cutoff     = timezone.now() - datetime.timedelta(days=days)
+
+    qs = Task.objects.filter(project__workspace=workspace, created_at__gte=cutoff)
+    if project_id:
+        qs = qs.filter(project_id=project_id)
+
+    if group_by == "status":
+        rows = list(
+            qs.values("status__name", "status__color")
+            .annotate(count=Count("id"))
+            .order_by("-count")
+        )
+        return [{"label": r["status__name"] or "No status", "value": r["count"], "color": r["status__color"]} for r in rows]
+    elif group_by == "priority":
+        rows = list(qs.values("priority").annotate(count=Count("id")).order_by("-count"))
+        return [{"label": r["priority"] or "none", "value": r["count"]} for r in rows]
+    elif group_by == "assignee":
+        rows = list(
+            qs.values("assignee__full_name", "assignee__email")
+            .annotate(count=Count("id"))
+            .order_by("-count")
+        )
+        return [
+            {"label": r["assignee__full_name"] or (r["assignee__email"] or "Unassigned").split("@")[0],
+             "value": r["count"]}
+            for r in rows
+        ]
+    elif group_by == "task_type":
+        rows = list(qs.values("task_type").annotate(count=Count("id")).order_by("-count"))
+        return [{"label": r["task_type"] or "task", "value": r["count"]} for r in rows]
+
+    return []
+
+
+def _report_time_entries(workspace, cfg):
+    project_id = cfg.get("project_id")
+    group_by   = cfg.get("group_by", "member")
+    days       = int(cfg.get("date_range_days", 30))
+    cutoff     = timezone.now() - datetime.timedelta(days=days)
+
+    qs = TimeEntry.objects.filter(
+        task__project__workspace=workspace,
+        start_at__gte=cutoff,
+    ).exclude(end_at=None)
+    if project_id:
+        qs = qs.filter(task__project_id=project_id)
+
+    if group_by == "member":
+        rows = list(
+            qs.values("user__full_name", "user__email")
+            .annotate(total_seconds=Sum("duration_seconds"))
+            .order_by("-total_seconds")
+        )
+        return [
+            {
+                "label": r["user__full_name"] or (r["user__email"] or "").split("@")[0],
+                "value": round((r["total_seconds"] or 0) / 3600, 2),
+            }
+            for r in rows
+        ]
+    elif group_by == "project":
+        rows = list(
+            qs.values("task__project__name")
+            .annotate(total_seconds=Sum("duration_seconds"))
+            .order_by("-total_seconds")
+        )
+        return [
+            {"label": r["task__project__name"] or "Unknown", "value": round((r["total_seconds"] or 0) / 3600, 2)}
+            for r in rows
+        ]
+
+    return []
+
+
+def _report_velocity(workspace, cfg):
+    project_id = cfg.get("project_id")
+    sprints_qs = Sprint.objects.filter(
+        project__workspace=workspace, status=Sprint.Status.COMPLETED
+    ).order_by("-end_date")[:8]
+    if project_id:
+        sprints_qs = sprints_qs.filter(project_id=project_id)
+    done_ids = list(
+        TaskStatus.objects.filter(project__workspace=workspace, is_done=True)
+        .values_list("id", flat=True)
+    )
+    rows = []
+    for sprint in reversed(list(sprints_qs)):
+        done = Task.objects.filter(sprint=sprint, status_id__in=done_ids)
+        sp   = done.aggregate(s=Sum("estimate_points"))["s"] or 0
+        rows.append({"label": sprint.name, "value": done.count(), "story_points": sp})
+    return rows
+
+
+def _report_throughput(workspace, cfg):
+    project_id = cfg.get("project_id")
+    period     = cfg.get("period", "week")
+    days       = int(cfg.get("date_range_days", 60))
+    cutoff     = timezone.now() - datetime.timedelta(days=days)
+    done_names = _done_status_names(workspace)
+    acts = TaskActivity.objects.filter(
+        task__project__workspace=workspace,
+        verb=TaskActivity.Verb.STATUS,
+        meta__to__in=done_names,
+        created_at__gte=cutoff,
+    )
+    if project_id:
+        acts = acts.filter(task__project_id=project_id)
+    trunc_fn = {"day": TruncDate, "week": TruncWeek, "month": TruncMonth}.get(period, TruncWeek)
+    rows = (
+        acts
+        .annotate(bucket=trunc_fn("created_at"))
+        .values("bucket")
+        .annotate(count=Count("task", distinct=True))
+        .order_by("bucket")
+    )
+    return [
+        {"label": str(r["bucket"].date() if hasattr(r["bucket"], "date") else r["bucket"]),
+         "value": r["count"]}
+        for r in rows
+    ]
+
+
+class ReportListCreateView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, workspace_slug):
+        workspace = get_workspace_for_user(workspace_slug, request.user)
+        reports   = Report.objects.filter(workspace=workspace, owner=request.user).order_by("-updated_at")
+        return Response(ReportSerializer(reports, many=True).data)
+
+    def post(self, request, workspace_slug):
+        workspace  = get_workspace_for_user(workspace_slug, request.user)
+        serializer = ReportSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        report = serializer.save(workspace=workspace, owner=request.user)
+        return Response(ReportSerializer(report).data, status=status.HTTP_201_CREATED)
+
+
+class ReportDetailView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _get(self, workspace_slug, report_id, user):
+        workspace = get_workspace_for_user(workspace_slug, user)
+        return get_object_or_404(Report, id=report_id, workspace=workspace)
+
+    def get(self, request, workspace_slug, report_id):
+        return Response(ReportSerializer(self._get(workspace_slug, report_id, request.user)).data)
+
+    def patch(self, request, workspace_slug, report_id):
+        report = self._get(workspace_slug, report_id, request.user)
+        s = ReportSerializer(report, data=request.data, partial=True)
+        if not s.is_valid():
+            return Response(s.errors, status=400)
+        return Response(ReportSerializer(s.save()).data)
+
+    def delete(self, request, workspace_slug, report_id):
+        self._get(workspace_slug, report_id, request.user).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ReportDataView(APIView):
+    """Execute a report config and return chart-ready data."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, workspace_slug, report_id):
+        workspace = get_workspace_for_user(workspace_slug, request.user)
+        report    = get_object_or_404(Report, id=report_id, workspace=workspace)
+        cfg       = report.config or {}
+        source    = cfg.get("data_source", "tasks")
+        fn        = _REPORT_DATA_SOURCES.get(source)
+        if not fn:
+            return Response({"error": f"Unknown data source: {source}"}, status=400)
+        return Response({"data": fn(workspace, cfg), "config": cfg})
+
+
+class ReportShareCreateView(APIView):
+    """Create or retrieve the public share link for a report."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, workspace_slug, report_id):
+        workspace = get_workspace_for_user(workspace_slug, request.user)
+        report    = get_object_or_404(Report, id=report_id, workspace=workspace)
+        share, _  = ReportShare.objects.get_or_create(report=report)
+        return Response(ReportShareSerializer(share).data)
+
+    def delete(self, request, workspace_slug, report_id):
+        workspace = get_workspace_for_user(workspace_slug, request.user)
+        report    = get_object_or_404(Report, id=report_id, workspace=workspace)
+        ReportShare.objects.filter(report=report).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ScheduledReportListCreateView(APIView):
+    """List + create schedules for a report."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _report(self, workspace_slug, report_id, user):
+        workspace = get_workspace_for_user(workspace_slug, user)
+        return get_object_or_404(Report, id=report_id, workspace=workspace)
+
+    def get(self, request, workspace_slug, report_id):
+        report = self._report(workspace_slug, report_id, request.user)
+        return Response(ScheduledReportSerializer(report.schedules.all(), many=True).data)
+
+    def post(self, request, workspace_slug, report_id):
+        report = self._report(workspace_slug, report_id, request.user)
+        s      = ScheduledReportSerializer(data=request.data)
+        if not s.is_valid():
+            return Response(s.errors, status=400)
+        return Response(ScheduledReportSerializer(s.save(report=report)).data, status=201)
 
 
 # ── CSV Export (v1.7.0) ───────────────────────────────────────────────────────
@@ -2593,4 +3332,199 @@ class KeyResultLinkedTasksView(APIView):
         if task_id:
             kr.tasks.remove(task_id)
         return Response(KeyResultSerializer(kr).data)
+
+
+# ── Import & Migration Tools (v4.6.0) ─────────────────────────────────────────
+
+class ImportSourcesView(APIView):
+    """GET /api/workspaces/:slug/import/sources/ — list available source formats."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, workspace_slug):
+        from .importers.registry import SUPPORTED_SOURCES
+        return Response([
+            {"id": k, "label": v["label"], "format": v["format"]}
+            for k, v in SUPPORTED_SOURCES.items()
+        ])
+
+
+class ImportJobListCreateView(APIView):
+    """
+    GET  /api/workspaces/:slug/import/jobs/      — list recent import jobs
+    POST /api/workspaces/:slug/import/jobs/      — upload file + source → parse + preview
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes     = [MultiPartParser, FormParser]
+
+    def get(self, request, workspace_slug):
+        workspace = get_workspace_for_user(workspace_slug, request.user)
+        jobs = ImportJob.objects.filter(workspace=workspace).order_by("-created_at")[:20]
+        return Response([{
+            "id":             str(j.id),
+            "source":         j.source,
+            "status":         j.status,
+            "file_name":      j.file_name,
+            "total_count":    j.total_count,
+            "imported_count": j.imported_count,
+            "skipped_count":  j.skipped_count,
+            "progress_pct":   j.progress_pct,
+            "created_at":     j.created_at.isoformat(),
+            "completed_at":   j.completed_at.isoformat() if j.completed_at else None,
+            "can_rollback":   _can_rollback(j),
+        } for j in jobs])
+
+    def post(self, request, workspace_slug):
+        workspace = get_workspace_for_user(workspace_slug, request.user)
+        source    = request.data.get("source", "").strip()
+        file_obj  = request.FILES.get("file")
+
+        if not source:
+            return Response({"error": "source required"}, status=400)
+        if not file_obj:
+            return Response({"error": "file required"}, status=400)
+        if file_obj.size > 50 * 1024 * 1024:
+            return Response({"error": "File exceeds 50 MB limit"}, status=400)
+
+        from .importers.registry import get_parser, SUPPORTED_SOURCES
+        if source not in SUPPORTED_SOURCES:
+            return Response({"error": f"Unknown source: {source}"}, status=400)
+
+        parser = get_parser(source)
+        content = file_obj.read().decode("utf-8", errors="replace")
+
+        job = ImportJob.objects.create(
+            workspace  = workspace,
+            source     = source,
+            status     = ImportJob.Status.PARSING,
+            file_name  = file_obj.name,
+            created_by = request.user,
+        )
+
+        try:
+            fmt = SUPPORTED_SOURCES[source]["format"]
+            if fmt == "xml":
+                tasks = parser.parse(content)
+                mapping = parser.detect_mapping(content)
+                parsed_rows = [t.to_dict() for t in tasks]
+                headers = list(mapping.keys())
+            elif fmt == "json":
+                tasks = parser.parse(content)
+                mapping = parser.detect_mapping(content)
+                parsed_rows = [t.to_dict() for t in tasks]
+                headers = list(mapping.keys())
+            else:  # csv
+                tasks, headers, mapping = parser.parse(content, field_mapping=None)
+                # Convert {col: {jcn_field, confidence}} → {col: jcn_field} for default
+                flat_mapping = {col: info["jcn_field"] for col, info in mapping.items()}
+                tasks2, _, _ = parser.parse(content, field_mapping=flat_mapping)
+                parsed_rows = [t.to_dict() for t in tasks2]
+                # Keep full mapping with confidence for the frontend
+                mapping = mapping  # already the full dict
+
+            preview = parsed_rows[:10]
+            job.parsed_rows   = parsed_rows
+            job.preview_rows  = preview
+            job.field_mapping = mapping if fmt == "csv" else mapping
+            job.status        = ImportJob.Status.MAPPED
+            job.total_count   = len(parsed_rows)
+            job.save()
+
+        except Exception as exc:
+            job.status    = ImportJob.Status.FAILED
+            job.error_log = [{"error": str(exc)}]
+            job.save(update_fields=["status", "error_log"])
+            return Response({"error": str(exc)}, status=400)
+
+        return Response({
+            "job_id":       str(job.id),
+            "source":       job.source,
+            "status":       job.status,
+            "total":        job.total_count,
+            "preview":      job.preview_rows,
+            "field_mapping": job.field_mapping,
+            "headers":      headers,
+        }, status=201)
+
+
+class ImportJobDetailView(APIView):
+    """
+    GET   — current job status + progress
+    PATCH — update field_mapping before running
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _get_job(self, workspace_slug, job_id, user):
+        workspace = get_workspace_for_user(workspace_slug, user)
+        return get_object_or_404(ImportJob, id=job_id, workspace=workspace)
+
+    def get(self, request, workspace_slug, job_id):
+        job = self._get_job(workspace_slug, job_id, request.user)
+        return Response({
+            "id":             str(job.id),
+            "source":         job.source,
+            "status":         job.status,
+            "file_name":      job.file_name,
+            "total_count":    job.total_count,
+            "imported_count": job.imported_count,
+            "skipped_count":  job.skipped_count,
+            "progress_pct":   job.progress_pct,
+            "preview_rows":   job.preview_rows,
+            "field_mapping":  job.field_mapping,
+            "error_log":      job.error_log[:20],
+            "created_at":     job.created_at.isoformat(),
+            "completed_at":   job.completed_at.isoformat() if job.completed_at else None,
+            "can_rollback":   _can_rollback(job),
+        })
+
+    def patch(self, request, workspace_slug, job_id):
+        job    = self._get_job(workspace_slug, job_id, request.user)
+        mapping = request.data.get("field_mapping")
+        if mapping is not None:
+            job.field_mapping = mapping
+            job.save(update_fields=["field_mapping"])
+        return Response({"ok": True})
+
+
+class ImportJobRunView(APIView):
+    """POST /api/workspaces/:slug/import/jobs/:id/run/ — kick off the Celery import task."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, workspace_slug, job_id):
+        workspace = get_workspace_for_user(workspace_slug, request.user)
+        job       = get_object_or_404(ImportJob, id=job_id, workspace=workspace)
+
+        if job.status not in (ImportJob.Status.MAPPED, ImportJob.Status.FAILED):
+            return Response({"error": f"Job is in state {job.status}, cannot run."}, status=400)
+
+        from .tasks import run_import
+        run_import.delay(str(job.id))
+        return Response({"ok": True, "job_id": str(job.id)})
+
+
+class ImportJobRollbackView(APIView):
+    """DELETE /api/workspaces/:slug/import/jobs/:id/rollback/ — undo the import."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def delete(self, request, workspace_slug, job_id):
+        workspace = get_workspace_for_user(workspace_slug, request.user)
+        job       = get_object_or_404(ImportJob, id=job_id, workspace=workspace)
+
+        if not _can_rollback(job):
+            return Response({"error": "Rollback window (24h) has expired or job is not complete."}, status=400)
+
+        task_ids = job.imported_task_ids or []
+        deleted  = Task.objects.filter(id__in=task_ids).delete()[0]
+        job.status            = ImportJob.Status.FAILED   # mark as rolled back
+        job.imported_task_ids = []
+        job.save(update_fields=["status", "imported_task_ids"])
+        return Response({"deleted": deleted})
+
+
+def _can_rollback(job):
+    if job.status != ImportJob.Status.COMPLETE:
+        return False
+    if not job.completed_at:
+        return False
+    from django.utils import timezone
+    return (timezone.now() - job.completed_at).total_seconds() < 86400
 

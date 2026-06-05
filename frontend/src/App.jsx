@@ -32,6 +32,17 @@ import InboxPage from "@/pages/workspace/InboxPage";
 // v3.8.0
 import GoalsPage from "@/pages/workspace/GoalsPage";
 // v3.9.0 — UserSettingsModal is opened from the sidebar, no route needed
+// v4.0.0 — Analytics Engine v2
+import AnalyticsPage from "@/pages/workspace/AnalyticsPage";
+// v4.1.0 — Report Builder
+import ReportsPage from "@/pages/workspace/ReportsPage";
+// v4.3.0 — Integrations
+import IntegrationsPage from "@/pages/workspace/IntegrationsPage";
+// v4.5.0 — Public API & Webhooks
+import APIKeysPage  from "@/pages/workspace/APIKeysPage";
+import WebhooksPage from "@/pages/workspace/WebhooksPage";
+// v4.6.0 — Import & Migration
+import ImportPage   from "@/pages/workspace/ImportPage";
 
 export default function App() {
   return (
@@ -68,14 +79,19 @@ export default function App() {
           {/* Workspace-level */}
           <Route path="roadmap"    element={<RoadmapPage />} />
           <Route path="dashboards" element={<DashboardsPage />} />
-          <Route path="analytics"  element={<Navigate to="dashboards?tab=analytics" replace />} />
+          <Route path="analytics"  element={<AnalyticsPage />} />
+          <Route path="reports"    element={<ReportsPage />} />
           <Route path="timesheets" element={<TimesheetsPage />} />
           <Route path="portfolio"  element={<PortfolioPage />} />
           <Route path="inbox"      element={<InboxPage />} />
           <Route path="goals"      element={<GoalsPage />} />
           <Route path="my-work"    element={<MyWorkPage />} />
-          <Route path="members"    element={<MembersPage />} />
-          <Route path="settings"   element={<SettingsPage />} />
+          <Route path="members"               element={<MembersPage />} />
+          <Route path="settings"             element={<SettingsPage />} />
+          <Route path="settings/integrations" element={<IntegrationsPage />} />
+          <Route path="settings/api"          element={<APIKeysPage />} />
+          <Route path="settings/webhooks"     element={<WebhooksPage />} />
+          <Route path="settings/import"       element={<ImportPage />} />
         </Route>
       </Route>
 

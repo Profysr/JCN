@@ -859,3 +859,131 @@ class AuditEvent(models.Model):
 
     def __str__(self):
         return f"{self.actor} — {self.action} at {self.created_at}"
+
+
+# ── v4.6.0 — Import & Migration Tools ────────────────────────────────────────
+
+class ImportJob(models.Model):
+    """Tracks a single import operation from an external tool into JCN."""
+
+    class Source(models.TextChoices):
+        JIRA    = "jira",    "Jira"
+        TRELLO  = "trello",  "Trello"
+        CLICKUP = "clickup", "ClickUp"
+        ASANA   = "asana",   "Asana"
+        GITHUB  = "github",  "GitHub Issues"
+        LINEAR  = "linear",  "Linear"
+        NOTION  = "notion",  "Notion"
+        MONDAY  = "monday",  "Monday"
+        CSV     = "csv",     "Generic CSV"
+
+    class Status(models.TextChoices):
+        PENDING   = "pending",   "Pending"
+        PARSING   = "parsing",   "Parsing"
+        MAPPED    = "mapped",    "Mapping Ready"
+        IMPORTING = "importing", "Importing"
+        COMPLETE  = "complete",  "Complete"
+        FAILED    = "failed",    "Failed"
+
+    id               = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace        = models.ForeignKey("workspaces.Workspace", on_delete=models.CASCADE, related_name="import_jobs")
+    source           = models.CharField(max_length=20, choices=Source.choices)
+    status           = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    file_name        = models.CharField(max_length=255, blank=True)
+    # Parsed intermediate representation stored as JSON (list of dicts)
+    parsed_rows      = models.JSONField(default=list)
+    # Auto-detected or user-confirmed mapping: {source_field: jcn_field}
+    field_mapping    = models.JSONField(default=dict)
+    # First 10 rows for the preview step
+    preview_rows     = models.JSONField(default=list)
+    # Runtime counters updated during import
+    progress_pct     = models.IntegerField(default=0)
+    total_count      = models.IntegerField(default=0)
+    imported_count   = models.IntegerField(default=0)
+    skipped_count    = models.IntegerField(default=0)
+    error_log        = models.JSONField(default=list)
+    # UUIDs of created Task objects — used for rollback
+    imported_task_ids = models.JSONField(default=list)
+    created_by       = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="import_jobs"
+    )
+    created_at       = models.DateTimeField(auto_now_add=True)
+    completed_at     = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Import({self.source}) → {self.workspace} [{self.status}]"
+
+
+# ── v4.0.0 — Analytics Engine v2 ─────────────────────────────────────────────
+
+class AnalyticsSnapshot(models.Model):
+    """Daily batch-computed analytics snapshot per workspace (cached metrics)."""
+    id        = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey("workspaces.Workspace", on_delete=models.CASCADE, related_name="analytics_snapshots")
+    date      = models.DateField()
+    data      = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [["workspace", "date"]]
+        ordering = ["-date"]
+
+    def __str__(self):
+        return f"Snapshot {self.workspace} — {self.date}"
+
+
+# ── v4.1.0 — Report Builder ───────────────────────────────────────────────────
+
+class Report(models.Model):
+    """A saved custom report with a chart config and data source."""
+    id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace   = models.ForeignKey("workspaces.Workspace", on_delete=models.CASCADE, related_name="reports")
+    name        = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    # config: {chart_type, data_source, filters, grouping, x_axis, y_axis, color_by, date_range_days}
+    config      = models.JSONField(default=dict)
+    owner       = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="reports")
+    created_at  = models.DateTimeField(auto_now_add=True)
+    updated_at  = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+
+    def __str__(self):
+        return f"{self.name} ({self.workspace})"
+
+
+class ReportShare(models.Model):
+    """Public read-only share link for a report."""
+    id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    report     = models.OneToOneField(Report, on_delete=models.CASCADE, related_name="share")
+    token      = models.UUIDField(default=uuid.uuid4, unique=True)
+    password   = models.CharField(max_length=128, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Share for {self.report.name}"
+
+
+class ScheduledReport(models.Model):
+    """Recurring scheduled delivery of a report (Celery beat)."""
+    class Format(models.TextChoices):
+        PDF = "pdf", "PDF"
+        PNG = "png", "PNG"
+        CSV = "csv", "CSV"
+
+    id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    report     = models.ForeignKey(Report, on_delete=models.CASCADE, related_name="schedules")
+    cron       = models.CharField(max_length=100)        # e.g. "0 9 * * 1"
+    recipients = models.JSONField(default=list)          # list of email strings
+    format     = models.CharField(max_length=10, choices=Format.choices, default=Format.PDF)
+    is_active  = models.BooleanField(default=True)
+    last_run_at = models.DateTimeField(null=True, blank=True)
+    created_at  = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Schedule for {self.report.name} ({self.cron})"

@@ -8,6 +8,9 @@ from .views import (
   OnboardingStateView, WorkspaceTemplateListView, WorkspaceTemplateApplyView,
   InboxListView, InboxItemUpdateView, InboxBulkUpdateView,
   NotificationPreferenceView,
+  # v4.5.0
+  APIKeyListCreateView, APIKeyDetailView,
+  WebhookListCreateView, WebhookDetailView, WebhookTestView, WebhookDeliveryListView,
 )
 
 urlpatterns = [
@@ -42,4 +45,14 @@ urlpatterns = [
   path("inbox/bulk/", InboxBulkUpdateView.as_view()),
   path("inbox/<uuid:item_id>/", InboxItemUpdateView.as_view()),
   path("workspaces/<slug:slug>/notification-preferences/", NotificationPreferenceView.as_view()),
+
+  # v4.5.0 — API Keys
+  path("workspaces/<slug:workspace_slug>/api-keys/",                         APIKeyListCreateView.as_view()),
+  path("workspaces/<slug:workspace_slug>/api-keys/<uuid:key_id>/",           APIKeyDetailView.as_view()),
+
+  # v4.5.0 — Webhooks
+  path("workspaces/<slug:workspace_slug>/webhooks/",                                       WebhookListCreateView.as_view()),
+  path("workspaces/<slug:workspace_slug>/webhooks/<uuid:hook_id>/",                        WebhookDetailView.as_view()),
+  path("workspaces/<slug:workspace_slug>/webhooks/<uuid:hook_id>/test/",                   WebhookTestView.as_view()),
+  path("workspaces/<slug:workspace_slug>/webhooks/<uuid:hook_id>/deliveries/",             WebhookDeliveryListView.as_view()),
 ]

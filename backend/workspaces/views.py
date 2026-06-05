@@ -3,8 +3,9 @@ from rest_framework.views import APIView
 from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
+import datetime
 from django.utils import timezone
-from .models import Workspace, WorkspaceMember, WorkspaceInvite, Notification, OnboardingState, InboxItem, NotificationPreference
+from .models import Workspace, WorkspaceMember, WorkspaceInvite, Notification, OnboardingState, InboxItem, NotificationPreference, WorkspaceAPIKey, Webhook, WebhookDelivery
 from .serializers import (
     WorkspaceSerializer, WorkspaceMemberSerializer, WorkspaceInviteSerializer,
     NotificationSerializer, InboxItemSerializer, NotificationPreferenceSerializer,
@@ -500,3 +501,201 @@ class WorkspaceTemplateApplyView(APIView):
             created_projects.append({"id": str(project.id), "name": project.name})
 
         return Response({"created_projects": created_projects}, status=status.HTTP_201_CREATED)
+
+
+# ── v4.5.0 — Public API Keys ──────────────────────────────────────────────────
+
+def _require_admin(workspace, user):
+    """Raise PermissionDenied if user is not an admin/owner of the workspace."""
+    from rest_framework.exceptions import PermissionDenied
+    member = workspace.members.filter(user=user).first()
+    if not member or member.role not in ("admin",):
+        if workspace.owner != user:
+            raise PermissionDenied("Only workspace admins can manage API keys.")
+
+
+class APIKeyListCreateView(APIView):
+    """
+    GET  /api/workspaces/:slug/api-keys/  — list keys (prefix + meta only, never hash)
+    POST /api/workspaces/:slug/api-keys/  — create key; returns raw key ONCE
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, workspace_slug):
+        ws = get_object_or_404(Workspace, slug=workspace_slug)
+        _require_admin(ws, request.user)
+        keys = ws.api_keys.filter(is_active=True).order_by("-created_at")
+        return Response([{
+            "id":          str(k.id),
+            "name":        k.name,
+            "key_prefix":  k.key_prefix,
+            "scopes":      k.scopes,
+            "last_used_at": k.last_used_at.isoformat() if k.last_used_at else None,
+            "expires_at":  k.expires_at.isoformat() if k.expires_at else None,
+            "created_at":  k.created_at.isoformat(),
+        } for k in keys])
+
+    def post(self, request, workspace_slug):
+        ws = get_object_or_404(Workspace, slug=workspace_slug)
+        _require_admin(ws, request.user)
+
+        name   = (request.data.get("name") or "").strip()
+        scopes = request.data.get("scopes") or ["read"]
+        exp    = request.data.get("expires_at")
+
+        if not name:
+            return Response({"error": "name required"}, status=400)
+
+        expires_at = None
+        if exp:
+            try:
+                from django.utils.dateparse import parse_datetime
+                expires_at = parse_datetime(exp)
+            except Exception:
+                return Response({"error": "Invalid expires_at"}, status=400)
+
+        key_obj, raw = WorkspaceAPIKey.generate(
+            workspace=ws, name=name, scopes=scopes,
+            created_by=request.user, expires_at=expires_at,
+        )
+        return Response({
+            "id":         str(key_obj.id),
+            "name":       key_obj.name,
+            "key_prefix": key_obj.key_prefix,
+            "scopes":     key_obj.scopes,
+            "expires_at": key_obj.expires_at.isoformat() if key_obj.expires_at else None,
+            "created_at": key_obj.created_at.isoformat(),
+            "key":        raw,   # ← ONLY returned here; client must copy immediately
+        }, status=201)
+
+
+class APIKeyDetailView(APIView):
+    """DELETE /api/workspaces/:slug/api-keys/:key_id/ — revoke a key."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def delete(self, request, workspace_slug, key_id):
+        ws  = get_object_or_404(Workspace, slug=workspace_slug)
+        _require_admin(ws, request.user)
+        key = get_object_or_404(WorkspaceAPIKey, id=key_id, workspace=ws)
+        key.is_active = False
+        key.save(update_fields=["is_active"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ── v4.5.0 — Webhooks ─────────────────────────────────────────────────────────
+
+WEBHOOK_EVENTS = [
+    "task.created", "task.updated", "task.deleted",
+    "task.assigned", "task.commented", "task.completed",
+    "sprint.started", "sprint.completed",
+    "member.added", "member.removed",
+]
+
+
+class WebhookListCreateView(APIView):
+    """
+    GET  /api/workspaces/:slug/webhooks/
+    POST /api/workspaces/:slug/webhooks/
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, workspace_slug):
+        ws = get_object_or_404(Workspace, slug=workspace_slug)
+        _require_admin(ws, request.user)
+        hooks = ws.webhooks.all().order_by("-created_at")
+        return Response([{
+            "id":         str(h.id),
+            "name":       h.name,
+            "url":        h.url,
+            "events":     h.events,
+            "is_active":  h.is_active,
+            "created_at": h.created_at.isoformat(),
+            "secret_prefix": h.secret[:8] + "…",
+        } for h in hooks])
+
+    def post(self, request, workspace_slug):
+        ws   = get_object_or_404(Workspace, slug=workspace_slug)
+        _require_admin(ws, request.user)
+        name   = (request.data.get("name") or "").strip()
+        url    = (request.data.get("url") or "").strip()
+        events = request.data.get("events") or WEBHOOK_EVENTS
+
+        if not name or not url:
+            return Response({"error": "name and url required"}, status=400)
+        if not url.startswith(("http://", "https://")):
+            return Response({"error": "url must start with http:// or https://"}, status=400)
+
+        hook = Webhook.create_with_secret(workspace=ws, name=name, url=url, events=events)
+        return Response({
+            "id":         str(hook.id),
+            "name":       hook.name,
+            "url":        hook.url,
+            "events":     hook.events,
+            "is_active":  hook.is_active,
+            "secret":     hook.secret,  # returned ONCE at creation
+            "created_at": hook.created_at.isoformat(),
+        }, status=201)
+
+
+class WebhookDetailView(APIView):
+    """PATCH/DELETE /api/workspaces/:slug/webhooks/:hook_id/"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def patch(self, request, workspace_slug, hook_id):
+        ws   = get_object_or_404(Workspace, slug=workspace_slug)
+        _require_admin(ws, request.user)
+        hook = get_object_or_404(Webhook, id=hook_id, workspace=ws)
+        for field in ("name", "url", "events", "is_active"):
+            if field in request.data:
+                setattr(hook, field, request.data[field])
+        hook.save()
+        return Response({
+            "id": str(hook.id), "name": hook.name,
+            "url": hook.url, "events": hook.events, "is_active": hook.is_active,
+        })
+
+    def delete(self, request, workspace_slug, hook_id):
+        ws   = get_object_or_404(Workspace, slug=workspace_slug)
+        _require_admin(ws, request.user)
+        hook = get_object_or_404(Webhook, id=hook_id, workspace=ws)
+        hook.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class WebhookTestView(APIView):
+    """POST /api/workspaces/:slug/webhooks/:hook_id/test/ — send a test event."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, workspace_slug, hook_id):
+        ws   = get_object_or_404(Workspace, slug=workspace_slug)
+        _require_admin(ws, request.user)
+        hook = get_object_or_404(Webhook, id=hook_id, workspace=ws)
+        from workspaces.tasks import deliver_webhook
+        payload = {
+            "event":  "ping",
+            "hook_id": str(hook.id),
+            "workspace": ws.slug,
+        }
+        deliver_webhook.delay(str(hook.id), "ping", payload)
+        return Response({"ok": True, "message": "Test event queued"})
+
+
+class WebhookDeliveryListView(APIView):
+    """GET /api/workspaces/:slug/webhooks/:hook_id/deliveries/"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, workspace_slug, hook_id):
+        ws   = get_object_or_404(Workspace, slug=workspace_slug)
+        _require_admin(ws, request.user)
+        hook = get_object_or_404(Webhook, id=hook_id, workspace=ws)
+        deliveries = hook.deliveries.order_by("-created_at")[:50]
+        return Response([{
+            "id":            str(d.id),
+            "event":         d.event,
+            "response_code": d.response_code,
+            "response_body": d.response_body[:500],
+            "duration_ms":   d.duration_ms,
+            "success":       d.success,
+            "attempt":       d.attempt,
+            "created_at":    d.created_at.isoformat(),
+        } for d in deliveries])

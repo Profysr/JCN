@@ -15,6 +15,7 @@ from .models import (
     UserPresence, CommentReaction,
     Approval, ApprovalReviewer,
     Objective, KeyResult,
+    Report, ReportShare, ScheduledReport,
 )
 from accounts.serializers import UserSerializer
 
@@ -712,3 +713,39 @@ class KeyResultLinkedTaskSerializer(serializers.ModelSerializer):
     class Meta:
         model  = Task
         fields = ["id", "title", "priority", "status_name", "is_done"]
+
+
+# ── v4.1.0 — Report Builder ───────────────────────────────────────────────────
+
+class ReportSerializer(serializers.ModelSerializer):
+    owner_name = serializers.SerializerMethodField()
+    has_share  = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = Report
+        fields = [
+            "id", "name", "description", "config",
+            "owner", "owner_name", "has_share",
+            "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "owner", "owner_name", "has_share", "created_at", "updated_at"]
+
+    def get_owner_name(self, obj):
+        return obj.owner.full_name or obj.owner.email.split("@")[0]
+
+    def get_has_share(self, obj):
+        return hasattr(obj, "share")
+
+
+class ReportShareSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = ReportShare
+        fields = ["id", "token", "expires_at", "created_at"]
+        read_only_fields = ["id", "token", "created_at"]
+
+
+class ScheduledReportSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = ScheduledReport
+        fields = ["id", "cron", "recipients", "format", "is_active", "last_run_at", "created_at"]
+        read_only_fields = ["id", "last_run_at", "created_at"]

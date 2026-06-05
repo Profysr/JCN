@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { useParams, useSearchParams, useNavigate } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { Plus, X, Lock, LayoutDashboard, BarChart2, Settings2, Trash2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useDashboards, useCreateDashboard, useUpdateDashboard, useDeleteDashboard } from "@/hooks/useDashboards";
 import { useObjectives, CONFIDENCE_CONFIG } from "@/hooks/useGoals";
 import { useAnalytics } from "@/hooks/useAnalytics";
@@ -80,101 +81,52 @@ function OverviewTab({ workspaceSlug }) {
   );
 }
 
-// ── Built-in: Analytics tab ──────────────────────────────────────────────────
-const PRI_CONFIG = Object.fromEntries(PRIORITIES.map(p => [p.value, { label: p.label, color: p.hex }]));
-
-function Bar({ label, value, max, color }) {
-  const pct = max > 0 ? Math.round((value / max) * 100) : 0;
-  return (
-    <div className="flex items-center gap-3">
-      <span className="text-xs text-muted-foreground w-28 truncate flex-shrink-0 text-right">{label}</span>
-      <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-        <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: color || "hsl(var(--primary))" }} />
-      </div>
-      <span className="text-xs font-semibold tabular-nums w-6 text-right">{value}</span>
-    </div>
-  );
-}
-
+// ── Built-in: Analytics tab — redirects to full AnalyticsPage ────────────────
 function AnalyticsTab({ workspaceSlug }) {
+  const navigate = useNavigate();
   const { data, isLoading } = useAnalytics(workspaceSlug);
-
-  if (isLoading) return <div className="p-6 text-sm text-muted-foreground">Loading analytics…</div>;
-  if (!data)     return null;
-
-  // Actual field names from WorkspaceAnalyticsView:
-  // overview: { projects, tasks, members, open_tasks }
-  // tasks_by_status:   [{status__name, status__color, count}]
-  // tasks_by_priority: [{priority, count}]
-  // workload:          [{name, email, assigned}]
-  const overview        = data.overview        || {};
-  const tasks_by_status   = data.tasks_by_status   || [];
-  const tasks_by_priority = data.tasks_by_priority || [];
-  const workload          = data.workload          || [];
-
-  const maxStatus   = Math.max(1, ...tasks_by_status.map(s => s.count));
-  const maxPriority = Math.max(1, ...tasks_by_priority.map(p => p.count));
-  const maxWorkload = Math.max(1, ...workload.filter(w => w.assigned > 0).map(w => w.assigned));
+  const ov = data?.overview || {};
 
   return (
     <div className="p-6 space-y-6">
-      {/* Overview stat cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: "Projects",   value: overview.projects   ?? 0 },
-          { label: "Tasks",      value: overview.tasks      ?? 0 },
-          { label: "Members",    value: overview.members    ?? 0 },
-          { label: "Open Tasks", value: overview.open_tasks ?? 0, alert: true },
-        ].map(s => (
-          <div key={s.label} className="bg-card border border-border rounded-xl p-4 shadow-card">
-            <p className={cn("text-2xl font-bold tabular-nums", s.alert && s.value > 0 && "text-orange-500")}>
-              {s.value}
-            </p>
-            <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Tasks by status */}
-        <div className="bg-card border border-border rounded-xl p-5 shadow-card">
-          <h3 className="text-sm font-semibold mb-4">Tasks by Status</h3>
-          {tasks_by_status.length === 0
-            ? <p className="text-xs text-muted-foreground text-center py-6">No data yet</p>
-            : <div className="space-y-2.5">
-                {tasks_by_status.map(s => (
-                  <Bar key={s.status__name} label={s.status__name || "No status"} value={s.count} max={maxStatus} color={s.status__color} />
-                ))}
-              </div>
-          }
+      {/* Quick KPIs */}
+      {isLoading ? (
+        <div className="h-32 flex items-center justify-center">
+          <div className="w-5 h-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
         </div>
-
-        {/* Tasks by priority */}
-        <div className="bg-card border border-border rounded-xl p-5 shadow-card">
-          <h3 className="text-sm font-semibold mb-4">Tasks by Priority</h3>
-          {tasks_by_priority.length === 0
-            ? <p className="text-xs text-muted-foreground text-center py-6">No data yet</p>
-            : <div className="space-y-2.5">
-                {tasks_by_priority.map(p => {
-                  const cfg = PRI_CONFIG[p.priority] || PRI_CONFIG.no_priority;
-                  return <Bar key={p.priority} label={cfg.label} value={p.count} max={maxPriority} color={cfg.color} />;
-                })}
-              </div>
-          }
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[
+            { label: "Projects",   value: ov.projects   ?? 0 },
+            { label: "Tasks",      value: ov.tasks      ?? 0 },
+            { label: "Members",    value: ov.members    ?? 0 },
+            { label: "Open Tasks", value: ov.open_tasks ?? 0 },
+          ].map(s => (
+            <div key={s.label} className="bg-card border border-border rounded-xl p-4 shadow-card">
+              <p className="text-2xl font-bold tabular-nums">{s.value}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
+            </div>
+          ))}
         </div>
+      )}
 
-        {/* Team workload */}
-        <div className="bg-card border border-border rounded-xl p-5 shadow-card md:col-span-2">
-          <h3 className="text-sm font-semibold mb-4">Team Workload</h3>
-          {workload.filter(w => w.assigned > 0).length === 0
-            ? <p className="text-xs text-muted-foreground text-center py-6">No assigned tasks yet</p>
-            : <div className="space-y-2.5">
-                {workload.filter(w => w.assigned > 0).map(w => (
-                  <Bar key={w.email} label={w.name || w.email || "Unassigned"} value={w.assigned} max={maxWorkload} />
-                ))}
-              </div>
-          }
+      {/* CTA to full analytics */}
+      <div className="bg-gradient-to-br from-primary/5 to-primary/10 border border-primary/20 rounded-2xl p-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+        <div className="w-12 h-12 rounded-xl bg-primary/15 flex items-center justify-center flex-shrink-0">
+          <BarChart2 className="w-6 h-6 text-primary" />
         </div>
+        <div className="flex-1">
+          <p className="font-semibold">Full Analytics Suite</p>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Velocity, cycle time, CFD, burnup, lead time, workload heatmap — all your engineering metrics in one place.
+          </p>
+        </div>
+        <button
+          onClick={() => navigate(`/w/${workspaceSlug}/analytics`)}
+          className="flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity flex-shrink-0"
+        >
+          Open Analytics
+        </button>
       </div>
     </div>
   );

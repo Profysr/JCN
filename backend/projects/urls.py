@@ -47,6 +47,14 @@ from .views import (
     DashboardListCreateView, DashboardDetailView,
     # v3.4.0
     MyWorkView, PortfolioView,
+    # v4.0.0 — Analytics Engine v2
+    VelocityView, CycleTimeView, LeadTimeView, ThroughputView, CFDView, BurnupView, WorkloadHeatmapView,
+    # v4.1.0 — Report Builder
+    ReportListCreateView, ReportDetailView, ReportDataView,
+    ReportShareCreateView, ScheduledReportListCreateView,
+    # v4.6.0 — Import & Migration Tools
+    ImportSourcesView, ImportJobListCreateView, ImportJobDetailView,
+    ImportJobRunView, ImportJobRollbackView,
 )
 
 _ws = "workspaces/<slug:workspace_slug>"
@@ -220,4 +228,35 @@ urlpatterns += [
     path(f"{_ob}/<uuid:obj_id>/key-results/",                              KeyResultListCreateView.as_view()),
     path(f"{_ob}/<uuid:obj_id>/key-results/<uuid:kr_id>/",                 KeyResultDetailView.as_view()),
     path(f"{_ob}/<uuid:obj_id>/key-results/<uuid:kr_id>/tasks/",           KeyResultLinkedTasksView.as_view()),
+]
+
+# v4.0.0 — Analytics Engine v2
+urlpatterns += [
+    path(f"{_ws}/analytics/velocity/",       VelocityView.as_view()),
+    path(f"{_ws}/analytics/cycle-time/",     CycleTimeView.as_view()),
+    path(f"{_ws}/analytics/lead-time/",      LeadTimeView.as_view()),
+    path(f"{_ws}/analytics/throughput/",     ThroughputView.as_view()),
+    path(f"{_ws}/analytics/cfd/",            CFDView.as_view()),
+    path(f"{_ws}/analytics/burnup/",         BurnupView.as_view()),
+    path(f"{_ws}/analytics/workload-heatmap/", WorkloadHeatmapView.as_view()),
+]
+
+# v4.1.0 — Report Builder
+_rp = f"{_ws}/reports"
+urlpatterns += [
+    path(f"{_rp}/",                                          ReportListCreateView.as_view()),
+    path(f"{_rp}/<uuid:report_id>/",                         ReportDetailView.as_view()),
+    path(f"{_rp}/<uuid:report_id>/data/",                    ReportDataView.as_view()),
+    path(f"{_rp}/<uuid:report_id>/share/",                   ReportShareCreateView.as_view()),
+    path(f"{_rp}/<uuid:report_id>/schedules/",               ScheduledReportListCreateView.as_view()),
+]
+
+# v4.6.0 — Import & Migration Tools
+_im = f"{_ws}/import"
+urlpatterns += [
+    path(f"{_im}/sources/",                                  ImportSourcesView.as_view()),
+    path(f"{_im}/jobs/",                                     ImportJobListCreateView.as_view()),
+    path(f"{_im}/jobs/<uuid:job_id>/",                       ImportJobDetailView.as_view()),
+    path(f"{_im}/jobs/<uuid:job_id>/run/",                   ImportJobRunView.as_view()),
+    path(f"{_im}/jobs/<uuid:job_id>/rollback/",              ImportJobRollbackView.as_view()),
 ]

@@ -158,6 +158,128 @@ class NotificationPreference(models.Model):
 
 # ── v2.3.0 — Onboarding ───────────────────────────────────────────────────────
 
+# ── v4.5.0 — Public API & Webhooks ───────────────────────────────────────────
+
+import hashlib
+import secrets
+
+
+class WorkspaceAPIKey(models.Model):
+    """
+    A long-lived API key scoped to a workspace.
+    The raw key is shown exactly once at creation time; we only store the SHA-256 hash.
+    """
+    class Scope(models.TextChoices):
+        READ  = "read",  "Read"
+        WRITE = "write", "Write"
+        ADMIN = "admin", "Admin"
+
+    id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace    = models.ForeignKey(Workspace, on_delete=models.CASCADE, related_name="api_keys")
+    name         = models.CharField(max_length=100)
+    key_prefix   = models.CharField(max_length=12)          # "jcn_xxxxxxxx" — shown in list UI
+    key_hash     = models.CharField(max_length=64, unique=True)  # sha256 hex
+    scopes       = models.JSONField(default=list)            # ["read", "write"]
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    expires_at   = models.DateTimeField(null=True, blank=True)
+    created_by   = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="api_keys"
+    )
+    is_active    = models.BooleanField(default=True)
+    created_at   = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    @classmethod
+    def generate(cls, workspace, name, scopes, created_by, expires_at=None):
+        """
+        Creates a new API key.  Returns (instance, raw_key).
+        raw_key is only available at this point — never stored.
+        """
+        raw   = "jcn_" + secrets.token_hex(32)   # 68-char key
+        h     = hashlib.sha256(raw.encode()).hexdigest()
+        prefix = raw[:12]
+        key = cls.objects.create(
+            workspace=workspace,
+            name=name,
+            key_prefix=prefix,
+            key_hash=h,
+            scopes=scopes,
+            created_by=created_by,
+            expires_at=expires_at,
+        )
+        return key, raw
+
+    @classmethod
+    def authenticate(cls, raw_key):
+        """Returns the WorkspaceAPIKey for a raw key, or None."""
+        from django.utils import timezone
+        if not raw_key or not raw_key.startswith("jcn_"):
+            return None
+        h = hashlib.sha256(raw_key.encode()).hexdigest()
+        try:
+            key = cls.objects.select_related("workspace", "created_by").get(
+                key_hash=h, is_active=True
+            )
+        except cls.DoesNotExist:
+            return None
+        if key.expires_at and key.expires_at < timezone.now():
+            return None
+        cls.objects.filter(pk=key.pk).update(last_used_at=timezone.now())
+        return key
+
+    def __str__(self):
+        return f"{self.name} ({self.key_prefix}…)"
+
+
+class Webhook(models.Model):
+    """Outbound webhook — fires signed POST requests on task/sprint events."""
+    id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace  = models.ForeignKey(Workspace, on_delete=models.CASCADE, related_name="webhooks")
+    name       = models.CharField(max_length=100)
+    url        = models.CharField(max_length=1024)
+    # e.g. ["task.created", "task.updated", "task.completed", "sprint.started"]
+    events     = models.JSONField(default=list)
+    secret     = models.CharField(max_length=64)   # HMAC signing secret
+    is_active  = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    @classmethod
+    def create_with_secret(cls, **kwargs):
+        kwargs["secret"] = secrets.token_hex(32)
+        return cls.objects.create(**kwargs)
+
+    def __str__(self):
+        return f"{self.name} → {self.url[:60]}"
+
+
+class WebhookDelivery(models.Model):
+    """Immutable log of every webhook delivery attempt."""
+    id             = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    webhook        = models.ForeignKey(Webhook, on_delete=models.CASCADE, related_name="deliveries")
+    event          = models.CharField(max_length=64)
+    request_body   = models.TextField()
+    response_code  = models.IntegerField(null=True, blank=True)
+    response_body  = models.TextField(blank=True)
+    duration_ms    = models.IntegerField(null=True, blank=True)
+    success        = models.BooleanField(default=False)
+    attempt        = models.PositiveSmallIntegerField(default=1)
+    created_at     = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.event} → {self.webhook.url[:40]} ({self.response_code})"
+
+
+# ── v2.3.0 — Onboarding ───────────────────────────────────────────────────────
+
 class OnboardingState(models.Model):
     """Tracks wizard + checklist progress per workspace."""
     workspace        = models.OneToOneField(Workspace, on_delete=models.CASCADE, related_name="onboarding")

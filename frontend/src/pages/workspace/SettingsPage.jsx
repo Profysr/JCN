@@ -7,7 +7,8 @@ import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Plug, ChevronRight, Key, Webhook, Upload } from "lucide-react";
+import { Link } from "react-router-dom";
 
 export default function SettingsPage() {
   const { workspaceSlug } = useParams();
@@ -92,6 +93,36 @@ export default function SettingsPage() {
             )}
           </div>
         </form>
+      </section>
+
+      {/* Developer & integration quick-links */}
+      <section className="rounded-xl border bg-card p-6">
+        <h2 className="text-base font-medium mb-1">Developer & Integrations</h2>
+        <p className="text-sm text-muted-foreground mb-4">Connect third-party tools, build on the JCN API, and migrate your data.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {[
+            { to: "integrations", icon: Plug,    label: "Integrations",  desc: "Slack, Teams, Google Chat" },
+            { to: "api",          icon: Key,      label: "API Keys",      desc: "Programmatic access"       },
+            { to: "webhooks",     icon: Webhook,  label: "Webhooks",      desc: "Outbound event webhooks"   },
+            { to: "import",       icon: Upload,   label: "Import",        desc: "Migrate from Jira, Trello…"},
+          ].map((item) => {
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.to}
+                to={`/w/${workspace?.slug}/settings/${item.to}`}
+                className="flex items-center gap-3 px-4 py-3 bg-muted hover:bg-accent rounded-xl text-sm transition-colors group"
+              >
+                <Icon className="w-4 h-4 text-primary flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="font-medium">{item.label}</p>
+                  <p className="text-xs text-muted-foreground">{item.desc}</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-muted-foreground ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
+              </Link>
+            );
+          })}
+        </div>
       </section>
 
       {/* Danger zone — owner only */}

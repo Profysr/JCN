@@ -1133,8 +1133,15 @@ The existing `DashboardPage` (workspace home, fixed stats + recent projects) and
 ---
 
 ## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-## PHASE 5 — ANALYTICS, REPORTING & INTEGRATIONS (Weeks 18–22)
+## PHASE 5 (PRE) — ANALYTICS & REPORTING (Weeks 18–19)
 ## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+> **Pre-Phase 5 scope:** Pure analytics and reporting — no third-party integrations, no AI. Builds directly on:
+> - Custom Dashboards system (v3.3.0) — Analytics Engine v2 replaces the built-in "Analytics" tab
+> - Celery infrastructure (v2.7.0) — used by `ScheduledReport` delivery
+> - Redis caching (v0.1.0 channel layer) — extended for heavy analytics query TTL
+>
+> **Validation:** No conflicts with Phases 1–4 changes. All new models (`AnalyticsSnapshot`, `Report`, `ScheduledReport`, `ReportShare`) are additive. Routes (`/reports`) are new and do not overlap with existing namespaces.
 
 ---
 
@@ -1195,7 +1202,17 @@ The existing `DashboardPage` (workspace home, fixed stats + recent projects) and
 
 ---
 
-## v4.2.0 — GitHub & GitLab Integration (Week 19)
+## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+## PHASE 5 (POST) — INTEGRATIONS & AI BUILDER (Weeks 19–22)
+## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+> **Post-Phase 5 scope:** All third-party integrations (GitHub/GitLab, Slack/Teams, Public API & Webhooks, Import tools) plus AI-powered features. These have zero overlap with Pre-Phase 5 analytics work — all models, routes, and signals introduced here are additive.
+>
+> **No conflicts with completed phases:** Git integration, AI sessions, webhooks, and import jobs are entirely new subsystems. Celery (v2.7.0) and Redis (v0.1.0) infrastructure they rely on is already in place.
+
+---
+
+## v4.2.0 — GitHub & GitLab Integration (Week 19) - Not needed at the moment ❌
 > Status: IN PROGRESS 🔨
 > **Gap filled:** Linear's GitHub integration is the best — JCN matches it and adds two-way sync.
 
@@ -1224,28 +1241,36 @@ The existing `DashboardPage` (workspace home, fixed stats + recent projects) and
 
 ---
 
-## v4.3.0 — Slack & Microsoft Teams Integration (Week 20)  --- Do it in Phase 06
-> Status: IN PROGRESS 🔨
+## v4.3.0 — Slack, Microsoft Teams & Google Chat Integration (Week 20)
+> Status: COMPLETE ✅
+> **Google Chat added** beyond original spec — all three platforms fully supported.
 
-### Backend
-- Slack OAuth bot token storage + webhook outbound
-- Slash commands: `/jcn create [title]`, `/jcn assign [task] @user`, `/jcn status [task] [status]`, `/jcn list`
-- Slack interactive messages: "Approve" / "Snooze" buttons in notification messages
-- Teams webhook outbound notifications
-- Message action: "Create JCN task" from Slack message right-click context menu
-- `POST /api/integrations/slack/events/` — Slack Events API handler
+### Backend — new `integrations` Django app
+- **Models**: `SlackIntegration` (OAuth token store), `TeamsIntegration` (webhook), `GoogleChatIntegration` (webhook), `IntegrationChannelMapping` (project → channel/space, per-platform), `SlackCommandLog` (audit log)
+- **Slack OAuth flow**: `GET /api/integrations/slack/oauth/begin/` → Slack → `GET /api/integrations/slack/oauth/callback/` — stores bot token, creates default workspace-wide mapping
+- **Slash commands** (Slack signing secret verified): `/jcn create <title>`, `/jcn list`, `/jcn status <keyword> <status>`, `/jcn assign <keyword> <email>`, `/jcn help`
+- **Slack interactive handler**: `POST /api/integrations/slack/interactive/` — handles "Approve" button click, resolves `ApprovalReviewer` from the matching JCN user
+- **Teams**: `PUT /api/workspaces/:slug/integrations/teams/` + `POST …/test/` — saves webhook, sends a live test MessageCard
+- **Google Chat**: `PUT /api/workspaces/:slug/integrations/google-chat/` + `POST …/test/` — saves webhook, sends a live test card
+- **Channel mappings CRUD**: `/api/workspaces/:slug/integrations/mappings/` — per-project or workspace-wide, per-event toggles (7 types), compact/detailed format, per-mapping webhook override
+- **Notification fanout** (`integrations/services.py`): `fanout_notification()` hooked into `projects.views.notify()` after every task event; failures silently logged — never break the main request
+- **Message formats**: Slack Block Kit (with "Open in JCN" action button), Teams MessageCard (legacy connector — no Power Apps required), Google Chat cardsV2 (with action button)
+- **Status endpoint**: `GET /api/workspaces/:slug/integrations/` — returns live connection state + OAuth config flag
 
-### Frontend
-- Slack OAuth connect flow in Integrations page
-- Channel mapping: project → Slack channel for notifications
-- Notification format toggle: Compact (one line) / Detailed (full card with fields)
-- Teams webhook URL input in Integrations page
-- "Create task from Slack" UX: modal pops up in Slack with all JCN fields
-- Task creation from Teams meeting: `/jcn create` works in Teams chat
+### Frontend — `/w/:ws/settings/integrations`
+- **Slack card**: "Add to Slack" OAuth button (gated on server config), connected team name + channel, slash command reference, setup guide (collapsible step-by-step with required scopes and redirect URL)
+- **Teams card**: webhook URL + display name form, live "Test" button sends MessageCard
+- **Google Chat card**: webhook URL + space name label, live "Test" button sends card
+- **Channel mapping UI**: per-project or workspace-wide scope, event picker (7 types), compact/detailed toggle, per-mapping webhook override, active toggle
+- **Navigation**: "Integrations" added to sidebar Workspace group; quick-link card added to `SettingsPage`
+- **Env vars required**: `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, `SLACK_SIGNING_SECRET`, `FRONTEND_URL`
+
+### Bugs found + fixed during implementation
+- `fanout_notification` imported lazily inside `notify()` (not at module level) to avoid circular import between `projects` and `integrations` apps
 
 ---
 
-## v4.4.0 — AI-Powered Features (Week 20–21)  --- Do it in Phase 06
+## v4.4.0 — AI-Powered Features (Week 20–21) - Not needed at the moment ❌
 > Status: IN PROGRESS 🔨
 > **Gap filled:** Other tools bolt on AI as gimmicks. JCN integrates AI into every real workflow moment.
 
@@ -1290,53 +1315,48 @@ The existing `DashboardPage` (workspace home, fixed stats + recent projects) and
 ---
 
 ## v4.5.0 — Public API & Webhooks (Week 21)
-> Status: IN PROGRESS 🔨
+> Status: COMPLETE ✅
 > **Gap filled:** Most tools have read-heavy, rate-limited APIs at lower tiers. JCN gives full API access from day 1.
 
 ### Backend
-- REST API v2 with full OpenAPI 3.1 spec (auto-generated via drf-spectacular)
-- `WorkspaceAPIKey` model: name (hashed), `scopes` (read/write/admin), `last_used_at`, `expires_at`
-- Rate limiting: 1000 req/hour (free), 10000 req/hour (Pro), unlimited (Enterprise) — Redis token bucket
-- `Webhook` model: URL, event subscriptions, HMAC secret for request signing
-- Webhook delivery: Celery queue with exponential backoff (3 retries: 1m / 5m / 30m)
-- `WebhookDelivery` model: request headers + body + response code + response body + duration_ms
-- Cursor-based pagination on all list endpoints (stable, no missed items on concurrent writes)
+- **`WorkspaceAPIKey` model** — name, `key_prefix` (first 12 chars for display), SHA-256 hash (never stored raw), `scopes` (read/write/admin JSON list), `last_used_at`, `expires_at`, `is_active`; `WorkspaceAPIKey.generate()` returns `(instance, raw_key)` — raw key is only available at creation time
+- **`APIKeyAuthentication`** DRF authenticator (`workspaces/authentication.py`) — validates `Authorization: Bearer jcn_<key>`, updates `last_used_at`, sets `request.api_key` for scope checks in views
+- **`Webhook` model** — workspace FK, name, URL, `events` (JSON list of subscribed event names), HMAC `secret` (auto-generated via `secrets.token_hex(32)`), `is_active`; `Webhook.create_with_secret()` class method
+- **`WebhookDelivery` model** — immutable log: `event`, `request_body`, `response_code`, `response_body`, `duration_ms`, `success`, `attempt`
+- **Celery task** (`workspaces/tasks.py`) — `deliver_webhook(webhook_id, event, payload_dict)`: HMAC-signs with `X-JCN-Signature: sha256=<digest>` + `X-JCN-Timestamp`; exponential retry backoff (attempt 1 → 5 min → 30 min); each attempt logged to `WebhookDelivery`
+- **Webhook fanout** — `_fire_webhooks()` hooked into `broadcast()` in `projects/views.py`; maps 8 internal event names to public webhook event names; fires Celery tasks asynchronously, never blocks the request
+- **API endpoints**: `GET+POST /api-keys/`, `DELETE /api-keys/:id/`, `GET+POST /webhooks/`, `PATCH+DELETE /webhooks/:id/`, `POST /webhooks/:id/test/`, `GET /webhooks/:id/deliveries/`
 
 ### Frontend
-- **API Keys page** `/w/:ws/settings/api`:
-  - "Generate API key" modal: name + scope selector (checkboxes) + expiry date picker
-  - Key shown exactly once with one-click copy; cannot be retrieved again
-  - Last used timestamp + revoke / regenerate buttons
-  - Docs link to API reference
-- **Webhooks page** `/w/:ws/settings/webhooks`:
-  - Add webhook: URL input + event type multi-select + secret generation
-  - "Send test event" button → shows response code + body inline
-  - Delivery log per webhook: last 50 deliveries, expandable to see full request/response
-- Interactive API docs at `/api/docs/` — "Try it" uses workspace API key, live responses
+- **API Keys page** `/w/:ws/settings/api` — key table with prefix, scopes, last-used, expiry; "Generate key" modal (name + scope checkboxes + optional expiry); raw key shown exactly once with one-click copy in an alert dialog; revoke button per key; link to `/api/docs/`
+- **Webhooks page** `/w/:ws/settings/webhooks` — webhook cards with active indicator, URL, "Test" button (queues Celery task), "Log" toggle; delivery log per webhook (last 50: event, HTTP code, duration, timestamp, expandable response body); inline edit form per webhook: name, URL, event picker (10 events), signing secret display, active toggle; signing secret shown once at creation
+- **SettingsPage** — "Developer & Integrations" grid linking to Integrations, API Keys, Webhooks, Import
 
 ---
 
-## v4.6.0 — Import & Migration Tools (Week 22) --- Do in Phase 06
-> Status: IN PROGRESS 🔨
+## v4.6.0 — Import & Migration Tools (Week 22)
+> Status: COMPLETE ✅
 > **Goal:** Switching to JCN from any tool should take 10 minutes, not 10 days.
 
 ### Backend
-- Import parsers: Jira XML export, Trello JSON, ClickUp CSV, Asana CSV, GitHub Issues JSON, Linear export, Notion CSV, Monday CSV, generic CSV with field mapping
-- `ImportJob` model: status (queued/parsing/importing/complete/failed), progress (%), error log
-- Import preview: parse file → return first 10 rows with detected field mapping (no data written yet)
-- Duplicate detection: tasks with identical title + description not re-imported
-- Import rollback: `DELETE /import-jobs/:id/rollback/` — removes all tasks created by that job (within 24h)
+- **`ImportJob` model** (`projects/models.py`) — `source` (9 choices), `status` (pending/parsing/mapped/importing/complete/failed), `parsed_rows` (full JSON), `preview_rows` (first 10), `field_mapping`, progress counters, `imported_task_ids` list (for rollback), `created_by`, `completed_at`
+- **Import parsers** (`projects/importers/`):
+  - `jira.py` — Jira XML RSS export: parses `<item>` elements, extracts summary, type, priority, status, assignee email, due date (RFC 2822 → ISO), labels; normalises priority + task type
+  - `trello.py` — Trello board JSON: resolves list-id → status name, card members → assignee email, labels, due dates
+  - `csv_parser.py` — generic CSV: auto-detection heuristic scores 30+ column name patterns against 11 JCN fields; returns `{col: {jcn_field, confidence}}` for the mapping step; `apply_mapping()` converts any CSV row dict to a `ParsedTask`; supports ClickUp / Asana / Linear / Notion / Monday / GitHub Issues exports
+  - `base.py` — `ParsedTask` dataclass with `to_dict()` / `from_dict()`; `normalize_priority()` + `normalize_type()` tables
+  - `registry.py` — maps 9 source keys to their parser modules + format hints
+- **Celery task** (`projects/tasks.py`) — `run_import(job_id)`: creates/resolves target project, resolves task statuses and assignees by name/email, creates Task + Label objects in batches, broadcasts `import.progress` WebSocket events every 5%, saves `imported_task_ids` for rollback
+- **5 endpoints**: `GET /import/sources/`, `GET+POST /import/jobs/`, `GET+PATCH /import/jobs/:id/`, `POST /import/jobs/:id/run/`, `DELETE /import/jobs/:id/rollback/` (24h window, deletes created tasks)
 
-### Frontend
-- **Import page** `/w/:ws/settings/import`:
-  - Source cards: Jira / Trello / ClickUp / Asana / GitHub / Linear / Notion / Monday / CSV
-  - Step 1: Upload file (drag-drop or browse)
-  - Step 2: Field mapping — visual table: source field → JCN field (dropdown per row); auto-detected with confidence indicator
-  - Step 3: Import preview — first 10 rows shown in task card format
-  - Step 4: Import progress (real-time WebSocket: "347 / 1200 tasks imported…")
-  - Step 5: Import report: "1,200 tasks imported, 12 skipped (duplicates), 3 warnings"
-  - Rollback button: "Undo this import" (available for 24h)
-- "Migrating from Jira?" helper link → step-by-step guide
+### Frontend — `/w/:ws/settings/import` (5-step wizard)
+- **Step 1 — Source picker**: 9 source cards with logo emoji + format label
+- **Step 2 — Upload**: tool-specific instructions + drag-drop zone; file parsed server-side on upload (no data written yet)
+- **Step 3 — Field mapping**: editable dropdown per column (CSV) or read-only mapping table (XML/JSON); confidence badge (green/amber/grey) per auto-detected mapping
+- **Step 4 — Preview**: first 10 parsed rows in a table with title, status, priority, type, assignee, due date columns
+- **Step 5 — Progress**: real-time progress bar fed by `import.progress` WebSocket events; total / imported / skipped stat cards; "Start another import" reset button
+- **Import history**: list of past jobs with status, count stats, and "Undo" rollback button (available 24h after completion)
+- Real-time updates via existing `useWorkspaceSocket` hook (no new WebSocket infra needed)
 
 ---
 
@@ -1488,7 +1508,8 @@ The existing `DashboardPage` (workspace home, fixed stats + recent projects) and
 > | Task Power Features | 5–8 | Hierarchy, rich text, wiki, forms, automation, time tracking |
 > | Views & Visualization | 9–13 | Calendar, Gantt, table view, advanced search, dashboards, portfolio |
 > | Collaboration & Communication | 14–17 | Presence, approvals, inbox, OKRs, keyboard shortcuts |
-> | Analytics & Integrations | 18–22 | Analytics engine, report builder, GitHub, Slack, AI, public API, import |
+> | Analytics & Reporting (Phase 5 Pre) | 18–19 | Analytics engine v2, cycle/lead time, CFD, burnup, report builder, scheduled delivery |
+> | Integrations & AI Builder (Phase 5 Post) | 19–22 | GitHub/GitLab, Slack/Teams, AI-powered features, public API & webhooks, import tools |
 > | Enterprise & Launch | 23–26 | Mobile PWA, SSO, billing, workflow builder, custom fields v2, final polish |
 >
 > **After 6 months JCN will have:**

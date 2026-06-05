@@ -1,7 +1,8 @@
 import axios from "axios";
+import { BACKEND_URL } from "@/lib/env";
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:8000",
+  baseURL: BACKEND_URL,
   headers: { "Content-Type": "application/json" },
 });
 
@@ -21,7 +22,7 @@ api.interceptors.response.use(
       if (refresh) {
         try {
           const { data } = await axios.post(
-            `${import.meta.env.VITE_API_URL || "http://localhost:8000"}/api/auth/token/refresh/`,
+            `${BACKEND_URL}/api/auth/token/refresh/`,
             { refresh }
           );
           localStorage.setItem("access_token", data.access);
