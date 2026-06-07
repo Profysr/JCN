@@ -109,12 +109,12 @@ function OverviewTab({ workspaceSlug }) {
                   >
                     {p.name[0].toUpperCase()}
                   </div>
-                  <div className="min-w-0">
+                  {/* <div className="min-w-0">
                     <p className="font-semibold text-sm truncate">{p.name}</p>
                     <p className="text-xs text-muted-foreground">
                       {total} tasks · {members.length} members
                     </p>
-                  </div>
+                  </div> */}
                 </div>
                 <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                   <div

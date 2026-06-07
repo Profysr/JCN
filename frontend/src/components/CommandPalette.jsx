@@ -24,19 +24,19 @@ const PRIORITY_COLOR = Object.fromEntries(
 
 // ── Recently viewed (localStorage) ────────────────────────────────────────────
 const RV_KEY = "jcn_recently_viewed";
-const MAX_RV = 8;
+// const MAX_RV = 8;
 
-export function trackRecentlyViewed(item) {
-  // item: { type: "task"|"project"|"page", id, title, url }
-  try {
-    const list = JSON.parse(localStorage.getItem(RV_KEY) || "[]");
-    const filtered = list.filter(
-      (i) => !(i.type === item.type && i.id === item.id),
-    );
-    filtered.unshift(item);
-    localStorage.setItem(RV_KEY, JSON.stringify(filtered.slice(0, MAX_RV)));
-  } catch {}
-}
+// export function trackRecentlyViewed(item) {
+//   // item: { type: "task"|"project"|"page", id, title, url }
+//   try {
+//     const list = JSON.parse(localStorage.getItem(RV_KEY) || "[]");
+//     const filtered = list.filter(
+//       (i) => !(i.type === item.type && i.id === item.id),
+//     );
+//     filtered.unshift(item);
+//     localStorage.setItem(RV_KEY, JSON.stringify(filtered.slice(0, MAX_RV)));
+//   } catch {}
+// }
 
 function getRecentlyViewed() {
   try {

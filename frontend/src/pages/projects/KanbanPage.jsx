@@ -8,7 +8,11 @@ import { useLabels, useCreateLabel } from "@/hooks/useLabels";
 import { useMembers } from "@/hooks/useMembers";
 import { useCreateStatus } from "@/hooks/useStatusManagement";
 import { useProjectFields } from "@/hooks/useCustomFields";
-import { useSavedViews, useCreateSavedView, useDeleteSavedView } from "@/hooks/useSavedViews";
+import {
+  useSavedViews,
+  useCreateSavedView,
+  useDeleteSavedView,
+} from "@/hooks/useSavedViews";
 import { useSprints } from "@/hooks/useSprints";
 import { useWorkspaceSocket } from "@/hooks/useWorkspaceSocket";
 import { useProjectPermissions } from "@/hooks/useProjectPermissions";
@@ -17,8 +21,6 @@ import { useAuthStore } from "@/store/authStore";
 import { useToast } from "@/components/ui/toast";
 import KanbanColumn from "@/components/tasks/KanbanColumn";
 import CreateTaskModal from "@/components/tasks/CreateTaskModal";
-// Lazy — TaskDetailPanel pulls in VoltEditor (Tiptap + extensions); load only when a task is opened
-const TaskDetailPanel = lazy(() => import("@/components/tasks/TaskDetailPanel"));
 import FilterBar from "@/components/tasks/FilterBar";
 import ListView from "@/components/tasks/ListView";
 import SprintPanel from "@/components/projects/SprintPanel";
@@ -28,22 +30,47 @@ import BulkActionBar from "@/components/tasks/BulkActionBar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@/components/ui/tooltip";
-import { Plus, ArrowLeft, Download, Settings2, Users, Lock, LayoutGrid, List, Zap, CalendarDays, GanttChartSquare, BookOpen, FormInput } from "lucide-react";
+import {
+  Plus,
+  ArrowLeft,
+  Download,
+  Settings2,
+  Users,
+  Lock,
+  LayoutGrid,
+  List,
+  Zap,
+  CalendarDays,
+  GanttChartSquare,
+  BookOpen,
+  FormInput,
+} from "lucide-react";
 // Lazy — only rendered when the user switches to that view
 const CalendarView = lazy(() => import("@/components/tasks/CalendarView"));
-const GanttView    = lazy(() => import("@/components/tasks/GanttView"));
+const GanttView = lazy(() => import("@/components/tasks/GanttView"));
+const TaskDetailPanel = lazy(
+  () => import("@/components/tasks/TaskDetailPanel"),
+);
 import { cn } from "@/lib/utils";
 import { APP_COLORS } from "@/lib/constants";
 import { useBulkUpdateTasks } from "@/hooks/useBulkActions";
 import api from "@/lib/api";
 
-const EMPTY_FILTERS = { search: "", priorities: [], assignees: [], labels: [], types: [], due: [], pendingMyApproval: false };
+const EMPTY_FILTERS = {
+  search: "",
+  priorities: [],
+  assignees: [],
+  labels: [],
+  types: [],
+  due: [],
+  pendingMyApproval: false,
+};
 
 const VIEW_OPTIONS = [
-  { id: "kanban",   icon: LayoutGrid,       label: "Board"    },
-  { id: "list",     icon: List,             label: "Table"    },
-  { id: "sprint",   icon: Zap,              label: "Sprint"   },
-  { id: "calendar", icon: CalendarDays,     label: "Calendar" },
+  { id: "kanban", icon: LayoutGrid, label: "Board" },
+  { id: "list", icon: List, label: "Table" },
+  { id: "sprint", icon: Zap, label: "Sprint" },
+  { id: "calendar", icon: CalendarDays, label: "Calendar" },
   { id: "timeline", icon: GanttChartSquare, label: "Timeline" },
 ];
 
@@ -51,16 +78,22 @@ const COLUMN_COLORS = ["#94a3b8", ...APP_COLORS];
 
 function AddColumnButton({ workspaceSlug, projectId }) {
   const [adding, setAdding] = useState(false);
-  const [name, setName]     = useState("");
+  const [name, setName] = useState("");
   const createStatus = useCreateStatus(workspaceSlug, projectId);
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!name.trim()) return;
-    const color = COLUMN_COLORS[Math.floor(Math.random() * COLUMN_COLORS.length)];
+    const color =
+      COLUMN_COLORS[Math.floor(Math.random() * COLUMN_COLORS.length)];
     createStatus.mutate(
       { name: name.trim(), color, is_done: false },
-      { onSuccess: () => { setName(""); setAdding(false); } }
+      {
+        onSuccess: () => {
+          setName("");
+          setAdding(false);
+        },
+      },
     );
   };
 
@@ -77,22 +110,33 @@ function AddColumnButton({ workspaceSlug, projectId }) {
 
   return (
     <form onSubmit={handleSubmit} className="w-[272px] flex-shrink-0">
-      <div className="bg-card border rounded-t-md border-t-[3px] px-2 py-2" style={{ borderTopColor: "#6366f1" }}>
+      <div
+        className="bg-card border rounded-t-md border-t-[3px] px-2 py-2"
+        style={{ borderTopColor: "#6366f1" }}
+      >
         <input
           autoFocus
           className="w-full text-sm bg-background border rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
           placeholder="Column name…"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Escape") setAdding(false); }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setAdding(false);
+          }}
         />
         <div className="flex gap-1.5 mt-2">
-          <button type="submit" disabled={!name.trim() || createStatus.isPending}
-            className="flex-1 text-xs py-1.5 bg-primary text-primary-foreground rounded-md font-medium disabled:opacity-50">
+          <button
+            type="submit"
+            disabled={!name.trim() || createStatus.isPending}
+            className="flex-1 text-xs py-1.5 bg-primary text-primary-foreground rounded-md font-medium disabled:opacity-50"
+          >
             {createStatus.isPending ? "Adding…" : "Add column"}
           </button>
-          <button type="button" onClick={() => setAdding(false)}
-            className="px-2 text-xs border rounded-md text-muted-foreground hover:bg-accent transition-colors">
+          <button
+            type="button"
+            onClick={() => setAdding(false)}
+            className="px-2 text-xs border rounded-md text-muted-foreground hover:bg-accent transition-colors"
+          >
             Cancel
           </button>
         </div>
@@ -108,27 +152,33 @@ export default function KanbanPage() {
 
   const { user } = useAuthStore();
   const { toast } = useToast();
-  const { data: project }   = useProject(workspaceSlug, projectId);
+  const { data: project } = useProject(workspaceSlug, projectId);
   const { data: allTasks = [] } = useTasks(workspaceSlug, projectId);
-  const { data: labels = [] }   = useLabels(workspaceSlug, projectId);
-  const { data: members = [] }  = useMembers(workspaceSlug);
-  const { data: fields = [] }   = useProjectFields(workspaceSlug, projectId);
-  const { data: sprints = [] }  = useSprints(workspaceSlug, projectId);
+  const { data: labels = [] } = useLabels(workspaceSlug, projectId);
+  const { data: members = [] } = useMembers(workspaceSlug);
+  const { data: fields = [] } = useProjectFields(workspaceSlug, projectId);
+  const { data: sprints = [] } = useSprints(workspaceSlug, projectId);
   const perms = useProjectPermissions(workspaceSlug, projectId);
 
-  const moveTask    = useMoveTask(workspaceSlug, projectId);
-  const updateTask  = useUpdateTask(workspaceSlug, projectId);
+  const moveTask = useMoveTask(workspaceSlug, projectId);
+  const updateTask = useUpdateTask(workspaceSlug, projectId);
   const createLabel = useCreateLabel(workspaceSlug, projectId);
 
   const { data: savedViews = [] } = useSavedViews(workspaceSlug, projectId);
   const createView = useCreateSavedView(workspaceSlug, projectId);
   const deleteView = useDeleteSavedView(workspaceSlug, projectId);
 
-  const [createModal, setCreateModal]   = useState({ open: false, statusId: null, date: null });
+  const [createModal, setCreateModal] = useState({
+    open: false,
+    statusId: null,
+    date: null,
+  });
   const [boardSettings, setBoardSettings] = useState(false);
-  const [membersModal, setMembersModal]   = useState(false);
-  const [selectedTaskId, setSelectedTaskId] = useState(() => searchParams.get("task") || null);
-  const [view, setView]       = useState("kanban");
+  const [membersModal, setMembersModal] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState(
+    () => searchParams.get("task") || null,
+  );
+  const [view, setView] = useState("kanban");
 
   // Keep selectedTaskId in sync whenever ?task= param changes (e.g. navigating to a child task from the panel)
   useEffect(() => {
@@ -137,7 +187,9 @@ export default function KanbanPage() {
   }, [searchParams]);
 
   const [filters, setFilters] = useState(EMPTY_FILTERS);
-  const [activeSprint, setActiveSprint] = useState(() => sprints.find(s => s.status === "active") || null);
+  const [activeSprint, setActiveSprint] = useState(
+    () => sprints.find((s) => s.status === "active") || null,
+  );
   const [selectedIds, setSelectedIds] = useState(new Set());
 
   const bulkUpdate = useBulkUpdateTasks(workspaceSlug, projectId);
@@ -156,9 +208,11 @@ export default function KanbanPage() {
         `/api/workspaces/${workspaceSlug}/projects/${projectId}/tasks/export/`,
         { responseType: "blob" },
       );
-      const url  = URL.createObjectURL(new Blob([resp.data], { type: "text/csv" }));
+      const url = URL.createObjectURL(
+        new Blob([resp.data], { type: "text/csv" }),
+      );
       const link = document.createElement("a");
-      link.href     = url;
+      link.href = url;
       link.download = `${project?.name || "tasks"}-tasks.csv`;
       document.body.appendChild(link);
       link.click();
@@ -173,14 +227,19 @@ export default function KanbanPage() {
 
   // v3.9.0 — `c` shortcut creates a task in the current project
   useEffect(() => {
-    const handler = () => setCreateModal({ open: true, statusId: null, date: null });
+    const handler = () =>
+      setCreateModal({ open: true, statusId: null, date: null });
     window.addEventListener("jcn:create-task", handler);
     return () => window.removeEventListener("jcn:create-task", handler);
   }, []);
 
   // v3.5.0 — announce presence for this project board
   useAnnouncePresence(workspaceSlug, "project", projectId);
-  const { data: boardPresence = [] } = usePresence(workspaceSlug, "project", projectId);
+  const { data: boardPresence = [] } = usePresence(
+    workspaceSlug,
+    "project",
+    projectId,
+  );
 
   // Map task-scoped presence to individual task cards
   const taskViewerMap = useMemo(() => {
@@ -193,45 +252,64 @@ export default function KanbanPage() {
     return map;
   }, [boardPresence]);
 
-  const openTask  = (taskId) => { setSelectedTaskId(taskId); setSearchParams({ task: taskId }, { replace: true }); };
-  const closeTask = () => { setSelectedTaskId(null); setSearchParams({}, { replace: true }); };
+  const openTask = (taskId) => {
+    setSelectedTaskId(taskId);
+    setSearchParams({ task: taskId }, { replace: true });
+  };
+  const closeTask = () => {
+    setSelectedTaskId(null);
+    setSearchParams({}, { replace: true });
+  };
 
   // Sprint mode: filter tasks by selected sprint
   const tasks = useMemo(() => {
     if (view === "sprint" && activeSprint) {
-      return allTasks.filter(t => t.sprint_detail?.id === activeSprint.id);
+      return allTasks.filter((t) => t.sprint_detail?.id === activeSprint.id);
     }
     return allTasks;
   }, [allTasks, view, activeSprint]);
 
-  const backlogTasks = useMemo(() =>
-    view === "sprint" ? allTasks.filter(t => !t.sprint_detail) : [],
-    [allTasks, view]
+  const backlogTasks = useMemo(
+    () => (view === "sprint" ? allTasks.filter((t) => !t.sprint_detail) : []),
+    [allTasks, view],
   );
 
   const filteredTasks = useMemo(() => {
-    const today = new Date(); today.setHours(0,0,0,0);
-    const weekEnd = new Date(today); weekEnd.setDate(today.getDate() + 7);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const weekEnd = new Date(today);
+    weekEnd.setDate(today.getDate() + 7);
     let result = tasks;
-    if (filters.search)               result = result.filter(t => t.title.toLowerCase().includes(filters.search.toLowerCase()));
-    if (filters.priorities?.length)   result = result.filter(t => filters.priorities.includes(t.priority));
-    if (filters.assignees?.length)    result = result.filter(t => filters.assignees.includes(t.assignee?.id));
-    if (filters.labels?.length)       result = result.filter(t => t.labels?.some(l => filters.labels.includes(l.id)));
-    if (filters.types?.length)        result = result.filter(t => filters.types.includes(t.task_type));
+    if (filters.search)
+      result = result.filter((t) =>
+        t.title.toLowerCase().includes(filters.search.toLowerCase()),
+      );
+    if (filters.priorities?.length)
+      result = result.filter((t) => filters.priorities.includes(t.priority));
+    if (filters.assignees?.length)
+      result = result.filter((t) => filters.assignees.includes(t.assignee?.id));
+    if (filters.labels?.length)
+      result = result.filter((t) =>
+        t.labels?.some((l) => filters.labels.includes(l.id)),
+      );
+    if (filters.types?.length)
+      result = result.filter((t) => filters.types.includes(t.task_type));
     if (filters.due?.length) {
-      result = result.filter(t => {
+      result = result.filter((t) => {
         if (!t.due_date && filters.due.includes("no_date")) return true;
         if (!t.due_date) return false;
         const d = new Date(t.due_date + "T00:00:00");
-        if (filters.due.includes("overdue")   && d < today)               return true;
-        if (filters.due.includes("today")     && d.getTime() === today.getTime()) return true;
-        if (filters.due.includes("this_week") && d >= today && d <= weekEnd) return true;
+        if (filters.due.includes("overdue") && d < today) return true;
+        if (filters.due.includes("today") && d.getTime() === today.getTime())
+          return true;
+        if (filters.due.includes("this_week") && d >= today && d <= weekEnd)
+          return true;
         return false;
       });
     }
     // v3.6.0 — pending my approval: show tasks that have a pending approval
     if (filters.pendingMyApproval) {
-      result = result.filter(t => t.pending_approval_count > 0);
+      result = result.filter((t) => t.pending_approval_count > 0);
     }
     return result;
   }, [tasks, filters]);
@@ -240,11 +318,20 @@ export default function KanbanPage() {
     if (!result.destination) return;
     if (!perms.canEdit) return;
     moveTask.mutate(
-      { taskId: result.draggableId, status_id: result.destination.droppableId, order: result.destination.index },
+      {
+        taskId: result.draggableId,
+        status_id: result.destination.droppableId,
+        order: result.destination.index,
+      },
       {
         onError: (err) => {
           if (err?.response?.data?.approval_required) {
-            toast({ title: "Approval required", description: "Resolve pending approvals before marking this task done.", type: "error" });
+            toast({
+              title: "Approval required",
+              description:
+                "Resolve pending approvals before marking this task done.",
+              type: "error",
+            });
           }
         },
       },
@@ -252,7 +339,9 @@ export default function KanbanPage() {
   };
 
   const tasksByStatus = (statusId) =>
-    filteredTasks.filter(t => t.status_detail?.id === statusId).sort((a, b) => a.order - b.order);
+    filteredTasks
+      .filter((t) => t.status_detail?.id === statusId)
+      .sort((a, b) => a.order - b.order);
 
   const addTaskToSprint = (task) => {
     if (!activeSprint) return;
@@ -287,7 +376,9 @@ export default function KanbanPage() {
                   </Badge>
                 )}
                 {boardPresence.length > 0 && (
-                  <Tooltip content={`${boardPresence.length} ${boardPresence.length === 1 ? "person" : "people"} online`}>
+                  <Tooltip
+                    content={`${boardPresence.length} ${boardPresence.length === 1 ? "person" : "people"} online`}
+                  >
                     <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 text-[11px] font-medium cursor-default">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                       {boardPresence.length} online
@@ -442,7 +533,8 @@ export default function KanbanPage() {
                     projectId={projectId}
                     canEdit={perms.canEdit}
                     columnViewers={boardPresence.filter(
-                      (p) => p.resource_type === "board" && p.resource_id === col.id
+                      (p) =>
+                        p.resource_type === "board" && p.resource_id === col.id,
                     )}
                     taskViewerMap={taskViewerMap}
                   />
@@ -493,7 +585,9 @@ export default function KanbanPage() {
                       projectId={projectId}
                       canEdit={perms.canEdit}
                       columnViewers={boardPresence.filter(
-                        (p) => p.resource_type === "board" && p.resource_id === col.id
+                        (p) =>
+                          p.resource_type === "board" &&
+                          p.resource_id === col.id,
                       )}
                       taskViewerMap={taskViewerMap}
                     />
@@ -595,23 +689,28 @@ export default function KanbanPage() {
 
       {/* Task Detail Panel — lazy; Tiptap/VoltEditor bundle loads on first task open */}
       {selectedTaskId && (
-        <Suspense fallback={
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-            <div className="relative w-full max-w-2xl bg-card border border-border rounded-md shadow-2xl flex items-center justify-center" style={{ height: "60vh" }}>
-              <Loader size="lg" />
+        <Suspense
+          fallback={
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+              <div
+                className="relative w-full max-w-2xl bg-card border border-border rounded-md shadow-2xl flex items-center justify-center"
+                style={{ height: "60vh" }}
+              >
+                <Loader size="lg" />
+              </div>
             </div>
-          </div>
-        }>
-        <TaskDetailPanel
-          taskId={selectedTaskId}
-          projectStatuses={project?.statuses || []}
-          projectLabels={labels}
-          projectFields={fields}
-          onCreateLabel={(data, opts) => createLabel.mutate(data, opts)}
-          onClose={closeTask}
-          canEdit={perms.canEdit}
-        />
+          }
+        >
+          <TaskDetailPanel
+            taskId={selectedTaskId}
+            projectStatuses={project?.statuses || []}
+            projectLabels={labels}
+            projectFields={fields}
+            onCreateLabel={(data, opts) => createLabel.mutate(data, opts)}
+            onClose={closeTask}
+            canEdit={perms.canEdit}
+          />
         </Suspense>
       )}
 

@@ -2,8 +2,9 @@ import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useProjects } from "@/hooks/useProjects";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import CreateProjectModal from "@/components/projects/CreateProjectModal";
-import { FolderKanban, Plus, ArrowRight } from "lucide-react";
+import { Plus, ArrowRight } from "lucide-react";
 import { APP_COLORS as PROJECT_COLORS } from "@/lib/constants";
 
 export default function ProjectsPage() {
@@ -32,18 +33,16 @@ export default function ProjectsPage() {
       )}
 
       {!isLoading && projects?.length === 0 && (
-        <div className="rounded-md border bg-card p-16 text-center shadow-card">
-          <div className="w-14 h-14 rounded--md bg-primary/10 text-primary flex items-center justify-center mx-auto mb-4">
-            <FolderKanban className="w-7 h-7" />
-          </div>
-          <p className="font-semibold text-lg">No projects yet</p>
-          <p className="text-sm text-muted-foreground mt-1 mb-5">
-            Create a project to start tracking work.
-          </p>
-          <Button onClick={() => setShowCreate(true)}>
-            <Plus className="w-4 h-4 mr-1.5" /> New Project
-          </Button>
-        </div>
+        <EmptyState
+          illustration="projects"
+          title="No projects yet"
+          description="Create a project to start tracking work."
+          action={
+            <Button onClick={() => setShowCreate(true)}>
+              <Plus className="w-4 h-4 mr-1.5" /> New Project
+            </Button>
+          }
+        />
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

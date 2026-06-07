@@ -2945,13 +2945,14 @@ class UserPresenceView(APIView):
         if not resource_id:
             return Response({"detail": "resource_id required."}, status=status.HTTP_400_BAD_REQUEST)
 
+        # last_seen is auto_now, so update_or_create already stamps it on save.
+        # Avoid a separate update + refresh_from_db, which races with a concurrent
+        # DELETE (leave) and raises UserPresence.DoesNotExist.
         presence, _ = UserPresence.objects.update_or_create(
             user=request.user, workspace=workspace,
             resource_type=resource_type, resource_id=resource_id,
             defaults={},
         )
-        UserPresence.objects.filter(pk=presence.pk).update(last_seen=timezone.now())
-        presence.refresh_from_db()
 
         data = UserPresenceSerializer(presence).data
         broadcast(workspace_slug, "presence.updated", {

@@ -4,7 +4,14 @@ import { CheckCircle, Eye, EyeOff, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import api from "@/lib/api";
 
 /**
@@ -13,11 +20,11 @@ import api from "@/lib/api";
  */
 export default function ResetPasswordConfirmPage() {
   const { uid, token } = useParams();
-  const [form, setForm]       = useState({ new_password1: "", new_password2: "" });
-  const [show, setShow]       = useState({ p1: false, p2: false });
+  const [form, setForm] = useState({ new_password1: "", new_password2: "" });
+  const [show, setShow] = useState({ p1: false, p2: false });
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
-  const [error,   setError]   = useState("");
+  const [error, setError] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -43,13 +50,14 @@ export default function ResetPasswordConfirmPage() {
       setSuccess(true);
     } catch (err) {
       const data = err?.response?.data || {};
-      const msg  = data.new_password1?.[0]
-        || data.new_password2?.[0]
-        || data.token?.[0]
-        || data.uid?.[0]
-        || data.detail
-        || data.non_field_errors?.[0]
-        || "Reset failed. The link may have expired.";
+      const msg =
+        data.new_password1?.[0] ||
+        data.new_password2?.[0] ||
+        data.token?.[0] ||
+        data.uid?.[0] ||
+        data.detail ||
+        data.non_field_errors?.[0] ||
+        "Reset failed. The link may have expired.";
       setError(msg);
     } finally {
       setLoading(false);
@@ -61,7 +69,9 @@ export default function ResetPasswordConfirmPage() {
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle className="text-2xl">Set new password</CardTitle>
-          <CardDescription>Choose a strong password for your account.</CardDescription>
+          <CardDescription>
+            Choose a strong password for your account.
+          </CardDescription>
         </CardHeader>
 
         {success ? (
@@ -98,7 +108,9 @@ export default function ResetPasswordConfirmPage() {
                     type={show.p1 ? "text" : "password"}
                     placeholder="At least 8 characters"
                     value={form.new_password1}
-                    onChange={(e) => setForm({ ...form, new_password1: e.target.value })}
+                    onChange={(e) =>
+                      setForm({ ...form, new_password1: e.target.value })
+                    }
                     className="pr-10"
                     required
                     autoFocus
@@ -109,7 +121,11 @@ export default function ResetPasswordConfirmPage() {
                     onClick={() => setShow((s) => ({ ...s, p1: !s.p1 }))}
                     className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                   >
-                    {show.p1 ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    {show.p1 ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
                   </button>
                 </div>
               </div>
@@ -123,7 +139,9 @@ export default function ResetPasswordConfirmPage() {
                     type={show.p2 ? "text" : "password"}
                     placeholder="Repeat password"
                     value={form.new_password2}
-                    onChange={(e) => setForm({ ...form, new_password2: e.target.value })}
+                    onChange={(e) =>
+                      setForm({ ...form, new_password2: e.target.value })
+                    }
                     className="pr-10"
                     required
                   />
@@ -133,7 +151,11 @@ export default function ResetPasswordConfirmPage() {
                     onClick={() => setShow((s) => ({ ...s, p2: !s.p2 }))}
                     className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                   >
-                    {show.p2 ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    {show.p2 ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
                   </button>
                 </div>
               </div>
@@ -143,7 +165,10 @@ export default function ResetPasswordConfirmPage() {
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? "Resetting…" : "Reset password"}
               </Button>
-              <Link to="/login" className="text-sm text-muted-foreground hover:text-primary transition-colors">
+              <Link
+                to="/login"
+                className="text-sm text-muted-foreground hover:text-primary transition-colors"
+              >
                 ← Back to sign in
               </Link>
             </CardFooter>

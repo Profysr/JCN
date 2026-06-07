@@ -61,34 +61,34 @@ export function Avatar({ name, src, size = "md", className, ring = false }) {
   );
 }
 
-export function AvatarGroup({ users = [], max = 3, size = "sm", className }) {
-  const visible = users.slice(0, max);
-  const overflow = users.length - max;
+// export function AvatarGroup({ users = [], max = 3, size = "sm", className }) {
+//   const visible = users.slice(0, max);
+//   const overflow = users.length - max;
 
-  return (
-    <div className={cn("flex -space-x-1.5", className)}>
-      {visible.map((user, i) => (
-        <Avatar
-          key={user.id || i}
-          name={user.display_name || user.full_name || user.email}
-          src={user.avatar}
-          size={size}
-          ring
-        />
-      ))}
-      {overflow > 0 && (
-        <div
-          className={cn(
-            "rounded-full flex items-center justify-center font-semibold",
-            "bg-muted text-muted-foreground ring-2 ring-background",
-            sizeMap[size]?.outer || sizeMap.sm.outer,
-            "text-[9px]"
-          )}
-          title={`${overflow} more`}
-        >
-          +{overflow}
-        </div>
-      )}
-    </div>
-  );
-}
+//   return (
+//     <div className={cn("flex -space-x-1.5", className)}>
+//       {visible.map((user, i) => (
+//         <Avatar
+//           key={user.id || i}
+//           name={user.display_name || user.full_name || user.email}
+//           src={user.avatar}
+//           size={size}
+//           ring
+//         />
+//       ))}
+//       {overflow > 0 && (
+//         <div
+//           className={cn(
+//             "rounded-full flex items-center justify-center font-semibold",
+//             "bg-muted text-muted-foreground ring-2 ring-background",
+//             sizeMap[size]?.outer || sizeMap.sm.outer,
+//             "text-[9px]"
+//           )}
+//           title={`${overflow} more`}
+//         >
+//           +{overflow}
+//         </div>
+//       )}
+//     </div>
+//   );
+// }

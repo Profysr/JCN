@@ -35,10 +35,10 @@ export function useDeleteAutomation(workspaceSlug, projectId) {
   });
 }
 
-export function useAutomationLogs(workspaceSlug, projectId, ruleId) {
-  return useQuery({
-    queryKey: ["automation-logs", workspaceSlug, projectId, ruleId],
-    queryFn: () => api.get(`${base(workspaceSlug, projectId)}${ruleId}/logs/`).then(r => r.data),
-    enabled: !!ruleId,
-  });
-}
+// export function useAutomationLogs(workspaceSlug, projectId, ruleId) {
+//   return useQuery({
+//     queryKey: ["automation-logs", workspaceSlug, projectId, ruleId],
+//     queryFn: () => api.get(`${base(workspaceSlug, projectId)}${ruleId}/logs/`).then(r => r.data),
+//     enabled: !!ruleId,
+//   });
+// }
