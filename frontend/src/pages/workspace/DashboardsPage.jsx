@@ -1,12 +1,10 @@
 import { useState } from "react";
-import { Loader } from "@/components/ui/Loader";
 import { useParams, useSearchParams } from "react-router-dom";
 import {
   Plus,
   X,
   Lock,
   LayoutDashboard,
-  BarChart2,
   Settings2,
   Trash2,
 } from "lucide-react";
@@ -18,20 +16,15 @@ import {
   useDeleteDashboard,
 } from "@/hooks/useDashboards";
 import { useObjectives, CONFIDENCE_CONFIG } from "@/hooks/useGoals";
-import { useAnalytics } from "@/hooks/useAnalytics";
 import { useProjects } from "@/hooks/useProjects";
 import { useQuery } from "@tanstack/react-query";
-import { useAuthStore } from "@/store/authStore";
 import api from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { PRIORITIES, APP_COLORS, pickColor } from "@/lib/constants";
+import { APP_COLORS } from "@/lib/constants";
 import GettingStartedChecklist from "@/components/dashboard/GettingStartedChecklist";
 
 // ── Built-in: Overview tab ───────────────────────────────────────────────────
-const PROJECT_COLORS = APP_COLORS; // canonical — from constants.js
-
 function OverviewTab({ workspaceSlug }) {
-  const { user } = useAuthStore();
   const { data: projects = [] } = useProjects(workspaceSlug);
   const { data: members = [] } = useQuery({
     queryKey: ["workspace-members", workspaceSlug],
@@ -100,7 +93,7 @@ function OverviewTab({ workspaceSlug }) {
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {projects.slice(0, 6).map((p, i) => {
-            const color = PROJECT_COLORS[i % PROJECT_COLORS.length];
+            const color = APP_COLORS[i % APP_COLORS.length];
             const done = p.done_task_count || 0;
             const total = p.task_count || 0;
             const pct = total > 0 ? Math.round((done / total) * 100) : 0;
@@ -136,59 +129,6 @@ function OverviewTab({ workspaceSlug }) {
             );
           })}
         </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Built-in: Analytics tab — redirects to full AnalyticsPage ────────────────
-function AnalyticsTab({ workspaceSlug }) {
-  const navigate = useNavigate();
-  const { data, isLoading } = useAnalytics(workspaceSlug);
-  const ov = data?.overview || {};
-
-  return (
-    <div className="p-6 space-y-6">
-      {/* Quick KPIs */}
-      {isLoading ? (
-        <Loader className="h-32" />
-      ) : (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[
-            { label: "Projects", value: ov.projects ?? 0 },
-            { label: "Tasks", value: ov.tasks ?? 0 },
-            { label: "Members", value: ov.members ?? 0 },
-            { label: "Open Tasks", value: ov.open_tasks ?? 0 },
-          ].map((s) => (
-            <div
-              key={s.label}
-              className="bg-card border border-border rounded-md p-4 shadow-card"
-            >
-              <p className="text-2xl font-bold tabular-nums">{s.value}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* CTA to full analytics */}
-      <div className="bg-gradient-to-br from-primary/5 to-primary/10 border border-primary/20 rounded-md p-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
-        <div className="w-12 h-12 rounded-md bg-primary/15 flex items-center justify-center flex-shrink-0">
-          <BarChart2 className="w-6 h-6 text-primary" />
-        </div>
-        <div className="flex-1">
-          <p className="font-semibold">Full Analytics Suite</p>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Velocity, cycle time, CFD, burnup, lead time, workload heatmap — all
-            your engineering metrics in one place.
-          </p>
-        </div>
-        <button
-          onClick={() => navigate(`/w/${workspaceSlug}/analytics`)}
-          className="flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity flex-shrink-0"
-        >
-          Open Analytics
-        </button>
       </div>
     </div>
   );
@@ -476,6 +416,55 @@ function CustomDashboardTab({ dashboard, workspaceSlug }) {
   );
 }
 
+// ── Tab component ─────────────────────────────────────────────────────────────
+function Tab({ active, onClick, label, icon, locked, onRename, onDelete }) {
+  return (
+    <div className="relative group flex-shrink-0">
+      <button
+        onClick={onClick}
+        className={cn(
+          "flex items-center gap-1.5 px-3 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap",
+          active
+            ? "border-primary text-foreground"
+            : "border-transparent text-muted-foreground hover:text-foreground hover:border-border",
+        )}
+      >
+        {icon}
+        {label}
+        {locked && <Lock className="w-3 h-3 text-muted-foreground/50" />}
+      </button>
+
+      {/* Rename / delete controls for user dashboards */}
+      {!locked && active && (
+        <div className="absolute right-1 top-1 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          {onRename && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onRename();
+              }}
+              className="p-0.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground"
+            >
+              <Settings2 className="w-3 h-3" />
+            </button>
+          )}
+          {onDelete && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+              className="p-0.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main DashboardsPage ───────────────────────────────────────────────────────
 export default function DashboardsPage() {
   const { workspaceSlug } = useParams();
@@ -539,13 +528,13 @@ export default function DashboardsPage() {
         />
 
         {/* Analytics (built-in) */}
-        <Tab
+        {/* <Tab
           active={activeTab === "analytics"}
           onClick={() => setTab("analytics")}
           locked
           icon={<BarChart2 className="w-3.5 h-3.5" />}
           label="Analytics"
-        />
+        /> */}
 
         {/* User dashboards */}
         {userDashboards.map((d) => (
@@ -613,9 +602,9 @@ export default function DashboardsPage() {
         {activeTab === "overview" && (
           <OverviewTab workspaceSlug={workspaceSlug} />
         )}
-        {activeTab === "analytics" && (
+        {/* {activeTab === "analytics" && (
           <AnalyticsTab workspaceSlug={workspaceSlug} />
-        )}
+        )} */}
         {activeDashboard && (
           <CustomDashboardTab
             dashboard={activeDashboard}
@@ -623,55 +612,6 @@ export default function DashboardsPage() {
           />
         )}
       </div>
-    </div>
-  );
-}
-
-// ── Tab component ─────────────────────────────────────────────────────────────
-function Tab({ active, onClick, label, icon, locked, onRename, onDelete }) {
-  return (
-    <div className="relative group flex-shrink-0">
-      <button
-        onClick={onClick}
-        className={cn(
-          "flex items-center gap-1.5 px-3 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap",
-          active
-            ? "border-primary text-foreground"
-            : "border-transparent text-muted-foreground hover:text-foreground hover:border-border",
-        )}
-      >
-        {icon}
-        {label}
-        {locked && <Lock className="w-3 h-3 text-muted-foreground/50" />}
-      </button>
-
-      {/* Rename / delete controls for user dashboards */}
-      {!locked && active && (
-        <div className="absolute right-1 top-1 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-          {onRename && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onRename();
-              }}
-              className="p-0.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground"
-            >
-              <Settings2 className="w-3 h-3" />
-            </button>
-          )}
-          {onDelete && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete();
-              }}
-              className="p-0.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
-            >
-              <Trash2 className="w-3 h-3" />
-            </button>
-          )}
-        </div>
-      )}
     </div>
   );
 }

@@ -41,7 +41,7 @@ const ALL_COLUMNS = [
 function getSortValue(task, col) {
   if (col === "title") return (task.title || "").toLowerCase();
   if (col === "status") return task.status_detail?.name?.toLowerCase() || "";
-  if (col === "priority") return PRI_ORDER[task.priority] ?? 4;
+  if (col === "priority") return PRIORITY_ORDER[task.priority] ?? 4;
   if (col === "assignee")
     return (
       task.assignee?.full_name ||

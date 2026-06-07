@@ -1,47 +1,76 @@
 import { useEditor, EditorContent } from "@tiptap/react";
 import { StarterKit } from "@tiptap/starter-kit";
 // Individual mark extensions — configured with inclusive:false so marks reset on Enter
-import { Bold as BoldExt }   from "@tiptap/extension-bold";
+import { Bold as BoldExt } from "@tiptap/extension-bold";
 import { Italic as ItalicExt } from "@tiptap/extension-italic";
 import { Strike as StrikeExt } from "@tiptap/extension-strike";
-import { Code as CodeExt }   from "@tiptap/extension-code";
-import { Underline }         from "@tiptap/extension-underline";
-import { TextAlign }         from "@tiptap/extension-text-align";
-import { Highlight }         from "@tiptap/extension-highlight";
-import { TextStyle }         from "@tiptap/extension-text-style";
-import { Link }              from "@tiptap/extension-link";
-import { Placeholder }       from "@tiptap/extension-placeholder";
-import { Table }             from "@tiptap/extension-table";
-import { TableRow }          from "@tiptap/extension-table-row";
-import { TableCell }         from "@tiptap/extension-table-cell";
-import { TableHeader }       from "@tiptap/extension-table-header";
-import { TaskList }          from "@tiptap/extension-task-list";
-import { TaskItem }          from "@tiptap/extension-task-item";
-import { Markdown }          from "tiptap-markdown";
+import { Code as CodeExt } from "@tiptap/extension-code";
+import { Underline } from "@tiptap/extension-underline";
+import { TextAlign } from "@tiptap/extension-text-align";
+import { Highlight } from "@tiptap/extension-highlight";
+import { TextStyle } from "@tiptap/extension-text-style";
+import { Link } from "@tiptap/extension-link";
+import { Placeholder } from "@tiptap/extension-placeholder";
+import { Table } from "@tiptap/extension-table";
+import { TableRow } from "@tiptap/extension-table-row";
+import { TableCell } from "@tiptap/extension-table-cell";
+import { TableHeader } from "@tiptap/extension-table-header";
+import { TaskList } from "@tiptap/extension-task-list";
+import { TaskItem } from "@tiptap/extension-task-item";
+import { Markdown } from "tiptap-markdown";
 import {
-  Bold, Italic, Strikethrough, Code, Underline as UnderlineIcon,
-  Heading1, Heading2, Heading3, List, ListOrdered, ListChecks,
-  Quote, Minus, Link as LinkIcon, AlignLeft, AlignCenter, AlignRight,
-  Highlighter, Undo, Redo, Table as TableIcon,
-  Plus, Trash2, ChevronDown, ChevronRight,
+  Bold,
+  Italic,
+  Strikethrough,
+  Code,
+  Underline as UnderlineIcon,
+  Heading1,
+  Heading2,
+  Heading3,
+  List,
+  ListOrdered,
+  ListChecks,
+  Quote,
+  Minus,
+  Link as LinkIcon,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  Highlighter,
+  Undo,
+  Redo,
+  Table as TableIcon,
+  Plus,
+  Trash2,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useEffect, useCallback, useState, useRef, useLayoutEffect } from "react";
+import {
+  useEffect,
+  useCallback,
+  useState,
+  useRef,
+  useLayoutEffect,
+} from "react";
 
 // ── Non-inclusive marks — reset at paragraph boundary (Enter key) ────────────
-const NiBold      = BoldExt.extend({ inclusive: false });
-const NiItalic    = ItalicExt.extend({ inclusive: false });
-const NiStrike    = StrikeExt.extend({ inclusive: false });
-const NiCode      = CodeExt.extend({ inclusive: false });
+const NiBold = BoldExt.extend({ inclusive: false });
+const NiItalic = ItalicExt.extend({ inclusive: false });
+const NiStrike = StrikeExt.extend({ inclusive: false });
+const NiCode = CodeExt.extend({ inclusive: false });
 const NiUnderline = Underline.extend({ inclusive: false });
 
 export default function VoltEditor({
-  value = "", onChange, onBlur,
+  value = "",
+  onChange,
+  onBlur,
   placeholder = "Write something…",
-  readOnly = false, className,
+  readOnly = false,
+  className,
 }) {
   const [linkInputOpen, setLinkInputOpen] = useState(false);
-  const [linkDraft, setLinkDraft]         = useState("");
+  const [linkDraft, setLinkDraft] = useState("");
   const linkRef = useRef(null);
   // Tracks whether the last value change originated from the editor itself.
   // If true, the sync useEffect skips setContent — preventing the input loop
@@ -52,17 +81,28 @@ export default function VoltEditor({
     extensions: [
       // StarterKit with its marks disabled — we add them individually above
       StarterKit.configure({
-        bold: false, italic: false, strike: false, code: false,
+        bold: false,
+        italic: false,
+        strike: false,
+        code: false,
+        underline: false,
+        link: false,
         codeBlock: { languageClassPrefix: "language-" },
       }),
-      NiBold, NiItalic, NiStrike, NiCode, NiUnderline,
+      NiBold,
+      NiItalic,
+      NiStrike,
+      NiCode,
+      NiUnderline,
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       Highlight.configure({ multicolor: false }),
       TextStyle,
       Link.configure({ openOnClick: false, autolink: true, inclusive: false }),
       Placeholder.configure({ placeholder }),
       Table.configure({ resizable: false }),
-      TableRow, TableCell, TableHeader,
+      TableRow,
+      TableCell,
+      TableHeader,
       TaskList,
       TaskItem.configure({ nested: true }),
       Markdown.configure({ html: false, tightLists: true }),
@@ -70,7 +110,7 @@ export default function VoltEditor({
     content: value,
     editable: !readOnly,
     onUpdate({ editor }) {
-      internalChange.current = true;          // mark as editor-driven
+      internalChange.current = true; // mark as editor-driven
       onChange?.(editor.storage.markdown.getMarkdown());
     },
     onBlur({ editor }) {
@@ -99,7 +139,10 @@ export default function VoltEditor({
 
   // Close link input on outside click
   useEffect(() => {
-    const handler = (e) => { if (linkRef.current && !linkRef.current.contains(e.target)) setLinkInputOpen(false); };
+    const handler = (e) => {
+      if (linkRef.current && !linkRef.current.contains(e.target))
+        setLinkInputOpen(false);
+    };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
@@ -115,7 +158,9 @@ export default function VoltEditor({
     if (!linkDraft.trim()) {
       editor.chain().focus().extendMarkRange("link").unsetLink().run();
     } else {
-      const href = linkDraft.startsWith("http") ? linkDraft : `https://${linkDraft}`;
+      const href = linkDraft.startsWith("http")
+        ? linkDraft
+        : `https://${linkDraft}`;
       editor.chain().focus().extendMarkRange("link").setLink({ href }).run();
     }
     setLinkInputOpen(false);
@@ -136,44 +181,137 @@ export default function VoltEditor({
   const inTable = editor.isActive("table");
 
   return (
-    <div className={cn("volt-wrap border rounded-lg overflow-hidden focus-within:border-primary transition-colors bg-card", className)}>
+    <div
+      className={cn(
+        "volt-wrap border rounded-lg overflow-hidden focus-within:border-primary transition-colors bg-card",
+        className,
+      )}
+    >
       <VoltStyles />
 
       {/* ── Main toolbar ── */}
       <div className="flex flex-wrap items-center gap-0.5 px-2 py-1.5 border-b bg-muted/20">
-
         {/* Headings */}
-        <ToolBtn onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} active={editor.isActive("heading", { level: 1 })} title="Heading 1"><Heading1 className="w-3.5 h-3.5" /></ToolBtn>
-        <ToolBtn onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} active={editor.isActive("heading", { level: 2 })} title="Heading 2"><Heading2 className="w-3.5 h-3.5" /></ToolBtn>
-        <ToolBtn onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} active={editor.isActive("heading", { level: 3 })} title="Heading 3"><Heading3 className="w-3.5 h-3.5" /></ToolBtn>
+        <ToolBtn
+          onClick={() =>
+            editor.chain().focus().toggleHeading({ level: 1 }).run()
+          }
+          active={editor.isActive("heading", { level: 1 })}
+          title="Heading 1"
+        >
+          <Heading1 className="w-3.5 h-3.5" />
+        </ToolBtn>
+        <ToolBtn
+          onClick={() =>
+            editor.chain().focus().toggleHeading({ level: 2 }).run()
+          }
+          active={editor.isActive("heading", { level: 2 })}
+          title="Heading 2"
+        >
+          <Heading2 className="w-3.5 h-3.5" />
+        </ToolBtn>
+        <ToolBtn
+          onClick={() =>
+            editor.chain().focus().toggleHeading({ level: 3 }).run()
+          }
+          active={editor.isActive("heading", { level: 3 })}
+          title="Heading 3"
+        >
+          <Heading3 className="w-3.5 h-3.5" />
+        </ToolBtn>
 
         <Sep />
 
         {/* Inline formatting — also in bubble menu, but kept here for discoverability */}
-        <ToolBtn onClick={() => editor.chain().focus().toggleBold().run()}      active={editor.isActive("bold")}      title="Bold (Ctrl+B)"><Bold className="w-3.5 h-3.5" /></ToolBtn>
-        <ToolBtn onClick={() => editor.chain().focus().toggleItalic().run()}    active={editor.isActive("italic")}    title="Italic (Ctrl+I)"><Italic className="w-3.5 h-3.5" /></ToolBtn>
-        <ToolBtn onClick={() => editor.chain().focus().toggleUnderline().run()} active={editor.isActive("underline")} title="Underline (Ctrl+U)"><UnderlineIcon className="w-3.5 h-3.5" /></ToolBtn>
-        <ToolBtn onClick={() => editor.chain().focus().toggleStrike().run()}    active={editor.isActive("strike")}    title="Strikethrough"><Strikethrough className="w-3.5 h-3.5" /></ToolBtn>
+        <ToolBtn
+          onClick={() => editor.chain().focus().toggleBold().run()}
+          active={editor.isActive("bold")}
+          title="Bold (Ctrl+B)"
+        >
+          <Bold className="w-3.5 h-3.5" />
+        </ToolBtn>
+        <ToolBtn
+          onClick={() => editor.chain().focus().toggleItalic().run()}
+          active={editor.isActive("italic")}
+          title="Italic (Ctrl+I)"
+        >
+          <Italic className="w-3.5 h-3.5" />
+        </ToolBtn>
+        <ToolBtn
+          onClick={() => editor.chain().focus().toggleUnderline().run()}
+          active={editor.isActive("underline")}
+          title="Underline (Ctrl+U)"
+        >
+          <UnderlineIcon className="w-3.5 h-3.5" />
+        </ToolBtn>
+        <ToolBtn
+          onClick={() => editor.chain().focus().toggleStrike().run()}
+          active={editor.isActive("strike")}
+          title="Strikethrough"
+        >
+          <Strikethrough className="w-3.5 h-3.5" />
+        </ToolBtn>
 
         <Sep />
 
         {/* Lists */}
-        <ToolBtn onClick={() => editor.chain().focus().toggleBulletList().run()}  active={editor.isActive("bulletList")}  title="Bullet list"><List className="w-3.5 h-3.5" /></ToolBtn>
-        <ToolBtn onClick={() => editor.chain().focus().toggleOrderedList().run()} active={editor.isActive("orderedList")} title="Numbered list"><ListOrdered className="w-3.5 h-3.5" /></ToolBtn>
-        <ToolBtn onClick={() => editor.chain().focus().toggleTaskList().run()}    active={editor.isActive("taskList")}    title="Checklist"><ListChecks className="w-3.5 h-3.5" /></ToolBtn>
+        <ToolBtn
+          onClick={() => editor.chain().focus().toggleBulletList().run()}
+          active={editor.isActive("bulletList")}
+          title="Bullet list"
+        >
+          <List className="w-3.5 h-3.5" />
+        </ToolBtn>
+        <ToolBtn
+          onClick={() => editor.chain().focus().toggleOrderedList().run()}
+          active={editor.isActive("orderedList")}
+          title="Numbered list"
+        >
+          <ListOrdered className="w-3.5 h-3.5" />
+        </ToolBtn>
+        <ToolBtn
+          onClick={() => editor.chain().focus().toggleTaskList().run()}
+          active={editor.isActive("taskList")}
+          title="Checklist"
+        >
+          <ListChecks className="w-3.5 h-3.5" />
+        </ToolBtn>
 
         <Sep />
 
         {/* Block elements */}
-        <ToolBtn onClick={() => editor.chain().focus().toggleBlockquote().run()}   active={editor.isActive("blockquote")} title="Quote"><Quote className="w-3.5 h-3.5" /></ToolBtn>
-        <ToolBtn onClick={() => editor.chain().focus().toggleCodeBlock().run()}    active={editor.isActive("codeBlock")}  title="Code block"><Code className="w-3.5 h-3.5" /></ToolBtn>
-        <ToolBtn onClick={() => editor.chain().focus().setHorizontalRule().run()}  title="Divider"><Minus className="w-3.5 h-3.5" /></ToolBtn>
+        <ToolBtn
+          onClick={() => editor.chain().focus().toggleBlockquote().run()}
+          active={editor.isActive("blockquote")}
+          title="Quote"
+        >
+          <Quote className="w-3.5 h-3.5" />
+        </ToolBtn>
+        <ToolBtn
+          onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+          active={editor.isActive("codeBlock")}
+          title="Code block"
+        >
+          <Code className="w-3.5 h-3.5" />
+        </ToolBtn>
+        <ToolBtn
+          onClick={() => editor.chain().focus().setHorizontalRule().run()}
+          title="Divider"
+        >
+          <Minus className="w-3.5 h-3.5" />
+        </ToolBtn>
 
         <Sep />
 
         {/* Link */}
         <div className="relative" ref={linkRef}>
-          <ToolBtn onClick={openLinkInput} active={editor.isActive("link")} title="Insert link"><LinkIcon className="w-3.5 h-3.5" /></ToolBtn>
+          <ToolBtn
+            onClick={openLinkInput}
+            active={editor.isActive("link")}
+            title="Insert link"
+          >
+            <LinkIcon className="w-3.5 h-3.5" />
+          </ToolBtn>
           {linkInputOpen && (
             <div className="absolute left-0 top-8 z-50 flex items-center gap-1.5 bg-popover border rounded-lg shadow-lg px-2 py-1.5 w-64">
               <LinkIcon className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
@@ -181,13 +319,24 @@ export default function VoltEditor({
                 className="flex-1 text-xs bg-transparent outline-none placeholder:text-muted-foreground"
                 placeholder="https://…"
                 value={linkDraft}
-                onChange={e => setLinkDraft(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter") applyLink(); if (e.key === "Escape") setLinkInputOpen(false); }}
+                onChange={(e) => setLinkDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") applyLink();
+                  if (e.key === "Escape") setLinkInputOpen(false);
+                }}
               />
-              <button onClick={applyLink} className="text-xs font-medium text-primary hover:underline">Apply</button>
+              <button
+                onClick={applyLink}
+                className="text-xs font-medium text-primary hover:underline"
+              >
+                Apply
+              </button>
               {editor.isActive("link") && (
                 <button
-                  onClick={() => { editor.chain().focus().unsetLink().run(); setLinkInputOpen(false); }}
+                  onClick={() => {
+                    editor.chain().focus().unsetLink().run();
+                    setLinkInputOpen(false);
+                  }}
                   className="text-xs text-muted-foreground hover:text-destructive"
                 >
                   Remove
@@ -201,7 +350,13 @@ export default function VoltEditor({
 
         {/* Table */}
         <ToolBtn
-          onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+          onClick={() =>
+            editor
+              .chain()
+              .focus()
+              .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+              .run()
+          }
           active={inTable}
           title="Insert table"
         >
@@ -211,11 +366,45 @@ export default function VoltEditor({
         {/* Table context controls — only when cursor is inside a table */}
         {inTable && (
           <>
-            <ToolBtn onClick={() => editor.chain().focus().addRowAfter().run()}    title="Add row below">   <Plus className="w-3 h-3" /><span className="text-[10px] ml-0.5">Row</span></ToolBtn>
-            <ToolBtn onClick={() => editor.chain().focus().addColumnAfter().run()} title="Add col right">   <Plus className="w-3 h-3" /><span className="text-[10px] ml-0.5">Col</span></ToolBtn>
-            <ToolBtn onClick={() => editor.chain().focus().deleteRow().run()}       title="Delete row"   className="text-destructive/70 hover:text-destructive"><Trash2 className="w-3 h-3" /><span className="text-[10px] ml-0.5">Row</span></ToolBtn>
-            <ToolBtn onClick={() => editor.chain().focus().deleteColumn().run()}    title="Delete col"   className="text-destructive/70 hover:text-destructive"><Trash2 className="w-3 h-3" /><span className="text-[10px] ml-0.5">Col</span></ToolBtn>
-            <ToolBtn onClick={() => editor.chain().focus().deleteTable().run()}     title="Delete table" className="text-destructive/70 hover:text-destructive"><Trash2 className="w-3.5 h-3.5" /></ToolBtn>
+            <ToolBtn
+              onClick={() => editor.chain().focus().addRowAfter().run()}
+              title="Add row below"
+            >
+              {" "}
+              <Plus className="w-3 h-3" />
+              <span className="text-[10px] ml-0.5">Row</span>
+            </ToolBtn>
+            <ToolBtn
+              onClick={() => editor.chain().focus().addColumnAfter().run()}
+              title="Add col right"
+            >
+              {" "}
+              <Plus className="w-3 h-3" />
+              <span className="text-[10px] ml-0.5">Col</span>
+            </ToolBtn>
+            <ToolBtn
+              onClick={() => editor.chain().focus().deleteRow().run()}
+              title="Delete row"
+              className="text-destructive/70 hover:text-destructive"
+            >
+              <Trash2 className="w-3 h-3" />
+              <span className="text-[10px] ml-0.5">Row</span>
+            </ToolBtn>
+            <ToolBtn
+              onClick={() => editor.chain().focus().deleteColumn().run()}
+              title="Delete col"
+              className="text-destructive/70 hover:text-destructive"
+            >
+              <Trash2 className="w-3 h-3" />
+              <span className="text-[10px] ml-0.5">Col</span>
+            </ToolBtn>
+            <ToolBtn
+              onClick={() => editor.chain().focus().deleteTable().run()}
+              title="Delete table"
+              className="text-destructive/70 hover:text-destructive"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </ToolBtn>
           </>
         )}
 
@@ -223,8 +412,20 @@ export default function VoltEditor({
         <div className="flex-1" />
 
         {/* Undo / Redo */}
-        <ToolBtn onClick={() => editor.chain().focus().undo().run()} disabled={!editor.can().undo()} title="Undo (Ctrl+Z)"><Undo className="w-3.5 h-3.5" /></ToolBtn>
-        <ToolBtn onClick={() => editor.chain().focus().redo().run()} disabled={!editor.can().redo()} title="Redo (Ctrl+Y)"><Redo className="w-3.5 h-3.5" /></ToolBtn>
+        <ToolBtn
+          onClick={() => editor.chain().focus().undo().run()}
+          disabled={!editor.can().undo()}
+          title="Undo (Ctrl+Z)"
+        >
+          <Undo className="w-3.5 h-3.5" />
+        </ToolBtn>
+        <ToolBtn
+          onClick={() => editor.chain().focus().redo().run()}
+          disabled={!editor.can().redo()}
+          title="Redo (Ctrl+Y)"
+        >
+          <Redo className="w-3.5 h-3.5" />
+        </ToolBtn>
       </div>
 
       {/* Editor content */}
@@ -237,16 +438,28 @@ export default function VoltEditor({
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function ToolBtn({ onClick, active, disabled, title, children, className: cls }) {
+function ToolBtn({
+  onClick,
+  active,
+  disabled,
+  title,
+  children,
+  className: cls,
+}) {
   return (
     <button
       type="button"
-      onMouseDown={e => { e.preventDefault(); onClick?.(); }} // preventDefault keeps editor focus
+      onMouseDown={(e) => {
+        e.preventDefault();
+        onClick?.();
+      }} // preventDefault keeps editor focus
       disabled={disabled}
       title={title}
       className={cn(
         "flex items-center p-1.5 rounded text-xs transition-colors active:scale-[0.97]",
-        active ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground",
+        active
+          ? "bg-primary/15 text-primary"
+          : "text-muted-foreground hover:bg-accent hover:text-foreground",
         disabled && "opacity-30 cursor-not-allowed pointer-events-none",
         cls,
       )}

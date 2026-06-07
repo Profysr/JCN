@@ -873,10 +873,18 @@ function ReportList({ workspaceSlug, onSelect, onCreate }) {
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {reports.map((r) => (
-                <button
+                <div
                   key={r.id}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => onSelect(r)}
-                  className="group relative bg-card border border-border rounded-md p-4 text-left hover:shadow-card-hover hover:border-primary/30 transition-all"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onSelect(r);
+                    }
+                  }}
+                  className="group relative bg-card border border-border rounded-md p-4 text-left cursor-pointer hover:shadow-card-hover hover:border-primary/30 transition-all"
                 >
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -901,7 +909,7 @@ function ReportList({ workspaceSlug, onSelect, onCreate }) {
                       ?.label || "Chart"}
                   </p>
                   <ChevronRight className="w-4 h-4 text-muted-foreground absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </button>
+                </div>
               ))}
             </div>
           </div>
