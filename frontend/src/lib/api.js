@@ -1,11 +1,13 @@
 import axios from "axios";
 import { BACKEND_URL } from "@/lib/env";
 
+// Instead of typing your complete backend URL (like https://api.myapp.com/api/...) every time you make a request, you create a custom instance called api. Now, you can just write api.get('/users'), and Axios automatically prepends your BACKEND_URL
 const api = axios.create({
   baseURL: BACKEND_URL,
   headers: { "Content-Type": "application/json" },
 });
 
+// validating token existence on every request and attaching it to the Authorization header if found. This way, you don't have to manually add the token to each request — it's handled globally by the interceptor.
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("access_token");
   if (token) config.headers.Authorization = `Bearer ${token}`;
@@ -13,7 +15,7 @@ api.interceptors.request.use((config) => {
 });
 
 api.interceptors.response.use(
-  (res) => res,
+  (res) => res, // if the response is successful, just return it
   async (error) => {
     const original = error.config;
     if (error.response?.status === 401 && !original._retry) {

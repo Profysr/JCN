@@ -7,6 +7,16 @@ import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { CheckCircle, XCircle, LogIn } from "lucide-react";
 
+function InviteShell({ children }) {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-muted/30 px-4">
+      <div className="w-full max-w-sm bg-card border rounded--md p-8 shadow-sm">
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export default function AcceptInvitePage() {
   const { token } = useParams();
   const navigate = useNavigate();
@@ -14,7 +24,7 @@ export default function AcceptInvitePage() {
   const [accepted, setAccepted] = useState(false);
   const [error, setError] = useState("");
 
-  // Fetch invite details — public endpoint, no auth needed
+  // Fetch invite details — public endpoint, no auth needed ---> useQuery = Used for fetching data (GET requests).
   const {
     data: invite,
     isLoading,
@@ -25,6 +35,7 @@ export default function AcceptInvitePage() {
     retry: false,
   });
 
+  // mutations are used to modify data on the server (POST/PUT/DELETE requests)
   const acceptMutation = useMutation({
     mutationFn: () =>
       api.post(`/api/invites/${token}/accept/`).then((r) => r.data),
@@ -149,15 +160,5 @@ export default function AcceptInvitePage() {
         </p>
       </div>
     </InviteShell>
-  );
-}
-
-function InviteShell({ children }) {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-muted/30 px-4">
-      <div className="w-full max-w-sm bg-card border rounded--md p-8 shadow-sm">
-        {children}
-      </div>
-    </div>
   );
 }

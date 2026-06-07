@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 
-const HEARTBEAT_MS = 30_000;
+const HEARTBEAT_MS = 90_000;
 
 export function presenceKey(workspaceSlug, resourceType, resourceId) {
   return ["presence", workspaceSlug, resourceType, resourceId];
@@ -26,11 +26,11 @@ export function usePresence(workspaceSlug, resourceType, resourceId) {
 
 /**
  * Announce the current user's presence for a resource.
- * Sends heartbeat every 30s; sends leave on unmount.
+ * Sends heartbeat every 90s; sends leave on unmount.
  */
 export function useAnnouncePresence(workspaceSlug, resourceType, resourceId) {
   const timerRef = useRef(null);
-  const qc       = useQueryClient();
+  const qc = useQueryClient();
 
   const announce = useCallback(() => {
     if (!workspaceSlug || !resourceType || !resourceId) return;
@@ -40,15 +40,19 @@ export function useAnnouncePresence(workspaceSlug, resourceType, resourceId) {
         resource_id: resourceId,
       })
       .then(() => {
-        qc.invalidateQueries({ queryKey: presenceKey(workspaceSlug, resourceType, resourceId) });
+        qc.invalidateQueries({
+          queryKey: presenceKey(workspaceSlug, resourceType, resourceId),
+        });
       })
       .catch(() => {});
   }, [workspaceSlug, resourceType, resourceId, qc]);
 
   useEffect(() => {
+    // run the annouce function, Hey, I'm online and set an interval that runs after every 90s
     announce();
     timerRef.current = setInterval(announce, HEARTBEAT_MS);
 
+    // It clears the timer and sends a DELETE request to the server saying "I am leaving now".
     return () => {
       clearInterval(timerRef.current);
       if (workspaceSlug && resourceType && resourceId) {
@@ -57,7 +61,9 @@ export function useAnnouncePresence(workspaceSlug, resourceType, resourceId) {
             data: { resource_type: resourceType, resource_id: resourceId },
           })
           .catch(() => {});
-        qc.invalidateQueries({ queryKey: presenceKey(workspaceSlug, resourceType, resourceId) });
+        qc.invalidateQueries({
+          queryKey: presenceKey(workspaceSlug, resourceType, resourceId),
+        });
       }
     };
   }, [announce, workspaceSlug, resourceType, resourceId, qc]);
@@ -68,9 +74,7 @@ export function useWorkspaceOnlineUsers(workspaceSlug) {
   return useQuery({
     queryKey: ["presence", workspaceSlug, "all"],
     queryFn: () =>
-      api
-        .get(`/api/workspaces/${workspaceSlug}/presence/`)
-        .then((r) => r.data),
+      api.get(`/api/workspaces/${workspaceSlug}/presence/`).then((r) => r.data),
     enabled: !!workspaceSlug,
     refetchInterval: HEARTBEAT_MS,
     staleTime: 20_000,

@@ -213,7 +213,7 @@ export default function SetupWizard() {
           <div className="w-7 h-7 rounded-lg bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold">
             J
           </div>
-          <span className="font-semibold text-sm">JCN</span>
+          <span className="font-semibold text-sm">CN</span>
         </div>
 
         {/* Step indicators */}

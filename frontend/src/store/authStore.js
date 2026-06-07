@@ -1,4 +1,4 @@
-import { create } from "zustand";
+import { create } from "zustand"; // Zustand is a lightweight, fast, and scalable state management library for React. Alternative to Redux, MobX, etc. It uses hooks and has a minimal API.
 import { persist } from "zustand/middleware";
 import api from "@/lib/api";
 import { queryClient } from "@/lib/queryClient";
@@ -19,16 +19,17 @@ export const useAuthStore = create(
       setUser: (user) => set({ user }),
 
       login: async (email, password) => {
-        // Wipe previous user's cache before loading new session data
-        queryClient.clear();
-        const { data } = await api.post("/api/auth/login/", { email, password });
+        queryClient.clear(); // Wipe previous user's cache before loading new session data
+        const { data } = await api.post("/api/auth/login/", {
+          email,
+          password,
+        });
         get().setTokens(data.access, data.refresh);
         set({ user: data.user });
         return data;
       },
 
       register: async (email, password1, password2, full_name) => {
-        // Same isolation guarantee — no cross-session data leakage
         queryClient.clear();
         const { data } = await api.post("/api/auth/registration/", {
           email, password1, password2, full_name,
@@ -53,10 +54,8 @@ export const useAuthStore = create(
           "access_token", "refresh_token",   // api.js interceptor keys
           "accessToken",  "refreshToken",    // camelCase variants
           "auth",                            // Zustand persist root key — removes
-                                             // the whole {"state":{...}} blob
         ];
         STORAGE_KEYS.forEach((k) => localStorage.removeItem(k));
-
         queryClient.clear();
         set({ user: null, accessToken: null, refreshToken: null });
       },

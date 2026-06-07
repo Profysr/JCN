@@ -19,6 +19,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { SHORTCUT_GROUPS } from "@/lib/shortcutsRegistry";
+import {
+  THEMES,
+  ACCENT_COLORS,
+  DENSITIES,
+  FOCUS_DURATIONS,
+} from "@/lib/constants";
 import api from "@/lib/api";
 
 // ── Shared <kbd> badge ────────────────────────────────────────────────────────
@@ -124,29 +130,32 @@ function MeTab() {
   );
 }
 
-// ── Stable password field — must live OUTSIDE PasswordTab so its identity
-//    doesn't change on every keystroke (which would unmount the input and
-//    drop focus after each character typed).
-function PwField({ id, label, field, stateKey, show, setShow, setForm }) {
+// ── Stable password field
+function PwField({ id, label, value, onChange }) {
+  // Move the show/hide visibility state right here where it belongs!
+  const [isVisible, setIsVisible] = useState(false);
+
   return (
     <div className="space-y-1.5">
       <Label htmlFor={id}>{label}</Label>
+
       <div className="relative">
         <Input
           id={id}
-          type={show[stateKey] ? "text" : "password"}
-          value={field}
-          onChange={(e) => setForm((f) => ({ ...f, [id]: e.target.value }))}
+          type={isVisible ? "text" : "password"}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
           className="pr-10"
           required
         />
+
         <button
           type="button"
           tabIndex={-1}
-          onClick={() => setShow((s) => ({ ...s, [stateKey]: !s[stateKey] }))}
+          onClick={() => setIsVisible((prev) => !prev)}
           className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
         >
-          {show[stateKey] ? (
+          {isVisible ? (
             <EyeOff className="w-4 h-4" />
           ) : (
             <Eye className="w-4 h-4" />
@@ -164,7 +173,6 @@ function PasswordTab() {
     new_password1: "",
     new_password2: "",
   });
-  const [show, setShow] = useState({ old: false, new1: false, new2: false });
   const [success, setSuccess] = useState(false);
   const [serverError, setError] = useState("");
 
@@ -201,6 +209,16 @@ function PasswordTab() {
     change.mutate(form);
   };
 
+  const PASSWORD_FIELDS = [
+    { id: "old_password", label: "Current password", name: "old_password" },
+    { id: "new_password1", label: "New password", name: "new_password1" },
+    {
+      id: "new_password2",
+      label: "Confirm new password",
+      name: "new_password2",
+    },
+  ];
+
   return (
     <div className="space-y-4">
       <div>
@@ -211,7 +229,22 @@ function PasswordTab() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <PwField
+        {PASSWORD_FIELDS.map((field) => (
+          <PwField
+            key={field.id}
+            id={field.id}
+            label={field.label}
+            value={form[field.name]}
+            onChange={(val) =>
+              setForm((prev) => ({ ...prev, [field.name]: val }))
+            }
+            // stateKey={field.id}
+            // show={show}
+            // setShow={setShow}
+            // setForm={setForm}
+          />
+        ))}
+        {/* <PwField
           id="old_password"
           label="Current password"
           field={form.old_password}
@@ -237,7 +270,7 @@ function PasswordTab() {
           show={show}
           setShow={setShow}
           setForm={setForm}
-        />
+        /> */}
 
         {serverError && (
           <div className="flex items-start gap-2 text-sm text-destructive bg-destructive/8 border border-destructive/20 rounded-lg px-3 py-2">
@@ -299,18 +332,14 @@ function PreferencesTab() {
           </div>
         ) : (
           <div className="flex flex-wrap gap-2">
-            {[
-              ["1h", "1 hour"],
-              ["4h", "4 hours"],
-              ["8h", "8 hours"],
-            ].map(([k, label]) => (
+            {FOCUS_DURATIONS.map((d) => (
               <Button
-                key={k}
+                key={d.key}
                 size="sm"
                 variant="outline"
-                onClick={() => enableFocus(parseFloat(k))}
+                onClick={() => enableFocus(d.hours)}
               >
-                Mute for {label}
+                Mute for {d.label}
               </Button>
             ))}
           </div>
@@ -327,37 +356,9 @@ function PreferencesTab() {
 }
 
 // ── Appearance tab ────────────────────────────────────────────────────────────
-const THEMES = [
-  { value: "light", label: "Light", preview: "bg-white border-gray-200" },
-  { value: "dark", label: "Dark", preview: "bg-gray-900 border-gray-700" },
-  {
-    value: "midnight",
-    label: "Midnight",
-    preview: "bg-slate-950 border-slate-800",
-  },
-];
-
-const ACCENTS = [
-  { value: "indigo", hex: "#6366f1" },
-  { value: "blue", hex: "#3b82f6" },
-  { value: "violet", hex: "#8b5cf6" },
-  { value: "pink", hex: "#ec4899" },
-  { value: "rose", hex: "#f43f5e" },
-  { value: "amber", hex: "#f59e0b" },
-  { value: "emerald", hex: "#10b981" },
-  { value: "cyan", hex: "#06b6d4" },
-  { value: "slate", hex: "#64748b" },
-];
-
-const DENSITIES = [
-  { value: "comfortable", label: "Comfortable" },
-  { value: "cozy", label: "Cozy" },
-  { value: "compact", label: "Compact" },
-];
+const ACCENTS = Object.entries(ACCENT_COLORS).map(([value, { hex }]) => ({ value, hex }));
 
 function AppearanceTab() {
-  const { user } = useAuthStore();
-  const qc = useQueryClient();
   const { theme, accent, density, setTheme, setAccent, setDensity } =
     useThemeStore();
   const [success, setSuccess] = useState(false);
@@ -365,7 +366,7 @@ function AppearanceTab() {
   const save = useMutation({
     mutationFn: (data) => api.patch("/api/users/me/", data).then((r) => r.data),
     onSuccess: (updated) => {
-      qc.setQueryData(["me"], updated);
+      // qc.setQueryData(["me"], updated);
       useAuthStore.setState((s) => ({ ...s, user: { ...s.user, ...updated } }));
       setSuccess(true);
       setTimeout(() => setSuccess(false), 2500);
@@ -526,7 +527,7 @@ function ShortcutsTab() {
       </div>
 
       <p className="text-xs text-muted-foreground/60 border border-dashed border-border rounded-md px-4 py-3">
-        Custom keybindings are coming in a future update.
+        Custom keybindings are coming in a future updates.
       </p>
     </div>
   );

@@ -80,30 +80,45 @@ export const PRIORITIES = [
 
 /** Look up a priority config by value. Always returns a valid object. */
 export function getPriority(value) {
-  return PRIORITIES.find(p => p.value === value) ?? PRIORITIES[0];
+  return PRIORITIES.find((p) => p.value === value) ?? PRIORITIES[0];
 }
 
 /** Sort order map — use for array.sort comparisons. */
-export const PRIORITY_ORDER = Object.fromEntries(PRIORITIES.map(p => [p.value, p.order]));
+export const PRIORITY_ORDER = Object.fromEntries(
+  PRIORITIES.map((p) => [p.value, p.order]),
+);
 
 // ── Project / sprint / label colour palette ───────────────────────────────────
 // Same 8-colour set used by projects, roadmap, labels, avatars.
 export const APP_COLORS = [
-  "#6366f1", "#ec4899", "#f59e0b", "#22c55e",
-  "#3b82f6", "#8b5cf6", "#14b8a6", "#ef4444",
+  "#6366f1",
+  "#ec4899",
+  "#f59e0b",
+  "#22c55e",
+  "#3b82f6",
+  "#8b5cf6",
+  "#14b8a6",
+  "#ef4444",
 ];
 
 /** Pick a colour deterministically from a string (e.g. project name). */
 export function pickColor(str = "") {
   let hash = 0;
-  for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  for (let i = 0; i < str.length; i++)
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
   return APP_COLORS[Math.abs(hash) % APP_COLORS.length];
 }
 
 // ── Label colour swatches ─────────────────────────────────────────────────────
 export const LABEL_COLORS = [
-  "#6366f1", "#ec4899", "#f59e0b", "#22c55e",
-  "#3b82f6", "#ef4444", "#8b5cf6", "#14b8a6",
+  "#6366f1",
+  "#ec4899",
+  "#f59e0b",
+  "#22c55e",
+  "#3b82f6",
+  "#ef4444",
+  "#8b5cf6",
+  "#14b8a6",
 ];
 
 // ── Task types — always import from here, not from @/lib/taskTypes directly ───
@@ -172,12 +187,14 @@ export const SPRINT_STATUSES = {
   active: {
     value: "active",
     label: "Active",
-    badgeCls: "text-blue-600 bg-blue-50 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800",
+    badgeCls:
+      "text-blue-600 bg-blue-50 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800",
   },
   completed: {
     value: "completed",
     label: "Completed",
-    badgeCls: "text-emerald-600 bg-emerald-50 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800",
+    badgeCls:
+      "text-emerald-600 bg-emerald-50 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800",
   },
 };
 
@@ -185,3 +202,41 @@ export const SPRINT_STATUSES = {
 export function getSprintStatus(value) {
   return SPRINT_STATUSES[value] ?? SPRINT_STATUSES.planning;
 }
+
+// ── Appearance ────────────────────────────────────────────────────────────────
+
+export const THEMES = [
+  { value: "light", label: "Light", preview: "bg-white border-gray-200" },
+  { value: "dark", label: "Dark", preview: "bg-gray-900 border-gray-700" },
+  {
+    value: "midnight",
+    label: "Midnight",
+    preview: "bg-slate-950 border-slate-800",
+  },
+];
+
+export const ACCENT_COLORS = {
+  indigo: { label: "Indigo", hex: "#6366f1" },
+  blue: { label: "Blue", hex: "#3b82f6" },
+  violet: { label: "Violet", hex: "#8b5cf6" },
+  pink: { label: "Pink", hex: "#ec4899" },
+  rose: { label: "Rose", hex: "#f43f5e" },
+  amber: { label: "Amber", hex: "#f59e0b" },
+  emerald: { label: "Emerald", hex: "#10b981" },
+  cyan: { label: "Cyan", hex: "#06b6d4" },
+  slate: { label: "Slate", hex: "#64748b" },
+};
+
+export const DENSITIES = [
+  { value: "comfortable", label: "Comfortable" },
+  { value: "cozy", label: "Cozy" },
+  { value: "compact", label: "Compact" },
+];
+
+// ── Focus mode ────────────────────────────────────────────────────────────────
+
+export const FOCUS_DURATIONS = [
+  { key: "1h", label: "1 hour", hours: 1 },
+  { key: "4h", label: "4 hours", hours: 4 },
+  { key: "8h", label: "8 hours", hours: 8 },
+];

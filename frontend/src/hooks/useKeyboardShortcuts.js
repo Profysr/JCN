@@ -24,24 +24,46 @@ function isTypingTarget(e) {
  * @param {() => void} opts.onCreateTask    — trigger "create task" (context-aware)
  * @param {() => void} opts.onOpenFilter    — focus the filter/search bar
  */
+
+/**
+ * Adding a new shortcut - Say you want Shift+N to open notifications.
+ * Step 1 — Register it in the registry (shortcutsRegistry.js:56):
+  { keys: ["Shift+N"], display: ["⇧", "N"], description: "Open notifications" }
+  This makes it appear in the ? overlay automatically.
+
+ * Step 2 — Handle it in the hook (useKeyboardShortcuts.js:27):
+  Add the param and the case in the switch (or before it for modifier combos):
+
+  export function useKeyboardShortcuts({ ..., onOpenNotifications } = {}) {
+    // inside the handler:
+    if (e.shiftKey && e.key === "N") {
+      e.preventDefault();
+      onOpenNotifications?.();
+      return;
+    }
+ * Step 3 — Wire the callback in AppLayout (AppLayout.jsx:92):
+  useKeyboardShortcuts({
+    ...existing,
+    onOpenNotifications: () => setNotificationsOpen(true),
+}); 
+ */
+
 export function useKeyboardShortcuts({
   onOpenPalette,
   onOpenShortcuts,
   onCreateTask,
   onOpenFilter,
 } = {}) {
-  const navigate        = useNavigate();
+  const navigate = useNavigate();
   const { workspaceSlug } = useParams();
 
   // Tracks the first key of a chord (e.g. "g" in "g p")
-  const chordRef   = useRef(null);
+  const chordRef = useRef(null);
   const chordTimer = useRef(null);
 
   useEffect(() => {
     if (!workspaceSlug) return;
-
     const ws = (path) => `/w/${workspaceSlug}/${path}`;
-
     const CHORD_MAP = {
       p: () => navigate(ws("projects")),
       d: () => navigate(ws("dashboards")),
@@ -111,5 +133,12 @@ export function useKeyboardShortcuts({
       window.removeEventListener("keydown", handler);
       clearTimeout(chordTimer.current);
     };
-  }, [workspaceSlug, navigate, onOpenPalette, onOpenShortcuts, onCreateTask, onOpenFilter]);
+  }, [
+    workspaceSlug,
+    navigate,
+    onOpenPalette,
+    onOpenShortcuts,
+    onCreateTask,
+    onOpenFilter,
+  ]);
 }

@@ -53,8 +53,16 @@ export function useBulkUpdateInbox(workspaceSlug) {
 /** Snooze presets → ISO strings relative to now. */
 export function snoozeUntil(preset) {
   const d = new Date();
-  if (preset === "1h")       { d.setHours(d.getHours() + 1); }
-  if (preset === "tomorrow") { d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); }
-  if (preset === "next_week"){ d.setDate(d.getDate() + 7); d.setHours(9, 0, 0, 0); }
+  if (preset === "1h") {
+    d.setHours(d.getHours() + 1);
+  }
+  if (preset === "tomorrow") {
+    d.setDate(d.getDate() + 1);
+    d.setHours(9, 0, 0, 0);
+  }
+  if (preset === "next_week") {
+    d.setDate(d.getDate() + 7);
+    d.setHours(9, 0, 0, 0);
+  }
   return d.toISOString();
 }

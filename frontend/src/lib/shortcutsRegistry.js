@@ -11,24 +11,60 @@ export const SHORTCUT_GROUPS = [
     id: "navigation",
     label: "Navigation",
     shortcuts: [
-      { keys: ["g", "then", "p"], display: ["g", "p"], description: "Go to Projects" },
-      { keys: ["g", "then", "d"], display: ["g", "d"], description: "Go to Dashboards" },
-      { keys: ["g", "then", "m"], display: ["g", "m"], description: "Go to My Work" },
-      { keys: ["g", "then", "i"], display: ["g", "i"], description: "Go to Inbox" },
-      { keys: ["g", "then", "a"], display: ["g", "a"], description: "Go to Analytics" },
-      { keys: ["g", "then", "g"], display: ["g", "g"], description: "Go to Goals" },
-      { keys: ["⌘K"],             display: ["⌘K"],      description: "Open command palette" },
+      {
+        keys: ["g", "then", "p"],
+        display: ["g", "p"],
+        description: "Go to Projects",
+      },
+      {
+        keys: ["g", "then", "d"],
+        display: ["g", "d"],
+        description: "Go to Dashboards",
+      },
+      {
+        keys: ["g", "then", "m"],
+        display: ["g", "m"],
+        description: "Go to My Work",
+      },
+      {
+        keys: ["g", "then", "i"],
+        display: ["g", "i"],
+        description: "Go to Inbox",
+      },
+      {
+        keys: ["g", "then", "a"],
+        display: ["g", "a"],
+        description: "Go to Analytics",
+      },
+      {
+        keys: ["g", "then", "g"],
+        display: ["g", "g"],
+        description: "Go to Goals",
+      },
+      { keys: ["⌘K"], display: ["⌘K"], description: "Open command palette" },
     ],
   },
   {
     id: "board",
     label: "Board & Task List",
     shortcuts: [
-      { keys: ["c"],     display: ["c"],     description: "Create task (context-aware)" },
-      { keys: ["ArrowUp", "ArrowDown"], display: ["↑", "↓"], description: "Navigate task list" },
+      {
+        keys: ["c"],
+        display: ["c"],
+        description: "Create task (context-aware)",
+      },
+      {
+        keys: ["ArrowUp", "ArrowDown"],
+        display: ["↑", "↓"],
+        description: "Navigate task list",
+      },
       { keys: ["Enter"], display: ["Enter"], description: "Open focused task" },
-      { keys: ["/"],     display: ["/"],     description: "Focus filter / search bar" },
-      { keys: ["Escape"],display: ["Esc"],   description: "Close panel · deselect task" },
+      { keys: ["/"], display: ["/"], description: "Focus filter / search bar" },
+      {
+        keys: ["Escape"],
+        display: ["Esc"],
+        description: "Close panel · deselect task",
+      },
     ],
   },
   {
@@ -48,19 +84,23 @@ export const SHORTCUT_GROUPS = [
     id: "my_work",
     label: "My Work",
     shortcuts: [
-      { keys: ["Space"], display: ["Space"], description: "Check / uncheck task" },
+      {
+        keys: ["Space"],
+        display: ["Space"],
+        description: "Check / uncheck task",
+      },
     ],
   },
   {
     id: "global",
     label: "Global",
     shortcuts: [
-      { keys: ["?"],     display: ["?"],     description: "Show keyboard shortcuts" },
+      { keys: ["?"], display: ["?"], description: "Show keyboard shortcuts" },
     ],
   },
 ];
 
 /** Flat list — useful for search or rendering a single table. */
 export const ALL_SHORTCUTS = SHORTCUT_GROUPS.flatMap((g) =>
-  g.shortcuts.map((s) => ({ ...s, group: g.label }))
+  g.shortcuts.map((s) => ({ ...s, group: g.label })),
 );

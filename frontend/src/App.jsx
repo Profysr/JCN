@@ -61,6 +61,14 @@ function ContentLoader() {
  * Layout route that wraps all workspace children with a Suspense boundary.
  * AppLayout renders instantly; only the outlet content shows the fallback.
  */
+function FullPageSuspense() {
+  return (
+    <Suspense fallback={<FullPageLoader />}>
+      <Outlet />
+    </Suspense>
+  );
+}
+
 function SuspenseOutlet() {
   return (
     <Suspense fallback={<ContentLoader />}>
@@ -75,13 +83,7 @@ export default function App() {
   return (
     <Routes>
       {/* Public — full-page suspense */}
-      <Route
-        element={
-          <Suspense fallback={<FullPageLoader />}>
-            <Outlet />
-          </Suspense>
-        }
-      >
+      <Route element={<FullPageSuspense />}>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/invites/:token" element={<AcceptInvitePage />} />
@@ -90,16 +92,10 @@ export default function App() {
 
       {/* Protected */}
       <Route element={<ProtectedRoute />}>
-        <Route
-          element={
-            <Suspense fallback={<FullPageLoader />}>
-              <Outlet />
-            </Suspense>
-          }
-        >
+        <Route element={<FullPageSuspense />}>
           <Route path="/onboarding" element={<OnboardingPage />} />
-          <Route path="/" element={<WorkspaceRedirect />} />
           <Route path="/w/:workspaceSlug/setup" element={<SetupWizard />} />
+          <Route path="/" element={<WorkspaceRedirect />} />
         </Route>
 
         {/* AppLayout shell loads eagerly; page content lazy-loads inside SuspenseOutlet */}

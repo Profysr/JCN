@@ -5,6 +5,7 @@ import { useAuthStore } from "@/store/authStore";
 import { useThemeStore } from "@/store/themeStore";
 import api from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { FOCUS_DURATIONS } from "@/lib/constants";
 import {
   LogOut,
   ChevronDown,
@@ -45,18 +46,24 @@ export default function AppLayout() {
   });
 
   // Sync theme preferences from the logged-in user's profile
-  const { data: meData } = useQuery({
-    queryKey: ["me"],
-    queryFn: () => api.get("/api/users/me/").then((r) => r.data),
-    staleTime: Infinity,
-  });
+  // const { data: meData } = useQuery({
+  //   queryKey: ["me"],
+  //   queryFn: () => api.get("/api/users/me/").then((r) => r.data),
+  //   staleTime: Infinity,
+  // });
 
+  // useEffect(() => {
+  //   if (!meData) return;
+  //   if (meData.theme) setTheme(meData.theme);
+  //   if (meData.accent_color) setAccent(meData.accent_color);
+  //   if (meData.density_mode) setDensity(meData.density_mode);
+  // }, [meData]);
   useEffect(() => {
-    if (!meData) return;
-    if (meData.theme) setTheme(meData.theme);
-    if (meData.accent_color) setAccent(meData.accent_color);
-    if (meData.density_mode) setDensity(meData.density_mode);
-  }, [meData]);
+    if (!user) return;
+    if (user.theme) setTheme(user.theme);
+    if (user.accent_color) setAccent(user.accent_color);
+    if (user.density_mode) setDensity(user.density_mode);
+  }, [user]);
 
   const handleLogout = async () => {
     await logout();
@@ -73,7 +80,6 @@ export default function AppLayout() {
     })),
   }));
 
-  const initials = workspace?.name?.[0]?.toUpperCase() || "W";
   const userInitial = user?.display_name?.[0]?.toUpperCase() || "U";
 
   const { data: activeTimer } = useActiveTimer(workspaceSlug);
@@ -89,19 +95,6 @@ export default function AppLayout() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState("me");
 
-  useKeyboardShortcuts({
-    onOpenPalette: () => setPaletteOpen((o) => !o),
-    onOpenShortcuts: () => setShortcutsOpen((o) => !o),
-    onCreateTask: () => {
-      // Dispatch a custom event; KanbanPage (and other pages) can listen
-      window.dispatchEvent(new CustomEvent("jcn:create-task"));
-    },
-    onOpenFilter: () => {
-      window.dispatchEvent(new CustomEvent("jcn:focus-filter"));
-    },
-  });
-
-  // v3.7.0 — Focus Mode DND: snooze in-app notifications for a chosen duration
   const [focusModeUntil, setFocusModeUntil] = useState(() => {
     const stored = localStorage.getItem("jcn_focus_until");
     return stored ? parseInt(stored, 10) : null;
@@ -118,17 +111,17 @@ export default function AppLayout() {
     localStorage.removeItem("jcn_focus_until");
   };
 
-  const [focusMenuOpen, setFocusMenuOpen] = useState(false);
-  const focusRef = useRef(null);
-  useEffect(() => {
-    if (!focusMenuOpen) return;
-    const h = (e) => {
-      if (focusRef.current && !focusRef.current.contains(e.target))
-        setFocusMenuOpen(false);
-    };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, [focusMenuOpen]);
+  useKeyboardShortcuts({
+    onOpenPalette: () => setPaletteOpen((o) => !o),
+    onOpenShortcuts: () => setShortcutsOpen((o) => !o),
+    // Dispatch a custom event; KanbanPage (and other pages) can listen
+    onCreateTask: () => {
+      window.dispatchEvent(new CustomEvent("jcn:create-task"));
+    },
+    onOpenFilter: () => {
+      window.dispatchEvent(new CustomEvent("jcn:focus-filter"));
+    },
+  });
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -141,7 +134,7 @@ export default function AppLayout() {
         <WorkspaceSwitcher
           currentWorkspace={workspace}
           currentSlug={workspaceSlug}
-          canCreate={meData?.can_create_workspace ?? false}
+          canCreate={user?.can_create_workspace ?? false}
         />
 
         {/* Search / command palette */}
@@ -195,53 +188,12 @@ export default function AppLayout() {
           ))}
         </nav>
 
-        {/* v3.7.0 — Focus Mode DND toggle */}
-        <div ref={focusRef} className="mx-3 mb-1 relative">
-          {isFocusMode ? (
-            <button
-              onClick={disableFocusMode}
-              className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg bg-violet-500/10 border border-violet-500/20 text-violet-600 hover:bg-violet-500/15 transition-colors"
-            >
-              <BellOff className="w-3.5 h-3.5 flex-shrink-0" />
-              <span className="text-xs font-medium flex-1 text-left">
-                Focus Mode on
-              </span>
-              <span className="text-[10px] text-violet-500 opacity-80">
-                tap to disable
-              </span>
-            </button>
-          ) : (
-            <>
-              <button
-                onClick={() => setFocusMenuOpen((v) => !v)}
-                className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-muted-foreground hover:bg-accent transition-colors"
-              >
-                <BellOff className="w-3.5 h-3.5 flex-shrink-0" />
-                <span className="text-xs">Focus Mode</span>
-              </button>
-              {focusMenuOpen && (
-                <div className="absolute bottom-full left-0 right-0 mb-1 z-50 bg-popover border border-border rounded-md shadow-popover py-1">
-                  {[
-                    ["1h", "1 hour"],
-                    ["4h", "4 hours"],
-                    ["8h", "8 hours"],
-                  ].map(([k, label]) => (
-                    <button
-                      key={k}
-                      onClick={() => {
-                        enableFocusMode(parseFloat(k));
-                        setFocusMenuOpen(false);
-                      }}
-                      className="w-full text-left px-3 py-2 text-xs hover:bg-accent transition-colors"
-                    >
-                      Mute for {label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-        </div>
+        {/* v3.7.0 — Focus Mode DND: snooze in-app notifications for a chosen duration */}
+        <FocusMode
+          isFocusMode={isFocusMode}
+          onEnable={enableFocusMode}
+          onDisable={disableFocusMode}
+        />
 
         {/* Active timer strip — v2.8.0 */}
         {activeTimer && (
@@ -288,6 +240,7 @@ export default function AppLayout() {
         <CommandPalette
           open={paletteOpen}
           onClose={() => setPaletteOpen(false)}
+          workspaceSlug={workspaceSlug}
         />
       </Suspense>
       <Suspense fallback={null}>
@@ -308,6 +261,39 @@ export default function AppLayout() {
 }
 
 // ── UserPanel ─────────────────────────────────────────────────────────────────
+const UserAvatar = ({ initial }) => (
+  <div className="relative flex-shrink-0">
+    <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-bold">
+      {initial}
+    </div>
+    <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-background" />
+  </div>
+);
+
+const DropdownItem = ({
+  icon: Icon,
+  label,
+  onClick,
+  shortcut,
+  variant = "default",
+}) => (
+  <button
+    onClick={onClick}
+    className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-accent transition-colors text-left
+      ${variant === "destructive" ? "text-destructive hover:text-destructive" : ""}`}
+  >
+    <Icon
+      className={`w-4 h-4 ${variant !== "destructive" ? "text-muted-foreground" : ""}`}
+    />
+    <span className="flex-1">{label}</span>
+    {shortcut && (
+      <kbd className="text-[10px] font-semibold bg-muted border border-border rounded px-1 py-0.5 leading-none">
+        {shortcut}
+      </kbd>
+    )}
+  </button>
+);
+
 function UserPanel({
   user,
   userInitial,
@@ -317,8 +303,9 @@ function UserPanel({
 }) {
   const [open, setOpen] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
-  const ref = useRef(null);
 
+  // close the dropdown when clicking outside of it
+  const ref = useRef(null);
   useEffect(() => {
     if (!open) return;
     const handler = (e) => {
@@ -333,27 +320,37 @@ function UserPanel({
     setOpen(false);
   };
 
+  const menuItems = [
+    {
+      icon: UserCircle,
+      label: "Account settings",
+      onClick: () => onOpenSettings("me"),
+    },
+    {
+      icon: SlidersHorizontal,
+      label: "Preferences",
+      onClick: () => onOpenSettings("preferences"),
+    },
+    {
+      icon: Keyboard,
+      label: "Keyboard shortcuts",
+      onClick: onOpenShortcuts,
+      shortcut: "?",
+    },
+  ];
+
   return (
     <div
       ref={ref}
       className="px-3 pb-3 pt-2 border-t border-border/60 relative"
     >
-      {/* Trigger row — a div with two interactive zones to avoid button-in-button */}
+      {/* Trigger row */}
       <div className="flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-accent transition-colors group">
-        {/* Left: avatar + name/email — clicking opens dropdown */}
         <button
           onClick={() => setOpen((v) => !v)}
           className="flex-1 flex items-center gap-2.5 min-w-0 text-left"
         >
-          {/* Avatar */}
-          <div className="relative flex-shrink-0">
-            <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-bold">
-              {userInitial}
-            </div>
-            <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-background" />
-          </div>
-
-          {/* Name + email */}
+          <UserAvatar initial={userInitial} />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold truncate leading-tight text-foreground">
               {user?.display_name}
@@ -364,7 +361,6 @@ function UserPanel({
           </div>
         </button>
 
-        {/* Right: notification bell + more icon (sibling buttons, not nested) */}
         <NotificationBell />
         <button
           onClick={() => setOpen((v) => !v)}
@@ -374,44 +370,29 @@ function UserPanel({
         </button>
       </div>
 
-      {/* Dropdown */}
+      {/* Dropdown Menu */}
       {open && (
         <div className="absolute left-3 right-3 bottom-full mb-1 z-50 bg-popover border border-border rounded-md shadow-popover py-1">
-          <button
-            onClick={action(() => onOpenSettings("me"))}
-            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-accent transition-colors text-left"
-          >
-            <UserCircle className="w-4 h-4 text-muted-foreground" />
-            Account settings
-          </button>
-          <button
-            onClick={action(() => onOpenSettings("preferences"))}
-            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-accent transition-colors text-left"
-          >
-            <SlidersHorizontal className="w-4 h-4 text-muted-foreground" />
-            Preferences
-          </button>
-          <button
-            onClick={action(onOpenShortcuts)}
-            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-accent transition-colors text-left"
-          >
-            <Keyboard className="w-4 h-4 text-muted-foreground" />
-            <span className="flex-1">Keyboard shortcuts</span>
-            <kbd className="text-[10px] font-semibold bg-muted border border-border rounded px-1 py-0.5 leading-none">
-              ?
-            </kbd>
-          </button>
+          {menuItems.map((item) => (
+            <DropdownItem
+              key={item.label}
+              icon={item.icon}
+              label={item.label}
+              onClick={action(item.onClick)}
+              shortcut={item.shortcut ?? undefined}
+            />
+          ))}
           <div className="border-t border-border mx-2 my-1" />
-          <button
+          <DropdownItem
+            icon={LogOut}
+            label="Sign out"
             onClick={action(() => setConfirmLogout(true))}
-            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-accent transition-colors text-left text-destructive hover:text-destructive"
-          >
-            <LogOut className="w-4 h-4" />
-            Sign out
-          </button>
+            variant="destructive"
+          />
         </div>
       )}
 
+      {/* Logout Confirmation */}
       {confirmLogout && (
         <ConfirmModal
           title="Sign out?"
@@ -429,7 +410,6 @@ function UserPanel({
 }
 
 // ── WorkspaceSwitcher ─────────────────────────────────────────────────────────
-
 function WorkspaceSwitcher({ currentWorkspace, currentSlug, canCreate }) {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
@@ -520,6 +500,59 @@ function WorkspaceSwitcher({ currentWorkspace, currentSlug, canCreate }) {
             </>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+// ── FocusMode ─────────────────────────────────────────────────────────────────
+function FocusMode({ isFocusMode, onEnable, onDisable }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const h = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [menuOpen]);
+
+  return (
+    <div ref={ref} className="mx-3 mb-1 relative">
+      {isFocusMode ? (
+        <button
+          onClick={onDisable}
+          className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg bg-violet-500/10 border border-violet-500/20 text-violet-600 hover:bg-violet-500/15 transition-colors"
+        >
+          <BellOff className="w-3.5 h-3.5 flex-shrink-0" />
+          <span className="text-xs font-medium flex-1 text-left">Focus Mode on</span>
+          <span className="text-[10px] text-violet-500 opacity-80">tap to disable</span>
+        </button>
+      ) : (
+        <>
+          <button
+            onClick={() => setMenuOpen((v) => !v)}
+            className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-muted-foreground hover:bg-accent transition-colors"
+          >
+            <BellOff className="w-3.5 h-3.5 flex-shrink-0" />
+            <span className="text-xs">Focus Mode</span>
+          </button>
+          {menuOpen && (
+            <div className="absolute bottom-full left-0 right-0 mb-1 z-50 bg-popover border border-border rounded-md shadow-popover py-1">
+              {FOCUS_DURATIONS.map((d) => (
+                <button
+                  key={d.key}
+                  onClick={() => { onEnable(d.hours); setMenuOpen(false); }}
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-accent transition-colors"
+                >
+                  Mute for {d.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

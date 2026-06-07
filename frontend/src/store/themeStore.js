@@ -1,37 +1,19 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import api from "@/lib/api";
-
-export const THEMES = ["light", "dark", "midnight"];
-export const ACCENTS = ["indigo", "blue", "violet", "pink", "rose", "amber", "emerald", "cyan", "slate"];
-export const DENSITIES = ["comfortable", "compact", "cozy"];
-
-export const ACCENT_COLORS = {
-  indigo:  { label: "Indigo",   hex: "#6366f1" },
-  blue:    { label: "Blue",     hex: "#3b82f6" },
-  violet:  { label: "Violet",   hex: "#8b5cf6" },
-  pink:    { label: "Pink",     hex: "#ec4899" },
-  rose:    { label: "Rose",     hex: "#f43f5e" },
-  amber:   { label: "Amber",    hex: "#f59e0b" },
-  emerald: { label: "Emerald",  hex: "#10b981" },
-  cyan:    { label: "Cyan",     hex: "#06b6d4" },
-  slate:   { label: "Slate",    hex: "#64748b" },
-};
+import { ACCENT_COLORS, DENSITIES } from "@/lib/constants";
 
 function applyTheme(theme, accent, density) {
   const root = document.documentElement;
 
-  // Remove theme classes
   root.classList.remove("dark", "midnight");
   if (theme === "dark") root.classList.add("dark");
   else if (theme === "midnight") root.classList.add("midnight");
 
-  // Remove accent classes
-  ACCENTS.forEach((a) => root.classList.remove(`accent-${a}`));
+  Object.keys(ACCENT_COLORS).forEach((a) => root.classList.remove(`accent-${a}`));
   root.classList.add(`accent-${accent}`);
 
-  // Remove density classes
-  DENSITIES.forEach((d) => root.classList.remove(`density-${d}`));
+  DENSITIES.forEach((d) => root.classList.remove(`density-${d.value}`));
   root.classList.add(`density-${density}`);
 }
 
@@ -65,6 +47,6 @@ export const useThemeStore = create(
         applyTheme(theme, accent, density);
       },
     }),
-    { name: "jcn-theme" }
-  )
+    { name: "jcn-theme" },
+  ),
 );

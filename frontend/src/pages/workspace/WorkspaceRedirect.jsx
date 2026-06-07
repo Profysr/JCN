@@ -9,7 +9,8 @@ export default function WorkspaceRedirect() {
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["workspaces"],
-    queryFn: () => api.get("/api/workspaces/").then((r) => r.data.results || r.data),
+    queryFn: () =>
+      api.get("/api/workspaces/").then((r) => r.data.results || r.data),
   });
 
   useEffect(() => {
