@@ -1,7 +1,6 @@
 import { cn } from "@/lib/utils";
 
 /* Inline SVG illustrations — zero network requests */
-
 function IllustrationTasks() {
   return (
     <svg
@@ -282,12 +281,131 @@ function IllustrationGeneric() {
   );
 }
 
+function IllustrationAPIKeys() {
+  return (
+    <svg
+      width="80"
+      height="80"
+      viewBox="0 0 80 80"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      {/* Key ring */}
+      <circle cx="30" cy="34" r="14" fill="currentColor" opacity="0.10" />
+      <circle
+        cx="30"
+        cy="34"
+        r="14"
+        stroke="currentColor"
+        strokeWidth="2"
+        opacity="0.22"
+      />
+      <circle cx="30" cy="34" r="6" fill="currentColor" opacity="0.18" />
+      {/* Key shaft */}
+      <path
+        d="M40 34h22"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        opacity="0.28"
+      />
+      {/* Key teeth */}
+      <path
+        d="M54 34v6M60 34v4"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        opacity="0.22"
+      />
+      {/* Faint code lines suggesting API */}
+      <rect x="20" y="56" width="16" height="2.5" rx="1.25" fill="currentColor" opacity="0.15" />
+      <rect x="40" y="56" width="22" height="2.5" rx="1.25" fill="currentColor" opacity="0.10" />
+    </svg>
+  );
+}
+
+function IllustrationWebhooks() {
+  return (
+    <svg
+      width="80"
+      height="80"
+      viewBox="0 0 80 80"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      {/* Central node */}
+      <circle cx="40" cy="40" r="10" fill="currentColor" opacity="0.12" />
+      <circle cx="40" cy="40" r="10" stroke="currentColor" strokeWidth="1.5" opacity="0.22" />
+      {/* Spokes */}
+      <line x1="40" y1="30" x2="40" y2="14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" opacity="0.18" />
+      <line x1="40" y1="50" x2="40" y2="66" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" opacity="0.18" />
+      <line x1="30" y1="40" x2="14" y2="40" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" opacity="0.18" />
+      <line x1="50" y1="40" x2="66" y2="40" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" opacity="0.18" />
+      {/* Receiver dots */}
+      <circle cx="40" cy="12" r="4" fill="currentColor" opacity="0.14" />
+      <circle cx="40" cy="68" r="4" fill="currentColor" opacity="0.10" />
+      <circle cx="12" cy="40" r="4" fill="currentColor" opacity="0.10" />
+      <circle cx="68" cy="40" r="4" fill="currentColor" opacity="0.14" />
+      {/* Signal arc suggesting a broadcast */}
+      <path d="M52 28 a17 17 0 0 1 0 24" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" opacity="0.20" fill="none" />
+    </svg>
+  );
+}
+
+function IllustrationWebhookDeliveries() {
+  return (
+    <svg
+      width="80"
+      height="80"
+      viewBox="0 0 80 80"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      {/* Server box */}
+      <rect x="8" y="28" width="26" height="24" rx="5" fill="currentColor" opacity="0.10" />
+      <rect x="14" y="35" width="14" height="2.5" rx="1.25" fill="currentColor" opacity="0.25" />
+      <rect x="14" y="41" width="10" height="2.5" rx="1.25" fill="currentColor" opacity="0.18" />
+      {/* Arrow / signal line */}
+      <path
+        d="M34 40h12"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        opacity="0.22"
+      />
+      <path
+        d="M43 35l7 5-7 5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        opacity="0.22"
+      />
+      {/* Receiver box */}
+      <rect x="46" y="28" width="26" height="24" rx="5" fill="currentColor" opacity="0.07" />
+      <rect x="52" y="35" width="14" height="2.5" rx="1.25" fill="currentColor" opacity="0.18" />
+      <rect x="52" y="41" width="10" height="2.5" rx="1.25" fill="currentColor" opacity="0.12" />
+      {/* Empty inbox tray */}
+      <path
+        d="M28 60h24"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        opacity="0.15"
+      />
+    </svg>
+  );
+}
+
 const ILLUSTRATIONS = {
   tasks: IllustrationTasks,
   projects: IllustrationProjects,
   members: IllustrationMembers,
   notifications: IllustrationNotifications,
   search: IllustrationSearch,
+  "api-keys": IllustrationAPIKeys,
+  webhooks: IllustrationWebhooks,
+  "webhook-deliveries": IllustrationWebhookDeliveries,
   default: IllustrationGeneric,
 };
 

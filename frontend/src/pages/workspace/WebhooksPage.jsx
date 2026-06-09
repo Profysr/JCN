@@ -4,18 +4,21 @@ import {
   Webhook,
   Plus,
   Trash2,
-  X,
   Send,
   ChevronDown,
   ChevronUp,
   Check,
   XCircle,
+  Copy,
   Loader2,
   RefreshCw,
   Eye,
   EyeOff,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { EmptyState } from "@/components/ui/empty-state";
+import Modal from "@/components/ui/Modal";
 import {
   useWebhooks,
   useCreateWebhook,
@@ -68,9 +71,11 @@ function DeliveryLog({ workspaceSlug, hookId }) {
       {isLoading ? (
         <Loader size="sm" className="py-4" />
       ) : deliveries.length === 0 ? (
-        <p className="text-xs text-muted-foreground text-center py-4">
-          No deliveries yet. Click "Send test" to trigger one.
-        </p>
+        <EmptyState
+          illustration="webhook-deliveries"
+          title="No deliveries yet"
+          description='Click "Send test" to trigger one.'
+        />
       ) : (
         <div className="space-y-1 max-h-64 overflow-y-auto">
           {deliveries.map((d) => (
@@ -135,11 +140,11 @@ function DeliveryLog({ workspaceSlug, hookId }) {
 }
 
 // ── Webhook row ───────────────────────────────────────────────────────────────
-
 function WebhookRow({ hook, workspaceSlug }) {
   const [open, setOpen] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
   const [showLog, setShowLog] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const update = useUpdateWebhook(workspaceSlug);
   const remove = useDeleteWebhook(workspaceSlug);
   const test = useTestWebhook(workspaceSlug);
@@ -230,11 +235,7 @@ function WebhookRow({ hook, workspaceSlug }) {
             )}
           </button>
           <button
-            onClick={() =>
-              remove.mutate(hook.id, {
-                onSuccess: () => toast.success("Webhook deleted"),
-              })
-            }
+            onClick={() => setConfirmDelete(true)}
             className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
           >
             <Trash2 className="w-4 h-4" />
@@ -248,6 +249,25 @@ function WebhookRow({ hook, workspaceSlug }) {
           <DeliveryLog workspaceSlug={workspaceSlug} hookId={hook.id} />
         </div>
       )}
+
+      <Modal
+        variant="delete"
+        isOpen={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        title="Delete webhook"
+        confirmLabel="Delete webhook"
+        isLoading={remove.isPending}
+        onConfirm={() =>
+          remove.mutate(hook.id, {
+            onSuccess: () => { toast.success("Webhook deleted"); setConfirmDelete(false); },
+          })
+        }
+      >
+        <p className="text-sm text-muted-foreground">
+          Delete <span className="font-medium text-foreground">{hook.name}</span>?
+          All delivery history will be permanently removed and the endpoint will stop receiving events.
+        </p>
+      </Modal>
 
       {/* Edit form */}
       {open && (
@@ -382,6 +402,8 @@ function WebhookRow({ hook, workspaceSlug }) {
 }
 
 // ── Create modal ──────────────────────────────────────────────────────────────
+const INPUT_CLS =
+  "w-full text-sm bg-background border border-border rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ring";
 
 function CreateWebhookModal({ workspaceSlug, onClose, onCreated }) {
   const [form, setForm] = useState({ name: "", url: "", events: [] });
@@ -393,100 +415,76 @@ function CreateWebhookModal({ workspaceSlug, onClose, onCreated }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative bg-card border border-border rounded-md shadow-2xl w-full max-w-lg mx-4 p-6 z-10">
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="font-semibold">Add Webhook</h2>
-          <button onClick={onClose} className="p-1 rounded hover:bg-accent">
-            <X className="w-4 h-4" />
-          </button>
+    <Modal
+      isOpen
+      onClose={onClose}
+      title="Add Webhook"
+      icon={Webhook}
+      confirmLabel="Create webhook"
+      confirmVariant="primary"
+      onConfirm={submit}
+      isLoading={create.isPending}
+      isConfirmDisabled={!form.name || !form.url}
+      maxWidth="520px"
+    >
+      <div className="space-y-4">
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">Name</label>
+          <input
+            autoFocus
+            value={form.name}
+            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+            placeholder="e.g. Deploy trigger"
+            className={INPUT_CLS}
+          />
         </div>
-
-        <div className="space-y-4">
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">
-              Name
-            </label>
-            <input
-              autoFocus
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              placeholder="e.g. Deploy trigger"
-              className="w-full text-sm bg-background border border-border rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ring"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">
-              Payload URL
-            </label>
-            <input
-              value={form.url}
-              onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
-              placeholder="https://your-server.com/webhook"
-              className="w-full text-sm bg-background border border-border rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ring"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">
-              Events <span className="opacity-60">(empty = all)</span>
-            </label>
-            <div className="grid grid-cols-2 gap-1">
-              {ALL_EVENTS.map((ev) => {
-                const active = form.events.includes(ev.id);
-                return (
-                  <label
-                    key={ev.id}
-                    className={cn(
-                      "flex items-center gap-1.5 px-2 py-1 rounded-lg cursor-pointer text-xs transition-colors",
-                      active
-                        ? "bg-primary/10 text-primary"
-                        : "bg-muted/60 text-muted-foreground hover:bg-muted",
-                    )}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={active}
-                      onChange={() =>
-                        setForm((f) => ({
-                          ...f,
-                          events: active
-                            ? f.events.filter((e) => e !== ev.id)
-                            : [...f.events, ev.id],
-                        }))
-                      }
-                      className="accent-primary"
-                    />
-                    <code>{ev.label}</code>
-                  </label>
-                );
-              })}
-            </div>
-          </div>
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">Payload URL</label>
+          <input
+            value={form.url}
+            onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
+            placeholder="https://your-server.com/webhook"
+            className={INPUT_CLS}
+          />
         </div>
-
-        <div className="flex justify-end gap-2 mt-5">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm border border-border rounded-md hover:bg-accent"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={submit}
-            disabled={!form.name || !form.url || create.isPending}
-            className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md font-medium hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5"
-          >
-            {create.isPending ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Webhook className="w-3.5 h-3.5" />
-            )}
-            Create webhook
-          </button>
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">
+            Events <span className="opacity-60">(empty = all)</span>
+          </label>
+          <div className="grid grid-cols-2 gap-1">
+            {ALL_EVENTS.map((ev) => {
+              const active = form.events.includes(ev.id);
+              return (
+                <label
+                  key={ev.id}
+                  className={cn(
+                    "flex items-center gap-1.5 px-2 py-1 rounded-lg cursor-pointer text-xs transition-colors",
+                    active
+                      ? "bg-primary/10 text-primary"
+                      : "bg-muted/60 text-muted-foreground hover:bg-muted",
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    checked={active}
+                    onChange={() =>
+                      setForm((f) => ({
+                        ...f,
+                        events: active
+                          ? f.events.filter((e) => e !== ev.id)
+                          : [...f.events, ev.id],
+                      }))
+                    }
+                    className="accent-primary"
+                  />
+                  <code>{ev.label}</code>
+                </label>
+              );
+            })}
+          </div>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -498,18 +496,20 @@ function SecretReveal({ secret, onClose }) {
     setTimeout(() => setCopied(false), 2000);
   };
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50" />
-      <div className="relative bg-card border border-border rounded-md shadow-2xl w-full max-w-md mx-4 p-6 z-10">
-        <h2 className="font-semibold mb-1 flex items-center gap-2">
-          <Webhook className="w-4 h-4" /> Webhook created
-        </h2>
-        <p className="text-sm text-muted-foreground mb-4">
-          Copy your signing secret now — it won't be shown again.
-        </p>
-        <div className="flex items-center gap-2 bg-muted rounded-md px-3 py-2.5 mb-4">
+    <Modal
+      isOpen
+      onClose={onClose}
+      title="Copy your signing secret now"
+      description="This secret won't be shown again. Use it to verify incoming webhook signatures."
+      icon={AlertTriangle}
+      iconColor="text-amber-500"
+      showFooter={false}
+      maxWidth="480px"
+    >
+      <div className="space-y-4">
+        <div className="flex items-center gap-2 bg-muted rounded-md px-3 py-2.5">
           <code className="text-xs font-mono flex-1 break-all">{secret}</code>
-          <button onClick={copy} className="p-1.5 rounded hover:bg-accent">
+          <button onClick={copy} className="p-1.5 rounded-lg hover:bg-accent flex-shrink-0 transition-colors">
             {copied ? (
               <Check className="w-4 h-4 text-emerald-500" />
             ) : (
@@ -519,12 +519,12 @@ function SecretReveal({ secret, onClose }) {
         </div>
         <button
           onClick={onClose}
-          className="w-full py-2.5 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:opacity-90"
+          className="w-full py-2.5 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:opacity-90 transition-opacity"
         >
           I've saved the secret
         </button>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -543,7 +543,7 @@ export default function WebhooksPage() {
 
   return (
     <div className="flex-1 overflow-auto">
-      <div className="max-w-3xl mx-auto px-6 py-8 space-y-6">
+      <div className="p-8 space-y-4">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold flex items-center gap-2">
@@ -584,13 +584,11 @@ export default function WebhooksPage() {
         {isLoading ? (
           <Loader className="h-32" />
         ) : hooks.length === 0 ? (
-          <div className="py-16 flex flex-col items-center gap-2 text-center border border-dashed border-border rounded-md">
-            <Webhook className="w-8 h-8 text-muted-foreground/40" />
-            <p className="text-sm font-medium">No webhooks yet</p>
-            <p className="text-xs text-muted-foreground">
-              Add a webhook to receive real-time events
-            </p>
-          </div>
+          <EmptyState
+            illustration="webhooks"
+            title="No webhooks yet"
+            description="Add a webhook to receive real-time events from your workspace"
+          />
         ) : (
           <div className="space-y-4">
             {hooks.map((h) => (

@@ -45,6 +45,7 @@ export function useTestWebhook(workspaceSlug) {
   });
 }
 
+// Get the logs
 export function useWebhookDeliveries(workspaceSlug, hookId) {
   return useQuery({
     queryKey: ["webhooks", workspaceSlug, hookId, "deliveries"],

@@ -106,7 +106,7 @@ const BaseModal = ({
                 Cancel
               </Button>
               <Button
-                variant={"destructive"}
+                variant={VARIANT_MAP[confirmVariant] ?? "default"}
                 onClick={onConfirm}
                 disabled={isConfirmDisabled || isLoading}
               >

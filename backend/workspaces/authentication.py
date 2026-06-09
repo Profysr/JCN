@@ -4,7 +4,7 @@ Usage: Authorization: Bearer jcn_<hex>
 """
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
-
+from workspaces.models import WorkspaceAPIKey
 
 class APIKeyAuthentication(BaseAuthentication):
     """
@@ -18,7 +18,6 @@ class APIKeyAuthentication(BaseAuthentication):
             return None  # let other authenticators try
 
         raw = auth[len("Bearer "):]
-        from workspaces.models import WorkspaceAPIKey
         key = WorkspaceAPIKey.authenticate(raw)
 
         if key is None:

@@ -59,7 +59,12 @@ class IntegrationChannelMapping(models.Model):
         GOOGLE_CHAT = "google_chat", "Google Chat"
 
     class Format(models.TextChoices):
+        # One-line summary: "Task 'Fix login bug' was completed by John"
+        # Good for high-volume channels where you don't want noise.
         COMPACT = "compact", "Compact"
+
+        # Rich card with full context: title, assignee, project, due date, and a link.
+        # Better for dedicated notification channels where detail matters.
         DETAILED = "detailed", "Detailed"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

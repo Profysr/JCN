@@ -6,11 +6,11 @@ import {
   Trash2,
   Copy,
   Check,
-  X,
   AlertTriangle,
-  Loader2,
   ExternalLink,
 } from "lucide-react";
+import Modal from "@/components/ui/Modal";
+import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
 import {
   useAPIKeys,
@@ -20,6 +20,18 @@ import {
 import { formatDistanceToNow } from "date-fns";
 import { useToast } from "@/components/ui/toast";
 import { BACKEND_URL } from "@/lib/env";
+import { Loader } from "@/components/ui/Loader";
+
+const INPUT_CLS =
+  "w-full text-sm bg-background border border-border rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ring";
+
+const EXPIRY_OPTIONS = [
+  { value: "",    label: "Never" },
+  { value: "7",   label: "7 days" },
+  { value: "30",  label: "30 days" },
+  { value: "90",  label: "90 days" },
+  { value: "365", label: "1 year" },
+];
 
 const SCOPES = [
   { id: "read", label: "Read", desc: "Read tasks, projects, members" },
@@ -30,6 +42,15 @@ const SCOPES = [
     desc: "Manage workspace settings and members",
   },
 ];
+
+function FormField({ label, children }) {
+  return (
+    <div>
+      <label className="text-xs text-muted-foreground mb-1 block">{label}</label>
+      {children}
+    </div>
+  );
+}
 
 function NewKeyModal({ workspaceSlug, onClose, onCreated }) {
   const [name, setName] = useState("");
@@ -54,100 +75,69 @@ function NewKeyModal({ workspaceSlug, onClose, onCreated }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative bg-card border border-border rounded-md shadow-2xl w-full max-w-md mx-4 p-6 z-10">
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="font-semibold text-base">Generate API Key</h2>
-          <button onClick={onClose} className="p-1 rounded hover:bg-accent">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+    <Modal
+      isOpen
+      onClose={onClose}
+      title="Generate API Key"
+      icon={Key}
+      confirmLabel="Generate key"
+      confirmVariant="primary"
+      onConfirm={submit}
+      isLoading={create.isPending}
+      isConfirmDisabled={!name.trim() || !scopes.length}
+      maxWidth="480px"
+    >
+      <div className="space-y-4">
+        <FormField label="Key name">
+          <input
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. CI/CD pipeline, Zapier"
+            className={INPUT_CLS}
+          />
+        </FormField>
 
-        <div className="space-y-4">
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">
-              Key name
-            </label>
-            <input
-              autoFocus
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. CI/CD pipeline, Zapier"
-              className="w-full text-sm bg-background border border-border rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ring"
-            />
+        <FormField label="Scopes">
+          <div className="space-y-2">
+            {SCOPES.map((s) => (
+              <label
+                key={s.id}
+                className={cn(
+                  "flex items-start gap-3 px-3 py-2.5 rounded-md border cursor-pointer transition-colors",
+                  scopes.includes(s.id)
+                    ? "border-primary bg-primary/5"
+                    : "border-border hover:bg-accent",
+                )}
+              >
+                <input
+                  type="checkbox"
+                  checked={scopes.includes(s.id)}
+                  onChange={() => toggleScope(s.id)}
+                  className="accent-primary mt-0.5"
+                />
+                <div>
+                  <p className="text-sm font-medium">{s.label}</p>
+                  <p className="text-xs text-muted-foreground">{s.desc}</p>
+                </div>
+              </label>
+            ))}
           </div>
+        </FormField>
 
-          <div>
-            <label className="text-xs text-muted-foreground mb-2 block">
-              Scopes
-            </label>
-            <div className="space-y-2">
-              {SCOPES.map((s) => (
-                <label
-                  key={s.id}
-                  className={cn(
-                    "flex items-start gap-3 px-3 py-2.5 rounded-md border cursor-pointer transition-colors",
-                    scopes.includes(s.id)
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:bg-accent",
-                  )}
-                >
-                  <input
-                    type="checkbox"
-                    checked={scopes.includes(s.id)}
-                    onChange={() => toggleScope(s.id)}
-                    className="accent-primary mt-0.5"
-                  />
-                  <div>
-                    <p className="text-sm font-medium">{s.label}</p>
-                    <p className="text-xs text-muted-foreground">{s.desc}</p>
-                  </div>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">
-              Expiry (optional)
-            </label>
-            <select
-              value={expiryDays}
-              onChange={(e) => setExpiry(e.target.value)}
-              className="w-full text-sm bg-background border border-border rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ring"
-            >
-              <option value="">Never</option>
-              <option value="7">7 days</option>
-              <option value="30">30 days</option>
-              <option value="90">90 days</option>
-              <option value="365">1 year</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-2 mt-5">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm border border-border rounded-md hover:bg-accent transition-colors"
+        <FormField label="Expiry (optional)">
+          <select
+            value={expiryDays}
+            onChange={(e) => setExpiry(e.target.value)}
+            className={INPUT_CLS}
           >
-            Cancel
-          </button>
-          <button
-            onClick={submit}
-            disabled={!name.trim() || !scopes.length || create.isPending}
-            className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md font-medium hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-1.5"
-          >
-            {create.isPending ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Key className="w-3.5 h-3.5" />
-            )}
-            Generate key
-          </button>
-        </div>
+            {EXPIRY_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </FormField>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -161,18 +151,18 @@ function NewKeyReveal({ rawKey, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50" />
-      <div className="relative bg-card border border-border rounded-md shadow-2xl w-full max-w-lg mx-4 p-6 z-10">
-        <div className="flex items-center gap-2 mb-1">
-          <AlertTriangle className="w-5 h-5 text-amber-500" />
-          <h2 className="font-semibold">Copy your API key now</h2>
-        </div>
-        <p className="text-sm text-muted-foreground mb-4">
-          This key will not be shown again. Store it somewhere safe.
-        </p>
-
-        <div className="flex items-center gap-2 bg-muted rounded-md px-3 py-2.5 mb-4">
+    <Modal
+      isOpen
+      onClose={onClose}
+      title="Copy your API key now"
+      description="This key will not be shown again. Store it somewhere safe."
+      icon={AlertTriangle}
+      iconColor="text-amber-500"
+      showFooter={false}
+      maxWidth="520px"
+    >
+      <div className="space-y-4">
+        <div className="flex items-center gap-2 bg-muted rounded-md px-3 py-2.5">
           <code className="text-xs font-mono flex-1 break-all">{rawKey}</code>
           <button
             onClick={copy}
@@ -186,7 +176,7 @@ function NewKeyReveal({ rawKey, onClose }) {
           </button>
         </div>
 
-        <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-md p-3 mb-4 text-xs text-amber-700 dark:text-amber-300">
+        <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-md p-3 text-xs text-amber-700 dark:text-amber-300">
           Use it as:{" "}
           <code className="font-mono">
             Authorization: Bearer {rawKey.slice(0, 20)}…
@@ -200,7 +190,114 @@ function NewKeyReveal({ rawKey, onClose }) {
           I've saved the key
         </button>
       </div>
-    </div>
+    </Modal>
+  );
+}
+
+// Table Helpers ________________________________________________
+const CELL = "px-4 py-3";
+
+const COLUMNS = [
+  {
+    header: "Name",
+    render: (k) => <span className="font-medium">{k.name}</span>,
+  },
+  {
+    header: "Key prefix",
+    className: "font-mono text-xs text-muted-foreground",
+    render: (k) => <>{k.key_prefix}…</>,
+  },
+  {
+    header: "Scopes",
+    render: (k) => (
+      <div className="flex gap-1 flex-wrap">
+        {(k.scopes || []).map((s) => (
+          <span
+            key={s}
+            className="text-[10px] px-1.5 py-0.5 bg-primary/10 text-primary rounded-md font-medium capitalize"
+          >
+            {s}
+          </span>
+        ))}
+      </div>
+    ),
+  },
+  {
+    header: "Last used",
+    className: "text-xs text-muted-foreground",
+    render: (k) =>
+      k.last_used_at
+        ? formatDistanceToNow(new Date(k.last_used_at), { addSuffix: true })
+        : "Never",
+  },
+  {
+    header: "Expires",
+    className: "text-xs text-muted-foreground",
+    render: (k) =>
+      k.expires_at
+        ? formatDistanceToNow(new Date(k.expires_at), { addSuffix: true })
+        : "Never",
+  },
+];
+
+function KeyRow({ apiKey, onRevoke }) {
+  const [confirming, setConfirming] = useState(false);
+
+  return (
+    <>
+      <tr className="hover:bg-muted/20 transition-colors">
+        {COLUMNS.map((col) => (
+          <td key={col.header} className={cn(CELL, col.className)}>
+            {col.render(apiKey)}
+          </td>
+        ))}
+        <td className={CELL}>
+          <button
+            onClick={() => setConfirming(true)}
+            className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+            title="Revoke key"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </td>
+      </tr>
+
+      <Modal
+        variant="delete"
+        isOpen={confirming}
+        onClose={() => setConfirming(false)}
+        title="Revoke API key"
+        confirmLabel="Revoke key"
+        onConfirm={() => { onRevoke(apiKey.id); setConfirming(false); }}
+      >
+        <p className="text-sm text-muted-foreground">
+          Revoke <span className="font-medium text-foreground">{apiKey.name}</span>?
+          Any integrations using <code className="font-mono text-xs">{apiKey.key_prefix}…</code> will stop working immediately.
+        </p>
+      </Modal>
+    </>
+  );
+}
+
+function KeysTable({ keys, onRevoke }) {
+  return (
+    <table className="w-full text-sm">
+      <thead className="bg-muted/30 border-b border-border">
+        <tr>
+          {COLUMNS.map((col) => (
+            <th key={col.header} className={cn(CELL, "text-left font-medium text-muted-foreground text-xs")}>
+              {col.header}
+            </th>
+          ))}
+          <th className={CELL} />
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-border">
+        {keys.map((k) => (
+          <KeyRow key={k.id} apiKey={k} onRevoke={onRevoke} />
+        ))}
+      </tbody>
+    </table>
   );
 }
 
@@ -219,14 +316,14 @@ export default function APIKeysPage() {
 
   return (
     <div className="flex-1 overflow-auto">
-      <div className="max-w-3xl mx-auto px-6 py-8 space-y-6">
+      <div className="p-8 space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold flex items-center gap-2">
               <Key className="w-5 h-5 text-primary" /> API Keys
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-sm text-muted-foreground mt-1 w-3/4">
               API keys allow programmatic access to your workspace. Each key is
               shown only once at creation.
             </p>
@@ -235,7 +332,7 @@ export default function APIKeysPage() {
             onClick={() => setShowCreate(true)}
             className="flex items-center gap-1.5 px-3 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:opacity-90 transition-opacity"
           >
-            <Plus className="w-4 h-4" /> New key
+            <Plus className="w-4 h-4" /> Generate new key
           </button>
         </div>
 
@@ -247,92 +344,18 @@ export default function APIKeysPage() {
         {/* Keys table */}
         <div className="bg-card border border-border rounded-md overflow-hidden shadow-card">
           {isLoading ? (
-            <div className="h-32 flex items-center justify-center">
-              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-            </div>
+            <Loader className="min-h-screen" />
           ) : keys.length === 0 ? (
-            <div className="py-12 flex flex-col items-center gap-2 text-center">
-              <Key className="w-8 h-8 text-muted-foreground/40" />
-              <p className="text-sm font-medium">No API keys yet</p>
-              <p className="text-xs text-muted-foreground">
-                Create a key to start using the JCN API
-              </p>
-            </div>
+            <EmptyState
+              illustration="api-keys"
+              title="No API keys yet"
+              description="Create a key to start using the JCN API"
+            />
           ) : (
-            <table className="w-full text-sm">
-              <thead className="bg-muted/30 border-b border-border">
-                <tr>
-                  <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">
-                    Name
-                  </th>
-                  <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">
-                    Key prefix
-                  </th>
-                  <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">
-                    Scopes
-                  </th>
-                  <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">
-                    Last used
-                  </th>
-                  <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">
-                    Expires
-                  </th>
-                  <th className="px-4 py-3" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {keys.map((k) => (
-                  <tr
-                    key={k.id}
-                    className="hover:bg-muted/20 transition-colors"
-                  >
-                    <td className="px-4 py-3 font-medium">{k.name}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                      {k.key_prefix}…
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-1 flex-wrap">
-                        {(k.scopes || []).map((s) => (
-                          <span
-                            key={s}
-                            className="text-[10px] px-1.5 py-0.5 bg-primary/10 text-primary rounded-md font-medium capitalize"
-                          >
-                            {s}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {k.last_used_at
-                        ? formatDistanceToNow(new Date(k.last_used_at), {
-                            addSuffix: true,
-                          })
-                        : "Never"}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {k.expires_at
-                        ? formatDistanceToNow(new Date(k.expires_at), {
-                            addSuffix: true,
-                          })
-                        : "Never"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => {
-                          revoke.mutate(k.id, {
-                            onSuccess: () => toast.success("Key revoked"),
-                          });
-                        }}
-                        className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                        title="Revoke key"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <KeysTable
+              keys={keys}
+              onRevoke={(id) => revoke.mutate(id, { onSuccess: () => toast.success("Key revoked") })}
+            />
           )}
         </div>
 

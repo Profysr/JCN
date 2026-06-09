@@ -10,6 +10,7 @@ export function useIntegrationStatus(workspaceSlug) {
       api.get(`/api/workspaces/${workspaceSlug}/integrations/`).then((r) => r.data),
     enabled: !!workspaceSlug,
     staleTime: 30_000,
+    retry: false,
   });
 }
 

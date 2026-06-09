@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Loader } from "@/components/ui/Loader";
 import { useParams } from "react-router-dom";
-import { SiMicrosoftteams, SiGooglechat } from "react-icons/si";
+import { SiGooglechat } from "react-icons/si";
+import { BsMicrosoftTeams } from "react-icons/bs";
 import {
   CheckCircle2,
   XCircle,
@@ -174,6 +175,7 @@ function MappingRow({ mapping, workspaceSlug, onDelete }) {
   const toast = useToast();
 
   const patch = (key, val) => setForm((f) => ({ ...f, [key]: val }));
+
   const save = () =>
     update.mutate(
       { mappingId: mapping.id, ...form },
@@ -200,11 +202,11 @@ function MappingRow({ mapping, workspaceSlug, onDelete }) {
             )}
           />
           <span className="text-sm font-medium">
-            {mapping.project_name || "Workspace-wide"}
+            {mapping.project_name || "Workspace"}
           </span>
-          {(mapping.channel_name || mapping.webhook_url) && (
-            <span className="text-xs text-muted-foreground">
-              → {mapping.channel_name || "webhook"}
+          {mapping.webhook_url && (
+            <span className="text-xs text-muted-foreground truncate max-w-[200px]">
+              → {mapping.webhook_url}
             </span>
           )}
         </div>
@@ -241,6 +243,12 @@ function MappingRow({ mapping, workspaceSlug, onDelete }) {
             />
           </FieldRow>
 
+          {/*
+           * compact  — one-line summary e.g. "Task 'Fix login bug' completed by John"
+           *            use this for busy channels where you want minimal noise.
+           * detailed — rich card with title, assignee, project, due date, and a link.
+           *            use this for a dedicated notifications channel.
+           */}
           <FieldRow label="Notification format">
             <div className="flex gap-2">
               {["compact", "detailed"].map((f) => (
@@ -538,7 +546,7 @@ function TeamsCard({ workspaceSlug, teams }) {
       workspaceSlug={workspaceSlug}
       config={teams}
       platform="teams"
-      icon={<SiMicrosoftteams className="w-7 h-7 text-[#6264A7]" />}
+      icon={<BsMicrosoftTeams className="w-7 h-7 text-[#6264A7]" />}
       name="Microsoft Teams"
       description="Send task notifications to a Teams channel via incoming webhook. No app installation required."
       save={useSaveTeams(workspaceSlug)}
@@ -547,7 +555,7 @@ function TeamsCard({ workspaceSlug, teams }) {
       urlPlaceholder="https://yourorg.webhook.office.com/webhookb2/…"
       urlHowToHref="https://docs.microsoft.com/en-us/microsoftteams/platform/webhooks-and-connectors/how-to/add-incoming-webhook"
       secondary={{
-        key: "display_name",
+        key: "space_name",
         label: "Display name in Teams",
         placeholder: "JCN",
       }}

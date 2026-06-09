@@ -9,6 +9,8 @@ from .models import Workspace, WorkspaceMember, WorkspaceInvite, Notification, O
 from .serializers import (
     WorkspaceSerializer, WorkspaceMemberSerializer, WorkspaceInviteSerializer,
     NotificationSerializer, InboxItemSerializer, NotificationPreferenceSerializer,
+    WorkspaceAPIKeySerializer, APIKeyCreateSerializer,
+    WebhookSerializer, WebhookCreateSerializer, WebhookDeliverySerializer,
 )
 
 
@@ -521,7 +523,6 @@ class WorkspaceTemplateApplyView(APIView):
 
 
 # ── v4.5.0 — Public API Keys ──────────────────────────────────────────────────
-
 def _require_admin(workspace, user):
     """Raise PermissionDenied if user is not an admin/owner of the workspace."""
     from rest_framework.exceptions import PermissionDenied
@@ -533,57 +534,31 @@ def _require_admin(workspace, user):
 
 class APIKeyListCreateView(APIView):
     """
-    GET  /api/workspaces/:slug/api-keys/  — list keys (prefix + meta only, never hash)
-    POST /api/workspaces/:slug/api-keys/  — create key; returns raw key ONCE
+    GET  /api/workspaces/:slug/api-keys/  — list active api keys (prefix + meta only, never the hash)
+    POST /api/workspaces/:slug/api-keys/  — generate a new key; raw key is returned exactly once
     """
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_slug):
         ws = get_object_or_404(Workspace, slug=workspace_slug)
         _require_admin(ws, request.user)
-        keys = ws.api_keys.filter(is_active=True).order_by("-created_at")
-        return Response([{
-            "id":          str(k.id),
-            "name":        k.name,
-            "key_prefix":  k.key_prefix,
-            "scopes":      k.scopes,
-            "last_used_at": k.last_used_at.isoformat() if k.last_used_at else None,
-            "expires_at":  k.expires_at.isoformat() if k.expires_at else None,
-            "created_at":  k.created_at.isoformat(),
-        } for k in keys])
+        # Exclude revoked keys — is_active=False keys are soft-deleted and hidden from the list
+        keys = ws.api_keys.filter(is_active=True)
+        return Response(WorkspaceAPIKeySerializer(keys, many=True).data)
 
     def post(self, request, workspace_slug):
         ws = get_object_or_404(Workspace, slug=workspace_slug)
         _require_admin(ws, request.user)
-
-        name   = (request.data.get("name") or "").strip()
-        scopes = request.data.get("scopes") or ["read"]
-        exp    = request.data.get("expires_at")
-
-        if not name:
-            return Response({"error": "name required"}, status=400)
-
-        expires_at = None
-        if exp:
-            try:
-                from django.utils.dateparse import parse_datetime
-                expires_at = parse_datetime(exp)
-            except Exception:
-                return Response({"error": "Invalid expires_at"}, status=400)
-
+        s = APIKeyCreateSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        # generate() hashes the raw key and stores only the hash — raw is never saved
         key_obj, raw = WorkspaceAPIKey.generate(
-            workspace=ws, name=name, scopes=scopes,
-            created_by=request.user, expires_at=expires_at,
+            workspace=ws, created_by=request.user, **s.validated_data
         )
-        return Response({
-            "id":         str(key_obj.id),
-            "name":       key_obj.name,
-            "key_prefix": key_obj.key_prefix,
-            "scopes":     key_obj.scopes,
-            "expires_at": key_obj.expires_at.isoformat() if key_obj.expires_at else None,
-            "created_at": key_obj.created_at.isoformat(),
-            "key":        raw,   # ← ONLY returned here; client must copy immediately
-        }, status=201)
+        serialize_data = WorkspaceAPIKeySerializer(key_obj).data
+        # Attach the raw key to this response only — it cannot be retrieved again
+        serialize_data["key"] = raw
+        return Response(serialize_data, status=status.HTTP_201_CREATED)
 
 
 class APIKeyDetailView(APIView):
@@ -594,13 +569,13 @@ class APIKeyDetailView(APIView):
         ws  = get_object_or_404(Workspace, slug=workspace_slug)
         _require_admin(ws, request.user)
         key = get_object_or_404(WorkspaceAPIKey, id=key_id, workspace=ws)
+        # Soft-delete: keep the row for audit history, just disable authentication
         key.is_active = False
         key.save(update_fields=["is_active"])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 # ── v4.5.0 — Webhooks ─────────────────────────────────────────────────────────
-
 WEBHOOK_EVENTS = [
     "task.created", "task.updated", "task.deleted",
     "task.assigned", "task.commented", "task.completed",
@@ -608,79 +583,61 @@ WEBHOOK_EVENTS = [
     "member.added", "member.removed",
 ]
 
-
 class WebhookListCreateView(APIView):
     """
-    GET  /api/workspaces/:slug/webhooks/
-    POST /api/workspaces/:slug/webhooks/
+    GET  /api/workspaces/:slug/webhooks/ — list all webhooks for this workspace
+    POST /api/workspaces/:slug/webhooks/ — register a new webhook; signing secret returned once
     """
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_slug):
         ws = get_object_or_404(Workspace, slug=workspace_slug)
         _require_admin(ws, request.user)
-        hooks = ws.webhooks.all().order_by("-created_at")
-        return Response([{
-            "id":         str(h.id),
-            "name":       h.name,
-            "url":        h.url,
-            "events":     h.events,
-            "is_active":  h.is_active,
-            "created_at": h.created_at.isoformat(),
-            "secret_prefix": h.secret[:8] + "…",
-        } for h in hooks])
+        # secret_prefix (first 8 chars) is included so the user can identify the secret,
+        # but the full secret is never exposed again after creation
+        return Response(WebhookSerializer(ws.webhooks.all(), many=True).data)
 
     def post(self, request, workspace_slug):
-        ws   = get_object_or_404(Workspace, slug=workspace_slug)
+        ws = get_object_or_404(Workspace, slug=workspace_slug)
         _require_admin(ws, request.user)
-        name   = (request.data.get("name") or "").strip()
-        url    = (request.data.get("url") or "").strip()
-        events = request.data.get("events") or WEBHOOK_EVENTS
-
-        if not name or not url:
-            return Response({"error": "name and url required"}, status=400)
-        if not url.startswith(("http://", "https://")):
-            return Response({"error": "url must start with http:// or https://"}, status=400)
-
-        hook = Webhook.create_with_secret(workspace=ws, name=name, url=url, events=events)
-        return Response({
-            "id":         str(hook.id),
-            "name":       hook.name,
-            "url":        hook.url,
-            "events":     hook.events,
-            "is_active":  hook.is_active,
-            "secret":     hook.secret,  # returned ONCE at creation
-            "created_at": hook.created_at.isoformat(),
-        }, status=201)
+        # Validate name, URL format, and optional event filter list
+        s = WebhookCreateSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        # create_with_secret() generates a random HMAC signing secret and stores it on the model
+        hook = Webhook.create_with_secret(workspace=ws, **s.validated_data)
+        data = WebhookSerializer(hook).data
+        # Attach the full secret to this response only — use it to verify incoming webhook signatures
+        data["secret"] = hook.secret
+        return Response(data, status=status.HTTP_201_CREATED)
 
 
 class WebhookDetailView(APIView):
-    """PATCH/DELETE /api/workspaces/:slug/webhooks/:hook_id/"""
+    """
+    PATCH  /api/workspaces/:slug/webhooks/:hook_id/ — update name, URL, events, or is_active
+    DELETE /api/workspaces/:slug/webhooks/:hook_id/ — permanently remove the webhook
+    """
     permission_classes = [permissions.IsAuthenticated]
 
     def patch(self, request, workspace_slug, hook_id):
         ws   = get_object_or_404(Workspace, slug=workspace_slug)
         _require_admin(ws, request.user)
         hook = get_object_or_404(Webhook, id=hook_id, workspace=ws)
-        for field in ("name", "url", "events", "is_active"):
-            if field in request.data:
-                setattr(hook, field, request.data[field])
-        hook.save()
-        return Response({
-            "id": str(hook.id), "name": hook.name,
-            "url": hook.url, "events": hook.events, "is_active": hook.is_active,
-        })
+        # partial=True means only the fields sent in the request are updated
+        s = WebhookSerializer(hook, data=request.data, partial=True)
+        s.is_valid(raise_exception=True)
+        updated = s.save()
+        return Response(WebhookSerializer(updated).data)
 
     def delete(self, request, workspace_slug, hook_id):
         ws   = get_object_or_404(Workspace, slug=workspace_slug)
         _require_admin(ws, request.user)
-        hook = get_object_or_404(Webhook, id=hook_id, workspace=ws)
-        hook.delete()
+        # Hard-delete: removes the row and cascades to all WebhookDelivery log entries
+        get_object_or_404(Webhook, id=hook_id, workspace=ws).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class WebhookTestView(APIView):
-    """POST /api/workspaces/:slug/webhooks/:hook_id/test/ — send a test event."""
+    """POST /api/workspaces/:slug/webhooks/:hook_id/test/ — fire a ping event to verify the URL is reachable."""
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, workspace_slug, hook_id):
@@ -688,31 +645,21 @@ class WebhookTestView(APIView):
         _require_admin(ws, request.user)
         hook = get_object_or_404(Webhook, id=hook_id, workspace=ws)
         from workspaces.tasks import deliver_webhook
-        payload = {
-            "event":  "ping",
-            "hook_id": str(hook.id),
-            "workspace": ws.slug,
-        }
-        deliver_webhook.delay(str(hook.id), "ping", payload)
+        # Queued via Celery — the actual HTTP call happens in the background worker
+        deliver_webhook.delay(str(hook.id), "ping", {
+            "event": "ping", "hook_id": str(hook.id), "workspace": ws.slug,
+        })
         return Response({"ok": True, "message": "Test event queued"})
 
 
 class WebhookDeliveryListView(APIView):
-    """GET /api/workspaces/:slug/webhooks/:hook_id/deliveries/"""
+    """GET /api/workspaces/:slug/webhooks/:hook_id/deliveries/ — recent delivery log (latest 50)."""
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_slug, hook_id):
         ws   = get_object_or_404(Workspace, slug=workspace_slug)
         _require_admin(ws, request.user)
         hook = get_object_or_404(Webhook, id=hook_id, workspace=ws)
-        deliveries = hook.deliveries.order_by("-created_at")[:50]
-        return Response([{
-            "id":            str(d.id),
-            "event":         d.event,
-            "response_code": d.response_code,
-            "response_body": d.response_body[:500],
-            "duration_ms":   d.duration_ms,
-            "success":       d.success,
-            "attempt":       d.attempt,
-            "created_at":    d.created_at.isoformat(),
-        } for d in deliveries])
+        # Capped at 50 — WebhookDelivery.Meta ordering is -created_at so newest come first
+        deliveries = hook.deliveries.all()[:50]
+        return Response(WebhookDeliverySerializer(deliveries, many=True).data)

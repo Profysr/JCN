@@ -13,6 +13,7 @@ environ.Env.read_env(os.path.join(BASE_DIR, ".env"))
 # SECURITY
 SECRET_KEY = env("SECRET_KEY", default="dev-secret-key-change-in-production")
 DEBUG = env("DEBUG", default=True)
+
 # ALLOWED_HOSTS controls which domain names Django will serve — prevents HTTP Host header attacks
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 
@@ -20,13 +21,13 @@ INSTALLED_APPS = [
     # daphne must be first — it replaces Django's default WSGI server with ASGI (needed for WebSockets)
     "daphne",
     # Django built-ins
-    "django.contrib.admin",        # /admin dashboard
-    "django.contrib.auth",         # authentication framework (login, permissions, groups)
-    "django.contrib.contenttypes", # lets models reference other models generically (used by permissions)
-    "django.contrib.sessions",     # server-side session storage
-    "django.contrib.messages",     # one-time flash messages (used by admin)
+    "django.contrib.admin",  # /admin dashboard
+    "django.contrib.auth",  # authentication framework (login, permissions, groups)
+    "django.contrib.contenttypes",  # lets models reference other models generically (used by permissions)
+    "django.contrib.sessions",  # server-side session storage
+    "django.contrib.messages",  # one-time flash messages (used by admin)
     "django.contrib.staticfiles",  # serves CSS/JS in dev
-    "django.contrib.sites",        # required by allauth — supports multi-site setups
+    "django.contrib.sites",  # required by allauth — supports multi-site setups
     # Django REST Framework — turns Django views into a proper REST API
     "rest_framework",
     # Token auth table used internally by dj-rest-auth even when we use JWT
@@ -36,7 +37,7 @@ INSTALLED_APPS = [
     # allauth — handles registration flow, email verification, social auth later
     "allauth",
     "allauth.account",
-    "allauth.socialaccount",       # needed even if we don't use social login yet — dj-rest-auth requires it
+    "allauth.socialaccount",  # needed even if we don't use social login yet — dj-rest-auth requires it
     # dj-rest-auth — wraps allauth into DRF-compatible login/register/logout endpoints
     "dj_rest_auth",
     "dj_rest_auth.registration",
@@ -47,10 +48,10 @@ INSTALLED_APPS = [
     # drf-spectacular — auto-generates OpenAPI schema → Swagger UI at /api/docs/
     "drf_spectacular",
     # Our apps
-    "accounts",      # custom User model, profile
-    "workspaces",    # workspaces, members, invites
-    "projects",      # projects, tasks, subtasks, comments
-    "integrations",  # Slack, Teams, Google Chat integrations (v4.3.0)
+    "accounts",  # custom User model, profile
+    "workspaces",  # workspaces, members, invites
+    "projects",  # projects, tasks, subtasks, comments
+    "integrations",  # Teams, Google Chat integrations (v4.3.0)
 ]
 
 MIDDLEWARE = [
@@ -91,7 +92,9 @@ ASGI_APPLICATION = "core.asgi.application"
 
 # django-environ parses the DATABASE_URL string into the dict Django expects
 DATABASES = {
-    "default": env.db("DATABASE_URL", default="postgresql://jcn_user:jcn_pass@localhost:5432/jcn_db")
+    "default": env.db(
+        "DATABASE_URL", default="postgresql://jcn_user:jcn_pass@localhost:5432/jcn_db"
+    )
 }
 
 # Channel layers are how Django Channels broadcasts messages between consumers
@@ -106,19 +109,20 @@ CHANNEL_LAYERS = {
 }
 
 # ── Celery (v2.7.0) ───────────────────────────────────────────────────────────
-CELERY_BROKER_URL         = env("REDIS_URL", default="redis://localhost:6379")
-CELERY_RESULT_BACKEND     = env("REDIS_URL", default="redis://localhost:6379")
-CELERY_ACCEPT_CONTENT     = ["json"]
-CELERY_TASK_SERIALIZER    = "json"
-CELERY_RESULT_SERIALIZER  = "json"
-CELERY_TIMEZONE           = "UTC"
+CELERY_BROKER_URL = env("REDIS_URL", default="redis://localhost:6379")
+CELERY_RESULT_BACKEND = env("REDIS_URL", default="redis://localhost:6379")
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = "UTC"
 
 # Swap Django's built-in User model for ours (email-based, UUID pk, no username)
-# Must be set before the first migration — cannot be changed after
 AUTH_USER_MODEL = "accounts.User"
 
 AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"
+    },
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
@@ -143,8 +147,12 @@ SITE_ID = 1
 
 # REST Framework global defaults — can be overridden per-view
 REST_FRAMEWORK = {
-    # Every request must include a valid JWT Bearer token unless the view opts out
+    # Two authentication methods are supported:
+    #   1. JWT Bearer token — used by the React frontend (login flow)
+    #   2. API key (jcn_...) — used by external integrations (CI, scripts, Zapier, etc.)
+    # DRF tries each in order and stops at the first match.
     "DEFAULT_AUTHENTICATION_CLASSES": [
+        "workspaces.authentication.APIKeyAuthentication",
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
     # Unauthenticated requests get 403 by default
@@ -166,15 +174,19 @@ REST_FRAMEWORK = {
 
 # JWT token lifetimes
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(hours=1),   # short-lived — sent with every request
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=30),  # long-lived — used to get a new access token silently
-    "ROTATE_REFRESH_TOKENS": True,                 # issue a new refresh token on every refresh (rolling sessions)
+    "ACCESS_TOKEN_LIFETIME": timedelta(
+        hours=1
+    ),  # short-lived — sent with every request
+    "REFRESH_TOKEN_LIFETIME": timedelta(
+        days=30
+    ),  # long-lived — used to get a new access token silently
+    "ROTATE_REFRESH_TOKENS": True,  # issue a new refresh token on every refresh (rolling sessions)
 }
 
 # dj-rest-auth config
 REST_AUTH = {
-    "USE_JWT": True,           # use JWT instead of DRF's Token auth
-    "JWT_AUTH_HTTPONLY": False, # send refresh token in response body (not httpOnly cookie) so React can store it
+    "USE_JWT": True,  # use JWT instead of DRF's Token auth
+    "JWT_AUTH_HTTPONLY": False,  # send refresh token in response body (not httpOnly cookie) so React can store it
     # Point to our custom serializers so register/login returns our User shape
     "REGISTER_SERIALIZER": "accounts.serializers.RegisterSerializer",
     "USER_DETAILS_SERIALIZER": "accounts.serializers.UserSerializer",
@@ -185,11 +197,15 @@ REST_AUTH = {
 }
 
 # allauth account behaviour
-ACCOUNT_AUTHENTICATION_METHOD = "email"   # login with email, not username
+ACCOUNT_AUTHENTICATION_METHOD = "email"  # login with email, not username
 ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_USERNAME_REQUIRED = False
-ACCOUNT_USER_MODEL_USERNAME_FIELD = None  # our User model has no username field — stops allauth looking for one
-ACCOUNT_EMAIL_VERIFICATION = "none"       # disable email verification in dev; set to "mandatory" in production
+ACCOUNT_USER_MODEL_USERNAME_FIELD = (
+    None  # our User model has no username field — stops allauth looking for one
+)
+ACCOUNT_EMAIL_VERIFICATION = (
+    "none"  # disable email verification in dev; set to "mandatory" in production
+)
 
 # CORS — allow the React dev server to call this API
 # In production, replace with your actual frontend domain
@@ -208,7 +224,7 @@ SPECTACULAR_SETTINGS = {
 
 # ── v4.3.0 — Integration settings ────────────────────────────────────────────
 # Slack — create a Slack App at https://api.slack.com/apps and fill these in .env
-SLACK_CLIENT_ID     = env("SLACK_CLIENT_ID",     default="")
+SLACK_CLIENT_ID = env("SLACK_CLIENT_ID", default="")
 SLACK_CLIENT_SECRET = env("SLACK_CLIENT_SECRET", default="")
 SLACK_SIGNING_SECRET = env("SLACK_SIGNING_SECRET", default="")
 
