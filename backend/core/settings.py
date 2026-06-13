@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     "workspaces",  # workspaces, members, invites
     "projects",  # projects, tasks, subtasks, comments
     "integrations",  # Teams, Google Chat integrations (v4.3.0)
+    "analytics",  # analytics metrics + report builder
 ]
 
 MIDDLEWARE = [

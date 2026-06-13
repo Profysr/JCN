@@ -2,8 +2,7 @@ import uuid
 from django.db import models
 from django.conf import settings
 from workspaces.models import Workspace
-
-# !! Have to change this way, rename the projects with board as it makes more sense. Secondly, we should add a type with the board such as some boards refers to clients, some are general, some are for internal teams.
+from core.constants import DEFAULT_TASK_STATUSES  # noqa: F401 — re-exported for existing imports
 
 class Project(models.Model):
     class Status(models.TextChoices):
@@ -54,14 +53,6 @@ class TaskStatus(models.Model):
 
     def __str__(self):
         return f"{self.project.name} / {self.name}"
-
-# !! same thing, create a constants file, I would prefer, a single constant file in the core folder and move all the constants there
-DEFAULT_TASK_STATUSES = (
-    {"name": "Backlog", "color": "#94a3b8", "order": 0, "is_done": False},
-    {"name": "In Progress", "color": "#6366f1", "order": 1, "is_done": False},
-    {"name": "In Review", "color": "#f59e0b", "order": 2, "is_done": False},
-    {"name": "Done", "color": "#22c55e", "order": 3, "is_done": True},
-)
 
 class Task(models.Model):
     class Priority(models.TextChoices):
@@ -1039,8 +1030,6 @@ class ApprovalReviewer(models.Model):
 
 
 # ── v3.5.0 — Real-Time Collaboration v2 ──────────────────────────────────────
-
-
 class UserPresence(models.Model):
     """Tracks which resource a user is currently viewing (updated every 30s)."""
 
@@ -1114,88 +1103,3 @@ class AuditEvent(models.Model):
     def __str__(self):
         return f"{self.actor} — {self.action} at {self.created_at}"
 
-
-# ── v4.0.0 — Analytics Engine v2 ─────────────────────────────────────────────
-class AnalyticsSnapshot(models.Model):
-    """Daily batch-computed analytics snapshot per workspace (cached metrics)."""
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    workspace = models.ForeignKey(
-        Workspace,
-        on_delete=models.CASCADE,
-        related_name="analytics_snapshots",
-    )
-    date = models.DateField()
-    data = models.JSONField(default=dict)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        unique_together = [["workspace", "date"]]
-        ordering = ["-date"]
-
-    def __str__(self):
-        return f"Snapshot {self.workspace} — {self.date}"
-
-
-# ── v4.1.0 — Report Builder ───────────────────────────────────────────────────
-class Report(models.Model):
-    """A saved custom report with a chart config and data source."""
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    workspace = models.ForeignKey(
-        Workspace, on_delete=models.CASCADE, related_name="reports"
-    )
-    name = models.CharField(max_length=255)
-    description = models.TextField(blank=True)
-    # config: {chart_type, data_source, filters, grouping, x_axis, y_axis, color_by, date_range_days}
-    config = models.JSONField(default=dict)
-    owner = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="reports"
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ["-updated_at"]
-
-    def __str__(self):
-        return f"{self.name} ({self.workspace})"
-
-
-class ReportShare(models.Model):
-    """Public read-only share link for a report."""
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    report = models.OneToOneField(
-        Report, on_delete=models.CASCADE, related_name="share"
-    )
-    token = models.UUIDField(default=uuid.uuid4, unique=True)
-    password = models.CharField(max_length=128, blank=True)
-    expires_at = models.DateTimeField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"Share for {self.report.name}"
-
-
-class ScheduledReport(models.Model):
-    """Recurring scheduled delivery of a report (Celery beat)."""
-
-    class Format(models.TextChoices):
-        PDF = "pdf", "PDF"
-        PNG = "png", "PNG"
-        CSV = "csv", "CSV"
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    report = models.ForeignKey(
-        Report, on_delete=models.CASCADE, related_name="schedules"
-    )
-    cron = models.CharField(max_length=100)  # e.g. "0 9 * * 1"
-    recipients = models.JSONField(default=list)  # list of email strings
-    format = models.CharField(max_length=10, choices=Format.choices, default=Format.PDF)
-    is_active = models.BooleanField(default=True)
-    last_run_at = models.DateTimeField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"Schedule for {self.report.name} ({self.cron})"

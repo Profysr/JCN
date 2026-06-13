@@ -32,9 +32,15 @@ from .serializers import (
     ImportJobSerializer,
     ImportJobDetailSerializer,
 )
-from .constants import WORKSPACE_TEMPLATES, WEBHOOK_EVENTS
 from .importers.registry import get_parser, SUPPORTED_SOURCES
 from .tasks import deliver_webhook, run_import
+
+
+def _is_workspace_admin(workspace, user):
+    return WorkspaceMember.objects.filter(
+        workspace=workspace, user=user, role=WorkspaceMember.Role.ADMIN
+    ).exists()
+
 
 class WorkspaceListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -54,10 +60,9 @@ class WorkspaceListCreateView(APIView):
         serializer.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-
 class WorkspaceDetailView(APIView):
     permission_classes = [permissions.IsAuthenticated]
-    
+
     def get_object(self, slug, user):
         return get_object_or_404(Workspace, slug=slug, members__user=user)
 
@@ -86,13 +91,7 @@ class WorkspaceDetailView(APIView):
         workspace.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-
-def _is_workspace_admin(workspace, user):
-    return WorkspaceMember.objects.filter(
-        workspace=workspace, user=user, role=WorkspaceMember.Role.ADMIN
-    ).exists()
-
-
+# ── Workspace Members View ────────────────────────────────────────────────────────────
 class WorkspaceMemberListView(ListAPIView):
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = WorkspaceMemberSerializer
@@ -102,7 +101,6 @@ class WorkspaceMemberListView(ListAPIView):
             Workspace, slug=self.kwargs["slug"], members__user=self.request.user
         )
         return workspace.members.select_related("user").all()
-
 
 class WorkspaceMemberDetailView(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -142,7 +140,7 @@ class WorkspaceMemberDetailView(APIView):
         member.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-
+# ── Invite Members View ────────────────────────────────────────────────────────────
 class InviteMemberView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -154,7 +152,6 @@ class InviteMemberView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
-
 
 class WorkspaceInviteListView(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -180,7 +177,6 @@ class WorkspaceInviteCancelView(APIView):
         invite.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-
 class InviteDetailView(APIView):
     """Public endpoint — returns invite info so the accept page can display it before login."""
 
@@ -202,7 +198,6 @@ class InviteDetailView(APIView):
                 "invited_by": invite.invited_by.full_name or invite.invited_by.email,
             }
         )
-
 
 class AcceptInviteView(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -233,8 +228,7 @@ class AcceptInviteView(APIView):
             WorkspaceSerializer(invite.workspace, context={"request": request}).data
         )
 
-
-# ── Notifications ─────────────────────────────────────────────────────────────
+# ── Notifications and v3.7.0 — Inbox ─────────────────────────────────────────────────────────────
 class NotificationListView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -243,7 +237,6 @@ class NotificationListView(APIView):
             "actor"
         )[:50]
         return Response(NotificationSerializer(notifs, many=True).data)
-
 
 class NotificationMarkReadView(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -260,8 +253,6 @@ class NotificationMarkReadView(APIView):
             )
         return Response({"status": "ok"})
 
-
-# ── v3.7.0 — Inbox ────────────────────────────────────────────────────────────
 class InboxListView(APIView):
     """
     GET /api/inbox/?workspace=<slug>&tab=<for_you|all|done>&event_type=<type>
@@ -271,15 +262,39 @@ class InboxListView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
+        # 1. Fetch parameters
         workspace_slug = request.query_params.get("workspace")
         tab = request.query_params.get("tab", "for_you")
         event_type = request.query_params.get("event_type")
+        limit = min(int(request.query_params.get("limit", 20)), 50)
 
+        # 2. Build and process queryset
         qs = InboxItem.objects.filter(user=request.user).select_related("workspace")
+        qs = self._filter_queryset(qs, tab, workspace_slug, event_type)
 
+        # 3. Serialize and return response
+        serializer = InboxItemSerializer(qs[:limit], many=True)
+        return Response(serializer.data)
+
+    def _filter_queryset(self, qs, tab, workspace_slug=None, event_type=None):
+        """Filters the queryset based on params and updates expired snoozed items."""
+
+        # Apply workspace filter
         if workspace_slug:
             qs = qs.filter(workspace__slug=workspace_slug)
 
+        # Apply event type filter
+        if event_type:
+            qs = qs.filter(event_type=event_type)
+
+        # Handle "snoozed" expiration logic (Side effect)
+        # Note: We update expired items before checking the tab state so 'for_you' or 'all'
+        # includes newly un-snoozed items instantly.
+        qs.filter(
+            status=InboxItem.Status.SNOOZED, snoozed_until__lte=timezone.now()
+        ).update(status=InboxItem.Status.UNREAD, snoozed_until=None)
+
+        # Apply tab-specific status filters
         if tab == "for_you":
             qs = qs.filter(status__in=[InboxItem.Status.UNREAD, InboxItem.Status.READ])
         elif tab == "done":
@@ -289,16 +304,7 @@ class InboxListView(APIView):
         else:  # "all"
             qs = qs.exclude(status=InboxItem.Status.ARCHIVED)
 
-        # Auto-unsnooze items whose snooze has expired
-        qs.filter(
-            status=InboxItem.Status.SNOOZED, snoozed_until__lte=timezone.now()
-        ).update(status=InboxItem.Status.UNREAD, snoozed_until=None)
-
-        if event_type:
-            qs = qs.filter(event_type=event_type)
-
-        return Response(InboxItemSerializer(qs[:100], many=True).data)
-
+        return qs
 
 class InboxUnreadCountView(APIView):
     """
@@ -314,7 +320,6 @@ class InboxUnreadCountView(APIView):
         if workspace_slug:
             qs = qs.filter(workspace__slug=workspace_slug)
         return Response({"count": qs.count()})
-
 
 class InboxItemUpdateView(APIView):
     """PATCH /api/inbox/<id>/ — update status (read/archived/snoozed) on one item."""
@@ -333,7 +338,6 @@ class InboxItemUpdateView(APIView):
             if item.notification_id:
                 Notification.objects.filter(id=item.notification_id).update(read=True)
         return Response(serializer.data)
-
 
 class InboxBulkUpdateView(APIView):
     """POST /api/inbox/bulk/ — update status on multiple items at once."""
@@ -367,7 +371,6 @@ class InboxBulkUpdateView(APIView):
             qs.update(status=InboxItem.Status.SNOOZED, snoozed_until=snooze_until)
 
         return Response({"updated": qs.count()})
-
 
 # ── v2.3.0 — Onboarding ───────────────────────────────────────────────────────
 class OnboardingStateView(APIView):
@@ -430,56 +433,6 @@ class OnboardingStateView(APIView):
         return Response(self._build_response(state, workspace, request))
 
 
-class WorkspaceTemplateListView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request, slug):
-        get_object_or_404(Workspace, slug=slug, members__user=request.user)
-        return Response(WORKSPACE_TEMPLATES)
-
-
-class WorkspaceTemplateApplyView(APIView):
-    """Apply a template: create pre-configured projects + boards."""
-
-    permission_classes = [permissions.IsAuthenticated]
-
-    def post(self, request, slug):
-        from projects.models import Project, TaskStatus, Board, DEFAULT_TASK_STATUSES
-
-        workspace = get_object_or_404(Workspace, slug=slug, members__user=request.user)
-        key = request.data.get("template_key")
-        tmpl = next((t for t in WORKSPACE_TEMPLATES if t["key"] == key), None)
-        if not tmpl:
-            return Response(
-                {"detail": "Template not found."}, status=status.HTTP_400_BAD_REQUEST
-            )
-
-        created_projects = []
-        for proj_conf in tmpl["projects"]:
-            project = Project.objects.create(
-                workspace=workspace,
-                name=proj_conf["name"],
-                created_by=request.user,
-            )
-            TaskStatus.objects.bulk_create(
-                [TaskStatus(project=project, **s) for s in DEFAULT_TASK_STATUSES]
-            )
-            Board.objects.create(
-                project=project,
-                name="Main Board",
-                board_type=proj_conf.get("board_type", "kanban"),
-                is_default=True,
-                visibility="public",
-                created_by=request.user,
-                order=0,
-            )
-            created_projects.append({"id": str(project.id), "name": project.name})
-
-        return Response(
-            {"created_projects": created_projects}, status=status.HTTP_201_CREATED
-        )
-
-
 # ── v4.5.0 — Public API Keys ──────────────────────────────────────────────────
 def _require_admin(workspace, user):
     """Raise PermissionDenied if user is not an admin/owner of the workspace."""
@@ -489,7 +442,6 @@ def _require_admin(workspace, user):
     if not member or member.role not in ("admin",):
         if workspace.owner != user:
             raise PermissionDenied("Only workspace admins can manage API keys.")
-
 
 class APIKeyListCreateView(APIView):
     """
@@ -502,7 +454,6 @@ class APIKeyListCreateView(APIView):
     def get(self, request, workspace_slug):
         ws = get_object_or_404(Workspace, slug=workspace_slug)
         _require_admin(ws, request.user)
-        # Exclude revoked keys — is_active=False keys are soft-deleted and hidden from the list
         keys = ws.api_keys.filter(is_active=True)
         return Response(WorkspaceAPIKeySerializer(keys, many=True).data)
 
@@ -511,15 +462,12 @@ class APIKeyListCreateView(APIView):
         _require_admin(ws, request.user)
         s = APIKeyCreateSerializer(data=request.data)
         s.is_valid(raise_exception=True)
-        # generate() hashes the raw key and stores only the hash — raw is never saved
         key_obj, raw = WorkspaceAPIKey.generate(
             workspace=ws, created_by=request.user, **s.validated_data
         )
         serialize_data = WorkspaceAPIKeySerializer(key_obj).data
-        # Attach the raw key to this response only — it cannot be retrieved again
-        serialize_data["key"] = raw
+        serialize_data["key"] = raw # Attach the raw key to this response only — it cannot be retrieved again
         return Response(serialize_data, status=status.HTTP_201_CREATED)
-
 
 class APIKeyDetailView(APIView):
     """DELETE /api/workspaces/:slug/api-keys/:key_id/ — revoke a key."""
@@ -530,7 +478,7 @@ class APIKeyDetailView(APIView):
         ws = get_object_or_404(Workspace, slug=workspace_slug)
         _require_admin(ws, request.user)
         key = get_object_or_404(WorkspaceAPIKey, id=key_id, workspace=ws)
-        # Soft-delete: keep the row for audit history, just disable authentication
+        
         key.is_active = False
         key.save(update_fields=["is_active"])
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -548,19 +496,15 @@ class WebhookListCreateView(APIView):
     def get(self, request, workspace_slug):
         ws = get_object_or_404(Workspace, slug=workspace_slug)
         _require_admin(ws, request.user)
-        # secret_prefix (first 8 chars) is included so the user can identify the secret, but the full secret is never exposed again after creation
         return Response(WebhookSerializer(ws.webhooks.all(), many=True).data)
 
     def post(self, request, workspace_slug):
         ws = get_object_or_404(Workspace, slug=workspace_slug)
         _require_admin(ws, request.user)
-        # Validate name, URL format, and optional event filter list
         s = WebhookCreateSerializer(data=request.data)
         s.is_valid(raise_exception=True)
-        # create_with_secret() generates a random HMAC signing secret and stores it on the model
         hook = Webhook.create_with_secret(workspace=ws, **s.validated_data)
         data = WebhookSerializer(hook).data
-        # Attach the full secret to this response only — use it to verify incoming webhook signatures
         data["secret"] = hook.secret
         return Response(data, status=status.HTTP_201_CREATED)
 
@@ -577,7 +521,6 @@ class WebhookDetailView(APIView):
         ws = get_object_or_404(Workspace, slug=workspace_slug)
         _require_admin(ws, request.user)
         hook = get_object_or_404(Webhook, id=hook_id, workspace=ws)
-        # partial=True means only the fields sent in the request are updated
         s = WebhookSerializer(hook, data=request.data, partial=True)
         s.is_valid(raise_exception=True)
         updated = s.save()
@@ -646,7 +589,7 @@ class ImportSourcesView(APIView):
 
 class ImportJobListCreateView(APIView):
     """
-    GET  — list the 20 most recent import jobs for this workspace
+    GET  — list the 8 most recent import jobs for this workspace
     POST — upload a file + source, parse it, return preview + field mapping
     """
 
@@ -655,7 +598,7 @@ class ImportJobListCreateView(APIView):
 
     def get(self, request, workspace_slug):
         ws = get_object_or_404(Workspace, slug=workspace_slug)
-        jobs = ImportJob.objects.filter(workspace=ws).order_by("-created_at")[:20]
+        jobs = ImportJob.objects.filter(workspace=ws).order_by("-created_at")[:8]
         return Response(ImportJobSerializer(jobs, many=True).data)
 
     def post(self, request, workspace_slug):

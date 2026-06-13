@@ -20,21 +20,3 @@ export function useUpdateOnboarding(workspaceSlug) {
   });
 }
 
-export function useWorkspaceTemplates(workspaceSlug) {
-  return useQuery({
-    queryKey: ["workspace-templates", workspaceSlug],
-    queryFn:  () =>
-      api.get(`/api/workspaces/${workspaceSlug}/templates/`).then((r) => r.data),
-    enabled:  !!workspaceSlug,
-    staleTime: Infinity,
-  });
-}
-
-export function useApplyWorkspaceTemplate(workspaceSlug) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (template_key) =>
-      api.post(`/api/workspaces/${workspaceSlug}/templates/apply/`, { template_key }).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["projects", workspaceSlug] }),
-  });
-}

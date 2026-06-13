@@ -1,11 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Check, X, ChevronRight, ArrowLeft, Send, Loader2 } from "lucide-react";
-import {
-  useUpdateOnboarding,
-  useWorkspaceTemplates,
-  useApplyWorkspaceTemplate,
-} from "@/hooks/useOnboarding";
+import { Check, X, ChevronRight, ArrowLeft, Send } from "lucide-react";
+import { useUpdateOnboarding } from "@/hooks/useOnboarding";
 import { useMutation } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -169,21 +165,18 @@ export default function SetupWizard() {
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [teamType, setTeamType] = useState(null);
-  const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [emails, setEmails] = useState([]);
   const [showConfetti, setShowConfetti] = useState(false);
   const [inviteRole, setInviteRole] = useState("member");
 
   const updateOnboarding = useUpdateOnboarding(workspaceSlug);
-  const applyTemplate = useApplyWorkspaceTemplate(workspaceSlug);
-  const { data: templates = [] } = useWorkspaceTemplates(workspaceSlug);
 
   const inviteMutation = useMutation({
     mutationFn: ({ email, role }) =>
       api.post(`/api/workspaces/${workspaceSlug}/invites/`, { email, role }),
   });
 
-  const STEPS = ["Team type", "Template", "Invite", "Ready!"];
+  const STEPS = ["Team type", "Invite", "Ready!"];
 
   const handleFinish = async () => {
     // Send invites
@@ -198,7 +191,7 @@ export default function SetupWizard() {
       team_type: teamType,
     });
     setShowConfetti(true);
-    setTimeout(() => setStep(3), 400);
+    setTimeout(() => setStep(2), 400);
   };
 
   const handleGoToWorkspace = () => navigate(`/w/${workspaceSlug}`);
@@ -307,99 +300,8 @@ export default function SetupWizard() {
             </div>
           )}
 
-          {/* ── Step 1: Template ── */}
+          {/* ── Step 1: Invite ── */}
           {step === 1 && (
-            <div>
-              <h1 className="text-2xl font-bold text-center mb-1">
-                Start from a template
-              </h1>
-              <p className="text-muted-foreground text-center text-sm mb-8">
-                Pre-configured projects and boards — edit anything afterwards.
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-                {/* Blank */}
-                <button
-                  onClick={() => setSelectedTemplate(null)}
-                  className={cn(
-                    "p-4 rounded-md border text-left transition-all",
-                    selectedTemplate === null
-                      ? "border-primary bg-primary/5"
-                      : "border-border bg-card hover:border-primary/40",
-                  )}
-                >
-                  <p className="text-2xl mb-2">✨</p>
-                  <p className="font-semibold text-sm">Blank workspace</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Set up everything yourself
-                  </p>
-                </button>
-
-                {templates.map((tmpl) => (
-                  <button
-                    key={tmpl.key}
-                    onClick={() => setSelectedTemplate(tmpl.key)}
-                    className={cn(
-                      "p-4 rounded-md border text-left transition-all",
-                      selectedTemplate === tmpl.key
-                        ? "border-primary bg-primary/5"
-                        : "border-border bg-card hover:border-primary/40",
-                    )}
-                  >
-                    <p className="text-2xl mb-2">{tmpl.icon}</p>
-                    <p className="font-semibold text-sm">{tmpl.name}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                      {tmpl.description}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground mt-1.5">
-                      Includes: {tmpl.projects.map((p) => p.name).join(" · ")}
-                    </p>
-                  </button>
-                ))}
-              </div>
-
-              {/* Import hint */}
-              <p className="text-xs text-center text-muted-foreground">
-                Migrating from another tool?{" "}
-                <button
-                  className="text-primary underline-offset-2 hover:underline"
-                  onClick={() =>
-                    navigate(`/w/${workspaceSlug}/settings/import`)
-                  }
-                >
-                  Import from Jira, ClickUp, or Trello →
-                </button>
-              </p>
-
-              <div className="flex items-center justify-between mt-8">
-                <Button variant="ghost" onClick={() => setStep(0)}>
-                  <ArrowLeft className="w-4 h-4 mr-1" /> Back
-                </Button>
-                <Button
-                  disabled={applyTemplate.isPending}
-                  onClick={async () => {
-                    if (selectedTemplate) {
-                      await applyTemplate.mutateAsync(selectedTemplate);
-                    }
-                    setStep(2);
-                  }}
-                >
-                  {applyTemplate.isPending ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />{" "}
-                      Applying…
-                    </>
-                  ) : (
-                    <>
-                      Next <ChevronRight className="w-4 h-4 ml-1" />
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* ── Step 2: Invite ── */}
-          {step === 2 && (
             <div>
               <h1 className="text-2xl font-bold text-center mb-1">
                 Invite your team
@@ -426,7 +328,7 @@ export default function SetupWizard() {
                 ))}
               </div>
               <div className="flex items-center justify-between mt-8">
-                <Button variant="ghost" onClick={() => setStep(1)}>
+                <Button variant="ghost" onClick={() => setStep(0)}>
                   <ArrowLeft className="w-4 h-4 mr-1" /> Back
                 </Button>
                 <div className="flex gap-2">
@@ -455,8 +357,8 @@ export default function SetupWizard() {
             </div>
           )}
 
-          {/* ── Step 3: Ready ── */}
-          {step === 3 && (
+          {/* ── Step 2: Ready ── */}
+          {step === 2 && (
             <div className="text-center space-y-6">
               <div className="text-6xl">🎉</div>
               <div>

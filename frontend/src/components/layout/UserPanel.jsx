@@ -8,12 +8,15 @@ import {
   Sun,
   Moon,
   MoonStar,
+  BellOff,
+  BellRing,
 } from "lucide-react";
 import { useThemeStore } from "@/store/themeStore";
 import { Avatar } from "@/components/ui/avatar";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { cn } from "@/lib/utils";
 import NotificationBell from "@/components/layout/NotificationBell";
+import { FOCUS_DURATIONS } from "@/lib/constants";
 
 const THEMES = [
   { key: "light", label: "Light", icon: Sun },
@@ -21,7 +24,7 @@ const THEMES = [
   { key: "midnight", label: "Midnight", icon: MoonStar },
 ];
 
-const DropdownItem = ({ icon: Icon, label, onClick, shortcut, variant = "default" }) => (
+const DropdownItem = ({ icon: Icon, label, onClick, shortcut, variant = "default", description }) => (
   <button
     onClick={onClick}
     className={cn(
@@ -30,9 +33,12 @@ const DropdownItem = ({ icon: Icon, label, onClick, shortcut, variant = "default
     )}
   >
     <Icon
-      className={cn("w-4 h-4", variant !== "destructive" && "text-muted-foreground")}
+      className={cn("w-4 h-4 flex-shrink-0", variant !== "destructive" && "text-muted-foreground")}
     />
     <span className="flex-1">{label}</span>
+    {description && (
+      <span className="text-[10px] text-muted-foreground">{description}</span>
+    )}
     {shortcut && (
       <kbd className="text-[10px] font-semibold bg-muted border border-border rounded px-1 py-0.5 leading-none">
         {shortcut}
@@ -70,8 +76,62 @@ function ThemeSwitcher() {
   );
 }
 
+function FocusModeSection({ isFocusMode, onEnable, onDisable, onClose }) {
+  const [showDurations, setShowDurations] = useState(false);
+
+  if (isFocusMode) {
+    return (
+      <button
+        onClick={() => { onDisable(); onClose(); }}
+        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left rounded-md bg-violet-500/10 text-violet-600 hover:bg-violet-500/15 transition-colors"
+      >
+        <BellOff className="w-4 h-4 flex-shrink-0" />
+        <span className="flex-1">Focus Mode on</span>
+        <span className="text-[10px] text-violet-500 opacity-80">tap to disable</span>
+      </button>
+    );
+  }
+
+  if (showDurations) {
+    return (
+      <div>
+        <p className="px-3 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 select-none">
+          Mute notifications for
+        </p>
+        {FOCUS_DURATIONS.map((d) => (
+          <button
+            key={d.key}
+            onClick={() => { onEnable(d.hours); onClose(); }}
+            className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors rounded-md"
+          >
+            {d.label}
+          </button>
+        ))}
+        <button
+          onClick={() => setShowDurations(false)}
+          className="w-full text-left px-3 py-2 text-xs text-muted-foreground hover:bg-accent transition-colors rounded-md"
+        >
+          ← Back
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <DropdownItem
+      icon={BellRing}
+      label="Focus Mode"
+      description="mute notifications"
+      onClick={() => setShowDurations(true)}
+    />
+  );
+}
+
 export default function UserPanel({
   user,
+  isFocusMode,
+  onEnableFocus,
+  onDisableFocus,
   onOpenSettings,
   onOpenShortcuts,
   onLogout,
@@ -82,7 +142,6 @@ export default function UserPanel({
 
   const name = user?.display_name || "User";
 
-  // close the dropdown when clicking outside of it
   useEffect(() => {
     if (!open) return;
     const handler = (e) => {
@@ -185,6 +244,17 @@ export default function UserPanel({
 
           <div className="border-t border-border my-1" />
           <ThemeSwitcher />
+          <div className="border-t border-border my-1" />
+
+          <div className="px-1">
+            <FocusModeSection
+              isFocusMode={isFocusMode}
+              onEnable={onEnableFocus}
+              onDisable={onDisableFocus}
+              onClose={() => setOpen(false)}
+            />
+          </div>
+
           <div className="border-t border-border my-1" />
 
           <div className="px-1">

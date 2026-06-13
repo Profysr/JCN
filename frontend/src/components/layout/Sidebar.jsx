@@ -1,14 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { FOCUS_DURATIONS } from "@/lib/constants";
 import {
   ChevronDown,
   Search,
   Plus,
   Check,
   Square,
-  BellOff,
 } from "lucide-react";
 import { resolvedNavGroups, workspaceUrl } from "@/lib/navLinks";
 import { useInboxUnreadCount } from "@/hooks/useInbox";
@@ -39,6 +37,7 @@ export default function Sidebar({
       icon: item.icon,
       label: item.label,
       key: item.key,
+      end: item.end ?? false,
     })),
   }));
 
@@ -78,10 +77,11 @@ export default function Sidebar({
               </p>
             )}
             <div className="space-y-0.5">
-              {group.items.map(({ to, icon: Icon, label, key }) => (
+              {group.items.map(({ to, icon: Icon, label, key, end }) => (
                 <NavLink
                   key={to}
                   to={to}
+                  end={end}
                   className={({ isActive }) =>
                     cn(
                       "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors active:scale-[0.98]",
@@ -104,13 +104,6 @@ export default function Sidebar({
           </div>
         ))}
       </nav>
-
-      {/* v3.7.0 — Focus Mode DND: snooze in-app notifications for a chosen duration */}
-      <FocusMode
-        isFocusMode={isFocusMode}
-        onEnable={onEnableFocus}
-        onDisable={onDisableFocus}
-      />
 
       {/* Active timer strip — v2.8.0 */}
       {activeTimer && (
@@ -137,6 +130,9 @@ export default function Sidebar({
       {/* User panel */}
       <UserPanel
         user={user}
+        isFocusMode={isFocusMode}
+        onEnableFocus={onEnableFocus}
+        onDisableFocus={onDisableFocus}
         onOpenSettings={onOpenSettings}
         onOpenShortcuts={onOpenShortcuts}
         onLogout={onLogout}
@@ -153,7 +149,6 @@ function WorkspaceSwitcher({ currentWorkspace, currentSlug, canCreate }) {
 
   const { data: allWorkspaces = [] } = useWorkspaces();
 
-  // Close on outside click
   useEffect(() => {
     if (!open) return;
     const handler = (e) => {
@@ -231,66 +226,6 @@ function WorkspaceSwitcher({ currentWorkspace, currentSlug, canCreate }) {
             </>
           )}
         </div>
-      )}
-    </div>
-  );
-}
-
-// ── FocusMode ─────────────────────────────────────────────────────────────────
-function FocusMode({ isFocusMode, onEnable, onDisable }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const ref = useRef(null);
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    const h = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setMenuOpen(false);
-    };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, [menuOpen]);
-
-  return (
-    <div ref={ref} className="mx-3 mb-1 relative">
-      {isFocusMode ? (
-        <button
-          onClick={onDisable}
-          className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg bg-violet-500/10 border border-violet-500/20 text-violet-600 hover:bg-violet-500/15 transition-colors"
-        >
-          <BellOff className="w-3.5 h-3.5 flex-shrink-0" />
-          <span className="text-xs font-medium flex-1 text-left">
-            Focus Mode on
-          </span>
-          <span className="text-[10px] text-violet-500 opacity-80">
-            tap to disable
-          </span>
-        </button>
-      ) : (
-        <>
-          <button
-            onClick={() => setMenuOpen((v) => !v)}
-            className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-muted-foreground hover:bg-accent transition-colors"
-          >
-            <BellOff className="w-3.5 h-3.5 flex-shrink-0" />
-            <span className="text-xs">Focus Mode</span>
-          </button>
-          {menuOpen && (
-            <div className="absolute bottom-full left-0 right-0 mb-1 z-50 bg-popover border border-border rounded-md shadow-popover py-1">
-              {FOCUS_DURATIONS.map((d) => (
-                <button
-                  key={d.key}
-                  onClick={() => {
-                    onEnable(d.hours);
-                    setMenuOpen(false);
-                  }}
-                  className="w-full text-left px-3 py-2 text-xs hover:bg-accent transition-colors"
-                >
-                  Mute for {d.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </>
       )}
     </div>
   );

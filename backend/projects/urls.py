@@ -37,7 +37,6 @@ from .views import (
     TaskAttachmentDeleteView,
     TaskDependencyListCreateView,
     TaskDependencyDeleteView,
-    WorkspaceAnalyticsView,
     TaskExportView,
     ProjectMemberListCreateView,
     ProjectMemberDetailView,
@@ -86,20 +85,6 @@ from .views import (
     # v3.4.0
     MyWorkView,
     PortfolioView,
-    # v4.0.0 — Analytics Engine v2
-    VelocityView,
-    CycleTimeView,
-    LeadTimeView,
-    ThroughputView,
-    CFDView,
-    BurnupView,
-    WorkloadHeatmapView,
-    # v4.1.0 — Report Builder
-    ReportListCreateView,
-    ReportDetailView,
-    ReportDataView,
-    ReportShareCreateView,
-    ScheduledReportListCreateView,
 )
 
 _ws = "workspaces/<slug:workspace_slug>"
@@ -143,14 +128,10 @@ urlpatterns = [
     path(f"{_pr}/sprints/<uuid:sprint_id>/burndown/", SprintBurndownView.as_view()),
     # Attachments (v1.2.0)
     path(f"{_tk}/attachments/", TaskAttachmentListCreateView.as_view()),
-    path(
-        f"{_tk}/attachments/<uuid:attachment_id>/", TaskAttachmentDeleteView.as_view()
-    ),
+    path(f"{_tk}/attachments/<uuid:attachment_id>/", TaskAttachmentDeleteView.as_view()),
     # Dependencies (v1.4.0)
     path(f"{_tk}/dependencies/", TaskDependencyListCreateView.as_view()),
     path(f"{_tk}/dependencies/<uuid:dep_id>/", TaskDependencyDeleteView.as_view()),
-    # Analytics (v1.5.0)
-    path(f"{_ws}/analytics/", WorkspaceAnalyticsView.as_view()),
     # Project Members & Permissions (v2.1.0)
     path(f"{_pr}/members/", ProjectMemberListCreateView.as_view()),
     path(f"{_pr}/members/<uuid:member_id>/", ProjectMemberDetailView.as_view()),
@@ -195,7 +176,7 @@ urlpatterns += [
     path(f"{_pr}/forms/<uuid:form_id>/submissions/", FormSubmissionListView.as_view()),
 ]
 
-# Public form endpoints — already under api/ via core/urls.py include, so no api/ prefix here
+# Public form endpoints — already under api/ via core/urls.py include
 urlpatterns += [
     path("forms/<uuid:form_token>/", PublicFormView.as_view()),
     path("forms/<uuid:form_token>/submit/", PublicFormSubmitView.as_view()),
@@ -237,19 +218,14 @@ urlpatterns += [
 # v3.5.0 — Real-Time Collaboration v2
 urlpatterns += [
     path(f"{_ws}/presence/", UserPresenceView.as_view()),
-    path(
-        f"{_tk}/comments/<uuid:comment_id>/reactions/",
-        CommentReactionToggleView.as_view(),
-    ),
+    path(f"{_tk}/comments/<uuid:comment_id>/reactions/", CommentReactionToggleView.as_view()),
 ]
 
 # v3.6.0 — Approval Workflows
 urlpatterns += [
     path(f"{_tk}/approvals/", ApprovalListCreateView.as_view()),
     path(f"{_tk}/approvals/<uuid:approval_id>/review/", ApprovalReviewView.as_view()),
-    path(
-        f"{_tk}/approvals/<uuid:approval_id>/resubmit/", ApprovalResubmitView.as_view()
-    ),
+    path(f"{_tk}/approvals/<uuid:approval_id>/resubmit/", ApprovalResubmitView.as_view()),
 ]
 
 # v3.8.0 — OKR & Goal Tracking
@@ -258,32 +234,6 @@ urlpatterns += [
     path(f"{_ob}/", ObjectiveListCreateView.as_view()),
     path(f"{_ob}/<uuid:obj_id>/", ObjectiveDetailView.as_view()),
     path(f"{_ob}/<uuid:obj_id>/key-results/", KeyResultListCreateView.as_view()),
-    path(
-        f"{_ob}/<uuid:obj_id>/key-results/<uuid:kr_id>/", KeyResultDetailView.as_view()
-    ),
-    path(
-        f"{_ob}/<uuid:obj_id>/key-results/<uuid:kr_id>/tasks/",
-        KeyResultLinkedTasksView.as_view(),
-    ),
-]
-
-# v4.0.0 — Analytics Engine v2
-urlpatterns += [
-    path(f"{_ws}/analytics/velocity/", VelocityView.as_view()),
-    path(f"{_ws}/analytics/cycle-time/", CycleTimeView.as_view()),
-    path(f"{_ws}/analytics/lead-time/", LeadTimeView.as_view()),
-    path(f"{_ws}/analytics/throughput/", ThroughputView.as_view()),
-    path(f"{_ws}/analytics/cfd/", CFDView.as_view()),
-    path(f"{_ws}/analytics/burnup/", BurnupView.as_view()),
-    path(f"{_ws}/analytics/workload-heatmap/", WorkloadHeatmapView.as_view()),
-]
-
-# v4.1.0 — Report Builder
-_rp = f"{_ws}/reports"
-urlpatterns += [
-    path(f"{_rp}/", ReportListCreateView.as_view()),
-    path(f"{_rp}/<uuid:report_id>/", ReportDetailView.as_view()),
-    path(f"{_rp}/<uuid:report_id>/data/", ReportDataView.as_view()),
-    path(f"{_rp}/<uuid:report_id>/share/", ReportShareCreateView.as_view()),
-    path(f"{_rp}/<uuid:report_id>/schedules/", ScheduledReportListCreateView.as_view()),
+    path(f"{_ob}/<uuid:obj_id>/key-results/<uuid:kr_id>/", KeyResultDetailView.as_view()),
+    path(f"{_ob}/<uuid:obj_id>/key-results/<uuid:kr_id>/tasks/", KeyResultLinkedTasksView.as_view()),
 ]

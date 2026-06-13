@@ -33,7 +33,8 @@ from channels.layers import get_channel_layer
 from django.db import transaction
 from django.utils import timezone
 from .models import Webhook, WebhookDelivery
-from projects.models import DEFAULT_TASK_STATUSES, Project, Task, TaskStatus, Label
+from core.constants import DEFAULT_TASK_STATUSES
+from projects.models import Project, Task, TaskStatus, Label
 
 from django.contrib.auth import get_user_model
 

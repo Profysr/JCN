@@ -1,19 +1,17 @@
 import {
   LayoutDashboard,
   FolderKanban,
-  Inbox,
   Map,
   Clock,
   Users,
   Settings,
-  Bell,
   Target,
   BarChart2,
-  FileBarChart,
   Plug,
   Key,
   Webhook,
   Upload,
+  Inbox,
 } from "lucide-react";
 
 /**
@@ -36,13 +34,6 @@ export const NAV_ITEMS = [
     path: "projects",
   },
   {
-    key: "inbox",
-    icon: Bell,
-    label: "Inbox",
-    desc: "Notifications & updates",
-    path: "inbox",
-  },
-  {
     key: "my-work",
     icon: Inbox,
     label: "My Work",
@@ -62,13 +53,6 @@ export const NAV_ITEMS = [
     label: "Analytics",
     desc: "Velocity, flow & team metrics",
     path: "analytics",
-  },
-  {
-    key: "reports",
-    icon: FileBarChart,
-    label: "Reports",
-    desc: "Custom charts & scheduled delivery",
-    path: "reports",
   },
   {
     key: "roadmap",
@@ -125,6 +109,7 @@ export const NAV_ITEMS = [
     label: "Settings",
     desc: "Workspace settings",
     path: "settings",
+    end: true,
   },
 ];
 
@@ -136,11 +121,11 @@ export const NAV_GROUPS = [
   },
   {
     label: "Work",
-    items: ["inbox", "my-work", "goals"],
+    items: ["my-work", "goals"],
   },
   {
     label: "Insights",
-    items: ["analytics", "reports"],
+    items: ["analytics"],
   },
   {
     label: "Views",

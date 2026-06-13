@@ -1,21 +1,22 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 
-export const inboxKey = (workspaceSlug, tab, eventType) =>
-  ["inbox", workspaceSlug, tab, eventType].filter(Boolean);
+export const inboxKey = (workspaceSlug, tab, eventType, limit) =>
+  ["inbox", workspaceSlug, tab, eventType, limit].filter(Boolean);
 
 export function useInbox(
   workspaceSlug,
-  { tab = "for_you", eventType, enabled = true } = {},
+  { tab = "for_you", eventType, limit = 20, enabled = true } = {},
 ) {
   return useQuery({
-    queryKey: inboxKey(workspaceSlug, tab, eventType),
+    queryKey: inboxKey(workspaceSlug, tab, eventType, limit),
     queryFn: () =>
       api
         .get("/api/inbox/", {
           params: {
             workspace: workspaceSlug,
             tab,
+            limit,
             ...(eventType ? { event_type: eventType } : {}),
           },
         })

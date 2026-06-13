@@ -1,18 +1,3 @@
-import { useState } from "react";
-import { ConfirmModal } from "@/components/ui/ConfirmModal";
-import { useParams } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  useMembers,
-  useInviteMember,
-  useUpdateMemberRole,
-  useRemoveMember,
-} from "@/hooks/useMembers";
-import { useWorkspace } from "@/hooks/useWorkspace";
-import { useAuthStore } from "@/store/authStore";
-import api from "@/lib/api";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   UserPlus,
   Shield,
@@ -26,10 +11,26 @@ import {
   Send,
   CheckCircle2,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { useState } from "react";
+import { useParams } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useMembers,
+  useInviteMember,
+  useUpdateMemberRole,
+  useRemoveMember,
+} from "@/hooks/useMembers";
+import { useWorkspace } from "@/hooks/useWorkspace";
+import { useAuthStore } from "@/store/authStore";
+import api from "@/lib/api";
 
-const ROLES = ["admin", "member", "viewer"];
-const ROLE_CONFIG = {
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
+
+export const ROLES = ["admin", "member", "viewer"];
+export const ROLE_CONFIG = {
   admin: {
     label: "Admin",
     icon: Shield,
@@ -47,13 +48,161 @@ const ROLE_CONFIG = {
   },
 };
 
+/* ==========================================
+   1. INVITE FORM WORKSPACE HEADER
+   ========================================== */
+export function InviteFormHeader({ workspaceName }) {
+  return (
+    <div className="flex items-center gap-2.5 px-4 py-3 bg-primary/5 border-b border-primary/15">
+      <div className="w-7 h-7 rounded-md bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
+        <UserPlus className="w-4 h-4" />
+      </div>
+      <div>
+        <p className="text-sm font-semibold">
+          Invite people to {workspaceName}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          They'll receive a link to join this workspace.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ==========================================
+   2. PENDING INVITE LIST ROW ITEM
+   ========================================== */
+export function PendingInviteItem({ invite, onCopy, copiedToken, onCancel }) {
+  return (
+    <div className="flex items-center justify-between px-4 py-2.5">
+      <div>
+        <p className="text-sm font-medium">{invite.email}</p>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          <span className="capitalize">{invite.role}</span>
+          {invite.invited_by &&
+            ` · by ${invite.invited_by.full_name || invite.invited_by.email}`}
+        </p>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <button
+          onClick={() => onCopy(invite.token)}
+          className={cn(
+            "flex items-center gap-1.5 text-xs border rounded px-2.5 py-1.5 transition-colors",
+            copiedToken === invite.token
+              ? "bg-emerald-50 text-emerald-600 border-emerald-200"
+              : "text-muted-foreground hover:text-foreground hover:bg-accent",
+          )}
+        >
+          <Link className="w-3 h-3" />
+          {copiedToken === invite.token ? "Copied!" : "Copy link"}
+        </button>
+        <button
+          onClick={() => onCancel(invite.token)}
+          className="p-1.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+          title="Cancel invite"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ==========================================
+   3. ACTIVE MEMBER LIST ROW ITEM
+   ========================================== */
+export function ActiveMemberItem({
+  member,
+  isSelf,
+  isWorkspaceOwner,
+  isAdmin,
+  onRoleChange,
+  onRemove,
+}) {
+  const roleConf = ROLE_CONFIG[member.role] || ROLE_CONFIG.member;
+  const RoleIcon = roleConf.icon;
+
+  return (
+    <div className="flex items-center justify-between px-4 py-3 hover:bg-accent/40 transition-colors">
+      <div className="flex items-center gap-3">
+        {/* Avatar */}
+        <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm flex-shrink-0">
+          {member.user?.full_name?.[0]?.toUpperCase() ||
+            member.user?.email?.[0]?.toUpperCase()}
+        </div>
+        <div>
+          <div className="flex items-center gap-1.5">
+            <p className="text-sm font-medium leading-tight">
+              {member.user?.full_name || "-"}
+            </p>
+            {isWorkspaceOwner && (
+              <Crown
+                className="w-3.5 h-3.5 text-yellow-500 flex-shrink-0"
+                title="Owner"
+              />
+            )}
+            {isSelf && (
+              <span className="text-xs text-muted-foreground">(you)</span>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground leading-tight mt-0.5">
+            {member.user?.email}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        {isAdmin && !isSelf && !isWorkspaceOwner ? (
+          <select
+            className="text-xs border rounded px-2 py-1 bg-background outline-none focus:ring-1 focus:ring-ring"
+            value={member.role}
+            onChange={(e) => onRoleChange(member.id, e.target.value)}
+          >
+            {ROLES.map((r) => (
+              <option key={r} value={r}>
+                {ROLE_CONFIG[r].label}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span
+            className={cn(
+              "flex items-center gap-1 text-xs px-2 py-0.5 rounded border font-medium",
+              roleConf.className,
+            )}
+          >
+            <RoleIcon className="w-3 h-3" />
+            {roleConf.label}
+          </span>
+        )}
+
+        {isAdmin && !isSelf && !isWorkspaceOwner && (
+          <button
+            onClick={() => onRemove(member)}
+            className="p-1.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+            title="Remove member"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ==========================================
+   MAIN COMPONENT
+   ========================================== */
+
 export default function MembersPage() {
   const { workspaceSlug } = useParams();
   const { user } = useAuthStore();
   const qc = useQueryClient();
 
+  // Data fetching hooks
   const { data: members = [], isLoading } = useMembers(workspaceSlug);
   const { data: workspace } = useWorkspace(workspaceSlug);
+
   const { data: pendingInvites = [] } = useQuery({
     queryKey: ["workspace-invites", workspaceSlug],
     queryFn: () =>
@@ -63,6 +212,7 @@ export default function MembersPage() {
     enabled: !!workspaceSlug,
   });
 
+  // Action Mutation hooks
   const inviteMember = useInviteMember(workspaceSlug);
   const updateRole = useUpdateMemberRole(workspaceSlug);
   const removeMember = useRemoveMember(workspaceSlug);
@@ -74,6 +224,7 @@ export default function MembersPage() {
       qc.invalidateQueries({ queryKey: ["workspace-invites", workspaceSlug] }),
   });
 
+  // Local state configurations
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("member");
   const [confirmState, setConfirmState] = useState(null);
@@ -81,10 +232,12 @@ export default function MembersPage() {
   const [inviteSuccess, setInviteSuccess] = useState("");
   const [copiedToken, setCopiedToken] = useState(null);
 
+  // Authorization checks
   const currentMember = members.find((m) => m.user?.email === user?.email);
   const isAdmin =
     currentMember?.role === "admin" || workspace?.owner?.email === user?.email;
 
+  // Handlers
   const handleInvite = (e) => {
     e.preventDefault();
     setInviteError("");
@@ -119,7 +272,7 @@ export default function MembersPage() {
 
   return (
     <div className="p-8 max-w-3xl space-y-6">
-      {/* Page header */}
+      {/* 1. Page Title Header Block */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Team Members</h1>
         <p className="text-muted-foreground text-sm mt-1">
@@ -128,25 +281,11 @@ export default function MembersPage() {
         </p>
       </div>
 
-      {/* ── Invite section (admin only) ── */}
+      {/* 2. Admin Management / Invitation Block */}
       {isAdmin && (
         <div className="rounded-lg border bg-card overflow-hidden">
-          {/* Header bar */}
-          <div className="flex items-center gap-2.5 px-4 py-3 bg-primary/5 border-b border-primary/15">
-            <div className="w-7 h-7 rounded-md bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
-              <UserPlus className="w-4 h-4" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold">
-                Invite people to {workspace?.name}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                They'll receive a link to join this workspace.
-              </p>
-            </div>
-          </div>
+          <InviteFormHeader workspaceName={workspace?.name} />
 
-          {/* Form */}
           <form onSubmit={handleInvite} className="p-4">
             <div className="flex gap-2">
               <Input
@@ -190,7 +329,7 @@ export default function MembersPage() {
             )}
           </form>
 
-          {/* Pending invites */}
+          {/* Pending Invites List Sub-Block */}
           {pendingInvites.length > 0 && (
             <div className="border-t">
               <div className="px-4 py-2.5 flex items-center gap-2 bg-muted/40">
@@ -201,40 +340,13 @@ export default function MembersPage() {
               </div>
               <div className="divide-y">
                 {pendingInvites.map((invite) => (
-                  <div
+                  <PendingInviteItem
                     key={invite.id}
-                    className="flex items-center justify-between px-4 py-2.5"
-                  >
-                    <div>
-                      <p className="text-sm font-medium">{invite.email}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        <span className="capitalize">{invite.role}</span>
-                        {invite.invited_by &&
-                          ` · by ${invite.invited_by.full_name || invite.invited_by.email}`}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => copyInviteLink(invite.token)}
-                        className={cn(
-                          "flex items-center gap-1.5 text-xs border rounded px-2.5 py-1.5 transition-colors",
-                          copiedToken === invite.token
-                            ? "bg-emerald-50 text-emerald-600 border-emerald-200"
-                            : "text-muted-foreground hover:text-foreground hover:bg-accent",
-                        )}
-                      >
-                        <Link className="w-3 h-3" />
-                        {copiedToken === invite.token ? "Copied!" : "Copy link"}
-                      </button>
-                      <button
-                        onClick={() => cancelInvite.mutate(invite.token)}
-                        className="p-1.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                        title="Cancel invite"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
+                    invite={invite}
+                    onCopy={copyInviteLink}
+                    copiedToken={copiedToken}
+                    onCancel={(token) => cancelInvite.mutate(token)}
+                  />
                 ))}
               </div>
             </div>
@@ -242,7 +354,7 @@ export default function MembersPage() {
         </div>
       )}
 
-      {/* ── Active members ── */}
+      {/* 3. Active Members Layout Wrapper */}
       <div>
         <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">
           Active Members
@@ -252,98 +364,32 @@ export default function MembersPage() {
             <div className="p-6 text-sm text-muted-foreground">Loading…</div>
           ) : (
             <div className="divide-y">
-              {members.map((member) => {
-                const roleConf = ROLE_CONFIG[member.role] || ROLE_CONFIG.member;
-                const RoleIcon = roleConf.icon;
-                const isSelf = member.user?.email === user?.email;
-                const isWorkspaceOwner =
-                  workspace?.owner?.email === member.user?.email;
-
-                return (
-                  <div
-                    key={member.id}
-                    className="flex items-center justify-between px-4 py-3 hover:bg-accent/40 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm flex-shrink-0">
-                        {member.user?.full_name?.[0]?.toUpperCase() ||
-                          member.user?.email?.[0]?.toUpperCase()}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <p className="text-sm font-medium leading-tight">
-                            {member.user?.full_name || member.user?.email}
-                          </p>
-                          {isWorkspaceOwner && (
-                            <Crown
-                              className="w-3.5 h-3.5 text-yellow-500 flex-shrink-0"
-                              title="Owner"
-                            />
-                          )}
-                          {isSelf && (
-                            <span className="text-xs text-muted-foreground">
-                              (you)
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground leading-tight mt-0.5">
-                          {member.user?.email}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {isAdmin && !isSelf && !isWorkspaceOwner ? (
-                        <select
-                          className="text-xs border rounded px-2 py-1 bg-background outline-none focus:ring-1 focus:ring-ring"
-                          value={member.role}
-                          onChange={(e) =>
-                            updateRole.mutate({
-                              memberId: member.id,
-                              role: e.target.value,
-                            })
-                          }
-                        >
-                          {ROLES.map((r) => (
-                            <option key={r} value={r}>
-                              {ROLE_CONFIG[r].label}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span
-                          className={cn(
-                            "flex items-center gap-1 text-xs px-2 py-0.5 rounded border font-medium",
-                            roleConf.className,
-                          )}
-                        >
-                          <RoleIcon className="w-3 h-3" />
-                          {roleConf.label}
-                        </span>
-                      )}
-                      {isAdmin && !isSelf && !isWorkspaceOwner && (
-                        <button
-                          onClick={() =>
-                            setConfirmState({
-                              message: `Remove ${member.user?.full_name || member.user?.email} from this workspace?`,
-                              onConfirm: () => removeMember.mutate(member.id),
-                            })
-                          }
-                          className="p-1.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                          title="Remove member"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+              {members.map((member) => (
+                <ActiveMemberItem
+                  key={member.id}
+                  member={member}
+                  isSelf={member.user?.email === user?.email}
+                  isWorkspaceOwner={
+                    workspace?.owner?.email === member.user?.email
+                  }
+                  isAdmin={isAdmin}
+                  onRoleChange={(memberId, nextRole) =>
+                    updateRole.mutate({ memberId, role: nextRole })
+                  }
+                  onRemove={(target) =>
+                    setConfirmState({
+                      message: `Remove ${target.user?.full_name || target.user?.email} from this workspace?`,
+                      onConfirm: () => removeMember.mutate(target.id),
+                    })
+                  }
+                />
+              ))}
             </div>
           )}
         </div>
       </div>
 
+      {/* 4. Global Action Confirmation Modal */}
       {confirmState && (
         <ConfirmModal
           title="Remove member?"
