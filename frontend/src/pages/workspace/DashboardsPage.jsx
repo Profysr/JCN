@@ -202,19 +202,19 @@ export default function DashboardsPage() {
   const { workspaceId } = useParams();
   const navigate = useNavigate();
 
-  const { data: projects = [] } = useBoards(workspaceId);
+  const { data: boards = [] } = useBoards(workspaceId);
   const { data: workspace } = useWorkspace(workspaceId);
   const { data: velocity } = useVelocity(workspaceId);
 
-  const totalTasks = projects.reduce((s, p) => s + (p.task_count || 0), 0);
-  const doneTasks = projects.reduce((s, p) => s + (p.done_task_count || 0), 0);
+  const totalTasks = boards.reduce((s, p) => s + (p.task_count || 0), 0);
+  const doneTasks = boards.reduce((s, p) => s + (p.done_task_count || 0), 0);
   const completionPct =
     totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
 
   const stats = [
     {
-      label: "Projects",
-      value: projects.length,
+      label: "Boards",
+      value: boards.length,
       icon: FolderKanban,
       color:
         "bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300",
@@ -274,16 +274,16 @@ export default function DashboardsPage() {
           <OkrProgress workspaceId={workspaceId} />
         </div>
 
-        {/* Recent projects */}
+        {/* Recent boards */}
         <div>
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-            Recent Projects
+            Recent Boards
           </h2>
-          {projects.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No projects yet.</p>
+          {boards.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No boards yet.</p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {projects.slice(0, 6).map((p, i) => {
+              {boards.slice(0, 6).map((p, i) => {
                 const color = APP_COLORS[i % APP_COLORS.length];
                 const done = p.done_task_count || 0;
                 const total = p.task_count || 0;
@@ -291,9 +291,7 @@ export default function DashboardsPage() {
                 return (
                   <button
                     key={p.id}
-                    onClick={() =>
-                      navigate(`/w/${workspaceId}/boards/${p.id}`)
-                    }
+                    onClick={() => navigate(`/w/${workspaceId}/boards/${p.id}`)}
                     className="text-left bg-card border border-border rounded-md p-4 shadow-card hover:shadow-card-hover transition-shadow"
                   >
                     <div className="flex items-start gap-3 mb-3">

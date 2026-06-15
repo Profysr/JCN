@@ -31,6 +31,7 @@ export const NAV_ITEMS = [
     label: "Boards",
     desc: "All boards",
     path: "boards",
+    collapsible: true,
   },
   {
     key: "my-work",

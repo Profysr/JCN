@@ -1,16 +1,21 @@
-import { useEffect, useRef, useState } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { NavLink } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import {
-  ChevronDown,
-  Search,
-  Plus,
-  Check,
-} from "lucide-react";
+import { ChevronDown, Search } from "lucide-react";
 import { resolvedNavGroups, workspaceUrl } from "@/lib/navLinks";
 import { useInboxUnreadCount } from "@/hooks/useInbox";
-import { useWorkspaces } from "@/hooks/useWorkspace";
+import { useBoards } from "@/hooks/useProjects";
 import UserPanel from "@/components/layout/UserPanel";
+
+const BOARD_COLORS = {
+  SOFTWARE:   "bg-blue-500",
+  MARKETING:  "bg-pink-500",
+  OPERATIONS: "bg-orange-500",
+  CLIENT:     "bg-green-500",
+  HR:         "bg-purple-500",
+  DESIGN:     "bg-rose-500",
+  GENERAL:    "bg-slate-400",
+};
 
 export default function Sidebar({
   workspace,
@@ -25,6 +30,21 @@ export default function Sidebar({
   onLogout,
 }) {
   const inboxUnread = useInboxUnreadCount(workspaceId);
+  const { data: boards = [] } = useBoards(workspaceId);
+  const [openSections, setOpenSections] = useState({});
+
+  const toggleSection = (key) =>
+    setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
+
+  // Map each collapsible nav key to its dynamic sub-items
+  const subItemsMap = {
+    boards: boards.map((b) => ({
+      key: b.id,
+      to: `/w/${workspaceId}/boards/${b.id}`,
+      label: b.name,
+      colorClass: BOARD_COLORS[b.board_type?.toUpperCase()] ?? BOARD_COLORS.GENERAL,
+    })),
+  };
 
   const navGroups = resolvedNavGroups().map((group) => ({
     ...group,
@@ -34,6 +54,7 @@ export default function Sidebar({
       label: item.label,
       key: item.key,
       end: item.end ?? false,
+      collapsible: item.collapsible ?? false,
     })),
   }));
 
@@ -42,15 +63,8 @@ export default function Sidebar({
       className="w-64 flex-shrink-0 border-r flex flex-col"
       style={{ background: "hsl(var(--sidebar-bg))" }}
     >
-      {/* Workspace switcher */}
-      <WorkspaceSwitcher
-        currentWorkspace={workspace}
-        currentId={workspaceId}
-        canCreate={user?.can_create_workspace ?? false}
-      />
-
       {/* Search / command palette */}
-      <div className="px-3 pt-2.5 pb-2">
+      <div className="px-3 pt-3 pb-2">
         <button
           onClick={onOpenPalette}
           className="w-full flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs text-muted-foreground bg-background border border-border/70 hover:border-border hover:text-foreground shadow-sm transition-all active:scale-[0.98]"
@@ -72,30 +86,106 @@ export default function Sidebar({
                 {group.label}
               </p>
             )}
-            <div className="space-y-0.5">
-              {group.items.map(({ to, icon: Icon, label, key, end }) => (
-                <NavLink
-                  key={to}
-                  to={to}
-                  end={end}
-                  className={({ isActive }) =>
-                    cn(
-                      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors active:scale-[0.98]",
-                      isActive
-                        ? "bg-primary/10 text-primary font-semibold"
-                        : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                    )
-                  }
-                >
-                  <Icon className="w-4 h-4 flex-shrink-0" />
-                  <span className="flex-1">{label}</span>
-                  {key === "inbox" && inboxUnread > 0 && !isFocusMode && (
-                    <span className="min-w-[18px] h-[18px] rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center px-1">
-                      {inboxUnread > 9 ? "9+" : inboxUnread}
-                    </span>
-                  )}
-                </NavLink>
-              ))}
+            <div className="space-y-1">
+              {group.items.map(({ to, icon: Icon, label, key, end, collapsible }) => {
+                const subItems = collapsible ? subItemsMap[key] : null;
+                const isOpen = openSections[key] ?? false;
+
+                if (subItems !== null && subItems !== undefined) {
+                  return (
+                    <div key={to}>
+                      <NavLink
+                        to={to}
+                        end={end}
+                        className={({ isActive }) =>
+                          cn(
+                            "flex items-center gap-3 rounded px-3 py-2 text-sm transition-colors active:scale-[0.98]",
+                            isActive
+                              ? "text-primary font-semibold"
+                              : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                          )
+                        }
+                      >
+                        <Icon className="w-4 h-4 flex-shrink-0" />
+                        <span className="flex-1">{label}</span>
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            toggleSection(key);
+                          }}
+                          className="p-1 rounded-md hover:bg-primary/15 hover:text-primary transition-colors"
+                          title={isOpen ? "Collapse" : `Expand ${label.toLowerCase()}`}
+                        >
+                          <ChevronDown
+                            className={cn(
+                              "w-3.5 h-3.5 transition-transform duration-150",
+                              isOpen && "rotate-180",
+                            )}
+                          />
+                        </button>
+                      </NavLink>
+
+                      {isOpen && (
+                        <div className="mt-0.5 space-y-1">
+                          {subItems.length === 0 ? (
+                            <p className="px-3 py-1.5 text-xs text-muted-foreground/50 select-none">
+                              No {label.toLowerCase()} yet
+                            </p>
+                          ) : (
+                            subItems.map((item) => (
+                              <NavLink
+                                key={item.key}
+                                to={item.to}
+                                className={({ isActive }) =>
+                                  cn(
+                                    "flex items-center gap-2 rounded px-3 py-1.5 text-sm transition-colors",
+                                    isActive
+                                      ? "bg-primary/10 text-primary font-medium"
+                                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                                  )
+                                }
+                              >
+                                <span
+                                  className={cn(
+                                    "w-2 h-2 rounded-sm flex-shrink-0",
+                                    item.colorClass,
+                                  )}
+                                />
+                                <span className="flex-1 truncate">{item.label}</span>
+                              </NavLink>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
+                return (
+                  <NavLink
+                    key={to}
+                    to={to}
+                    end={end}
+                    className={({ isActive }) =>
+                      cn(
+                        "flex items-center gap-3 rounded px-3 py-2 text-sm transition-colors active:scale-[0.98]",
+                        isActive
+                          ? "bg-primary/10 text-primary font-semibold"
+                          : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                      )
+                    }
+                  >
+                    <Icon className="w-4 h-4 flex-shrink-0" />
+                    <span className="flex-1">{label}</span>
+                    {key === "inbox" && inboxUnread > 0 && !isFocusMode && (
+                      <span className="min-w-[18px] h-[18px] rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center px-1">
+                        {inboxUnread > 9 ? "9+" : inboxUnread}
+                      </span>
+                    )}
+                  </NavLink>
+                );
+              })}
             </div>
           </div>
         ))}
@@ -104,6 +194,8 @@ export default function Sidebar({
       {/* User panel */}
       <UserPanel
         user={user}
+        workspace={workspace}
+        workspaceId={workspaceId}
         isFocusMode={isFocusMode}
         onEnableFocus={onEnableFocus}
         onDisableFocus={onDisableFocus}
@@ -112,95 +204,5 @@ export default function Sidebar({
         onLogout={onLogout}
       />
     </aside>
-  );
-}
-
-// ── WorkspaceSwitcher ─────────────────────────────────────────────────────────
-function WorkspaceSwitcher({ currentWorkspace, currentId, canCreate }) {
-  const [open, setOpen] = useState(false);
-  const navigate = useNavigate();
-  const ref = useRef(null);
-
-  const { data: allWorkspaces = [] } = useWorkspaces();
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
-
-  const initials = currentWorkspace?.name?.[0]?.toUpperCase() || "W";
-
-  return (
-    <div
-      ref={ref}
-      className="px-3 pt-3 pb-2.5 border-b border-border/60 relative"
-    >
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center gap-2.5 rounded-lg px-2.5 py-2 hover:bg-accent transition-colors group active:scale-[0.98]"
-      >
-        <div className="w-7 h-7 rounded-lg bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold flex-shrink-0 shadow-sm">
-          {initials}
-        </div>
-        <span className="flex-1 text-left truncate text-sm font-semibold text-foreground">
-          {currentWorkspace?.name || "Loading…"}
-        </span>
-        <ChevronDown
-          className={cn(
-            "w-3.5 h-3.5 text-muted-foreground transition-transform",
-            open && "rotate-180",
-          )}
-        />
-      </button>
-
-      {open && (
-        <div className="absolute left-3 right-3 top-full mt-1 z-50 bg-popover border rounded-md shadow-popover py-1">
-          <p className="px-3 pt-2 pb-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-            Your workspaces
-          </p>
-
-          {allWorkspaces.map((ws) => (
-            <button
-              key={ws.id}
-              onClick={() => {
-                navigate(`/w/${ws.id}`);
-                setOpen(false);
-              }}
-              className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-accent transition-colors text-left"
-            >
-              <div className="w-6 h-6 rounded-md bg-primary/15 text-primary flex items-center justify-center text-[11px] font-bold flex-shrink-0">
-                {ws.name?.[0]?.toUpperCase()}
-              </div>
-              <span className="text-sm flex-1 truncate">{ws.name}</span>
-              {ws.id === currentId && (
-                <Check className="w-3.5 h-3.5 text-primary flex-shrink-0" />
-              )}
-            </button>
-          ))}
-
-          {canCreate && (
-            <>
-              <div className="border-t mx-2 my-1" />
-              <button
-                onClick={() => {
-                  navigate("/onboarding");
-                  setOpen(false);
-                }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-accent transition-colors text-left text-muted-foreground hover:text-foreground"
-              >
-                <div className="w-6 h-6 rounded-md border border-dashed border-border flex items-center justify-center flex-shrink-0">
-                  <Plus className="w-3.5 h-3.5" />
-                </div>
-                <span className="text-sm">New workspace</span>
-              </button>
-            </>
-          )}
-        </div>
-      )}
-    </div>
   );
 }

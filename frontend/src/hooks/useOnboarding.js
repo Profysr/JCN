@@ -8,7 +8,8 @@ export function useOnboarding(workspaceId) {
     queryKey: ["onboarding", workspaceId],
     queryFn:  () => api.get(base(workspaceId)).then((r) => r.data),
     enabled:  !!workspaceId,
-    staleTime: 30_000,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
   });
 }
 

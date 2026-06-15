@@ -2,7 +2,6 @@ from django.urls import path
 from .views import (
     BoardListCreateView,
     BoardDetailView,
-    BoardTemplatesView,
     BoardMemberListCreateView,
     BoardMemberDetailView,
     ProjectPermissionsView,
@@ -18,6 +17,7 @@ from .views import (
     KeyResultLinkedTasksView,
     TaskStatusListCreateView,
     TaskStatusDetailView,
+    TaskStatusReorderView,
     TaskListCreateView,
     TaskDetailView,
     TaskMoveView,
@@ -78,7 +78,6 @@ _tk = f"{_pr}/tasks/<str:task_id>"
 urlpatterns = [
     # Boards
     path(f"{_ws}/boards/", BoardListCreateView.as_view()),
-    path(f"{_ws}/boards/templates/", BoardTemplatesView.as_view()),
     path(f"{_pr}/", BoardDetailView.as_view()),
     # Board members & permissions
     path(f"{_pr}/members/", BoardMemberListCreateView.as_view()),
@@ -86,6 +85,7 @@ urlpatterns = [
     path(f"{_pr}/my-permissions/", ProjectPermissionsView.as_view()),
     # Kanban columns
     path(f"{_pr}/statuses/", TaskStatusListCreateView.as_view()),
+    path(f"{_pr}/statuses/reorder/", TaskStatusReorderView.as_view()),
     path(f"{_pr}/statuses/<str:status_id>/", TaskStatusDetailView.as_view()),
     # Tasks
     path(f"{_pr}/tasks/", TaskListCreateView.as_view()),

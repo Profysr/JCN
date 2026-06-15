@@ -149,7 +149,6 @@ Default permission: `IsAuthenticated`. Public endpoints (forms, invite detail) u
 |--------|------|-------------|
 | GET | `/api/workspaces/{ws}/boards/` | List all boards in workspace |
 | POST | `/api/workspaces/{ws}/boards/` | Create board |
-| GET | `/api/workspaces/{ws}/boards/templates/` | Return preset board templates |
 | GET | `/api/workspaces/{ws}/boards/{pid}/` | Board detail with statuses and counts |
 | PATCH | `/api/workspaces/{ws}/boards/{pid}/` | Update board name/type/status |
 | DELETE | `/api/workspaces/{ws}/boards/{pid}/` | Delete board |

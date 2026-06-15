@@ -1,9 +1,41 @@
 import uuid
 from django.db import models
+from django.db.models import Count, Q
 from django.conf import settings
 from workspaces.models import Workspace
 from core.constants import DEFAULT_TASK_STATUSES  # noqa: F401 — re-exported for existing imports
 from core.fields import UUIDv7Field
+from workspaces.models import WorkspaceMember
+
+
+class BoardQuerySet(models.QuerySet):
+    def for_user(self, workspace, user):
+
+        qs = (
+            self
+            .select_related('created_by')
+            .prefetch_related('statuses')
+            .annotate(
+                task_count=Count('tasks', distinct=True),
+                done_task_count=Count(
+                    'tasks',
+                    filter=Q(tasks__status__is_done=True),
+                    distinct=True,
+                ),
+            )
+            .filter(workspace=workspace)
+        )
+
+        is_admin = WorkspaceMember.objects.filter(
+            workspace=workspace, user=user, role=WorkspaceMember.Role.ADMIN
+        ).exists()
+
+        if is_admin:
+            return qs
+
+        return qs.filter(
+            Q(is_private=False) | Q(is_private=True, members__user=user)
+        ).distinct()
 
 
 class Board(models.Model):
@@ -45,6 +77,8 @@ class Board(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    objects = BoardQuerySet.as_manager()
 
     class Meta:
         ordering = ["-id"]

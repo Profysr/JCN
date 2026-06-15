@@ -238,39 +238,8 @@ function PasswordTab() {
             onChange={(val) =>
               setForm((prev) => ({ ...prev, [field.name]: val }))
             }
-            // stateKey={field.id}
-            // show={show}
-            // setShow={setShow}
-            // setForm={setForm}
           />
         ))}
-        {/* <PwField
-          id="old_password"
-          label="Current password"
-          field={form.old_password}
-          stateKey="old"
-          show={show}
-          setShow={setShow}
-          setForm={setForm}
-        />
-        <PwField
-          id="new_password1"
-          label="New password"
-          field={form.new_password1}
-          stateKey="new1"
-          show={show}
-          setShow={setShow}
-          setForm={setForm}
-        />
-        <PwField
-          id="new_password2"
-          label="Confirm new password"
-          field={form.new_password2}
-          stateKey="new2"
-          show={show}
-          setShow={setShow}
-          setForm={setForm}
-        /> */}
 
         {serverError && (
           <div className="flex items-start gap-2 text-sm text-destructive bg-destructive/8 border border-destructive/20 rounded-lg px-3 py-2">
@@ -551,7 +520,7 @@ export default function UserSettingsModal({ onClose, defaultTab = "me" }) {
       onClose={onClose}
       title={TABS.find((t) => t.id === activeTab)?.label ?? "Settings"}
       showFooter={false}
-      maxWidth="672px"
+      maxWidth="900px"
       padding="p-0"
     >
       <div className="flex" style={{ height: "min(540px, 80vh)" }}>

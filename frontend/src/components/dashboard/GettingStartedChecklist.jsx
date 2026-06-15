@@ -13,11 +13,11 @@ import { cn } from "@/lib/utils";
 
 const ITEMS = [
   {
-    key: "create_project",
-    label: "Create your first project",
-    desc: "Set up a project and invite the team",
+    key: "create_board",
+    label: "Create your first board",
+    desc: "Set up a board and invite the team",
     action: (navigate, ws) => navigate(`/w/${ws}/boards`),
-    cta: "Create project",
+    cta: "Create board",
   },
   {
     key: "add_task",
@@ -34,9 +34,9 @@ const ITEMS = [
     cta: "Invite members",
   },
   {
-    key: "connect_github",
-    label: "Connect GitHub",
-    desc: "Link commits and PRs to tasks",
+    key: "integration",
+    label: "Integration",
+    desc: "Link Team or Google chats for updates",
     action: (navigate, ws) => navigate(`/w/${ws}/settings/integrations`),
     cta: "Connect",
     future: true,

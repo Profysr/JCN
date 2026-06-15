@@ -2,6 +2,14 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import api from "@/lib/api";
 import { ACCENT_COLORS, DENSITIES } from "@/lib/constants";
+import { useAuthStore } from "@/store/authStore";
+
+// Patch authStore.user in place so hydrateTheme() on next refresh
+// doesn't overwrite themeStore with stale preferences.
+function syncAuthUser(patch) {
+  const { user, setUser } = useAuthStore.getState();
+  if (user) setUser({ ...user, ...patch });
+}
 
 function applyTheme(theme, accent, density) {
   const root = document.documentElement;
@@ -27,19 +35,25 @@ export const useThemeStore = create(
       setTheme: (theme) => {
         set({ theme });
         applyTheme(theme, get().accent, get().density);
-        api.patch("/api/users/me/", { theme }).catch(() => {});
+        api.patch("/api/users/me/", { theme })
+          .then(() => syncAuthUser({ theme }))
+          .catch(() => {});
       },
 
       setAccent: (accent) => {
         set({ accent });
         applyTheme(get().theme, accent, get().density);
-        api.patch("/api/users/me/", { accent_color: accent }).catch(() => {});
+        api.patch("/api/users/me/", { accent_color: accent })
+          .then(() => syncAuthUser({ accent_color: accent }))
+          .catch(() => {});
       },
 
       setDensity: (density) => {
         set({ density });
         applyTheme(get().theme, get().accent, density);
-        api.patch("/api/users/me/", { density_mode: density }).catch(() => {});
+        api.patch("/api/users/me/", { density_mode: density })
+          .then(() => syncAuthUser({ density_mode: density }))
+          .catch(() => {});
       },
 
       init: () => {

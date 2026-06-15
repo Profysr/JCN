@@ -7,10 +7,9 @@ export const useBoards = (workspaceId) =>
     queryFn: () =>
       api.get(`/api/workspaces/${workspaceId}/boards/`).then((r) => r.data),
     enabled: !!workspaceId,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
   });
-
-// Keep legacy alias so any remaining consumers don't break
-export const useProjects = useBoards;
 
 export const useBoard = (workspaceId, boardId) =>
   useQuery({
@@ -22,9 +21,6 @@ export const useBoard = (workspaceId, boardId) =>
     enabled: !!workspaceId && !!boardId,
   });
 
-// Keep legacy alias
-export const useProject = useBoard;
-
 export const useCreateBoard = (workspaceId) => {
   const qc = useQueryClient();
   return useMutation({
@@ -32,13 +28,12 @@ export const useCreateBoard = (workspaceId) => {
       api
         .post(`/api/workspaces/${workspaceId}/boards/`, data)
         .then((r) => r.data),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["boards", workspaceId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["boards", workspaceId] });
+      qc.invalidateQueries({ queryKey: ["portfolio", workspaceId] });
+    },
   });
 };
-
-// Keep legacy alias
-export const useCreateProject = useCreateBoard;
 
 export const useUpdateBoard = (workspaceId, boardId) => {
   const qc = useQueryClient();
@@ -48,14 +43,11 @@ export const useUpdateBoard = (workspaceId, boardId) => {
         .patch(`/api/workspaces/${workspaceId}/boards/${boardId}/`, data)
         .then((r) => r.data),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["boards", workspaceId] });
       qc.invalidateQueries({ queryKey: ["board", workspaceId, boardId] });
+      qc.invalidateQueries({ queryKey: ["portfolio", workspaceId] });
     },
   });
 };
-
-// Keep legacy alias
-export const useUpdateProject = useUpdateBoard;
 
 export const useDeleteBoard = (workspaceId) => {
   const qc = useQueryClient();
@@ -63,9 +55,6 @@ export const useDeleteBoard = (workspaceId) => {
     mutationFn: (boardId) =>
       api.delete(`/api/workspaces/${workspaceId}/boards/${boardId}/`),
     onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["boards", workspaceId] }),
+      qc.invalidateQueries({ queryKey: ["portfolio", workspaceId] }),
   });
 };
-
-// Keep legacy alias
-export const useDeleteProject = useDeleteBoard;

@@ -27,7 +27,7 @@ class MiniUserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ["id", "email"]
+        fields = ["id", "email", "full_name"]
         read_only_fields = ["email"]
 
 

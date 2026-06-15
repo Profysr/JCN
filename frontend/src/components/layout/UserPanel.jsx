@@ -1,15 +1,20 @@
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   LogOut,
   SlidersHorizontal,
   Keyboard,
   UserCircle,
   ChevronsUpDown,
+  ChevronDown,
   Sun,
   Moon,
   MoonStar,
   BellOff,
   BellRing,
+  Check,
+  Plus,
+  Building2,
 } from "lucide-react";
 import { useThemeStore } from "@/store/themeStore";
 import { Avatar } from "@/components/ui/avatar";
@@ -17,6 +22,7 @@ import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { cn } from "@/lib/utils";
 import NotificationBell from "@/components/layout/NotificationBell";
 import { FOCUS_DURATIONS } from "@/lib/constants";
+import { useWorkspaces } from "@/hooks/useWorkspace";
 
 const THEMES = [
   { key: "light", label: "Light", icon: Sun },
@@ -24,7 +30,14 @@ const THEMES = [
   { key: "midnight", label: "Midnight", icon: MoonStar },
 ];
 
-const DropdownItem = ({ icon: Icon, label, onClick, shortcut, variant = "default", description }) => (
+const DropdownItem = ({
+  icon: Icon,
+  label,
+  onClick,
+  shortcut,
+  variant = "default",
+  description,
+}) => (
   <button
     onClick={onClick}
     className={cn(
@@ -33,7 +46,10 @@ const DropdownItem = ({ icon: Icon, label, onClick, shortcut, variant = "default
     )}
   >
     <Icon
-      className={cn("w-4 h-4 flex-shrink-0", variant !== "destructive" && "text-muted-foreground")}
+      className={cn(
+        "w-4 h-4 flex-shrink-0",
+        variant !== "destructive" && "text-muted-foreground",
+      )}
     />
     <span className="flex-1">{label}</span>
     {description && (
@@ -77,58 +93,154 @@ function ThemeSwitcher() {
 }
 
 function FocusModeSection({ isFocusMode, onEnable, onDisable, onClose }) {
-  const [showDurations, setShowDurations] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   if (isFocusMode) {
     return (
       <button
-        onClick={() => { onDisable(); onClose(); }}
+        onClick={() => {
+          onDisable();
+          onClose();
+        }}
         className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left rounded-md bg-violet-500/10 text-violet-600 hover:bg-violet-500/15 transition-colors"
       >
         <BellOff className="w-4 h-4 flex-shrink-0" />
         <span className="flex-1">Focus Mode on</span>
-        <span className="text-[10px] text-violet-500 opacity-80">tap to disable</span>
+        <span className="text-[10px] text-violet-500/70">tap to disable</span>
       </button>
     );
   }
 
-  if (showDurations) {
-    return (
-      <div>
-        <p className="px-3 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 select-none">
-          Mute notifications for
-        </p>
-        {FOCUS_DURATIONS.map((d) => (
-          <button
-            key={d.key}
-            onClick={() => { onEnable(d.hours); onClose(); }}
-            className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors rounded-md"
-          >
-            {d.label}
-          </button>
-        ))}
-        <button
-          onClick={() => setShowDurations(false)}
-          className="w-full text-left px-3 py-2 text-xs text-muted-foreground hover:bg-accent transition-colors rounded-md"
-        >
-          ← Back
-        </button>
+  return (
+    <div>
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-accent transition-colors text-left rounded-md"
+      >
+        <BellRing className="w-4 h-4 flex-shrink-0 text-muted-foreground" />
+        <span className="flex-1">Focus Mode</span>
+        <ChevronDown
+          className={cn(
+            "w-3.5 h-3.5 text-muted-foreground transition-transform duration-150",
+            expanded && "rotate-180",
+          )}
+        />
+      </button>
+
+      {expanded && (
+        <div className="mt-0.5 mb-0.5">
+          <p className="px-3 pt-0.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 select-none">
+            Mute notifications for
+          </p>
+          {FOCUS_DURATIONS.map((d) => (
+            <button
+              key={d.key}
+              onClick={() => {
+                onEnable(d.hours);
+                onClose();
+              }}
+              className="w-full text-left pl-9 pr-3 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors rounded-md"
+            >
+              {d.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const VISIBLE_LIMIT = 2;
+
+function WorkspaceSwitcherSection({ workspaceId, canCreate, onClose }) {
+  const navigate = useNavigate();
+  const { data: allWorkspaces = [] } = useWorkspaces();
+  const [expanded, setExpanded] = useState(false);
+
+  const visible = allWorkspaces.slice(0, VISIBLE_LIMIT);
+  const hidden = allWorkspaces.slice(VISIBLE_LIMIT);
+  const hasMore = hidden.length > 0;
+
+  const goTo = (id) => {
+    navigate(`/w/${id}`);
+    onClose();
+  };
+
+  const WsRow = ({ ws }) => (
+    <button
+      key={ws.id}
+      onClick={() => goTo(ws.id)}
+      className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-md hover:bg-accent transition-colors text-left"
+    >
+      <div className="w-6 h-6 rounded-md bg-primary/15 text-primary flex items-center justify-center text-[11px] font-bold flex-shrink-0">
+        {ws.name?.[0]?.toUpperCase()}
       </div>
-    );
-  }
+      <span className="text-sm flex-1 truncate">{ws.name}</span>
+      {ws.id === workspaceId && (
+        <Check className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+      )}
+    </button>
+  );
 
   return (
-    <DropdownItem
-      icon={BellRing}
-      label="Focus Mode"
-      description="mute notifications"
-      onClick={() => setShowDurations(true)}
-    />
+    <div className="px-1 pt-1 pb-0.5">
+      <div className="flex items-center gap-1.5 px-2 pt-1 pb-1">
+        <Building2 className="w-3 h-3 text-muted-foreground/60" />
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+          Workspaces
+        </p>
+      </div>
+
+      {visible.map((ws) => (
+        <WsRow key={ws.id} ws={ws} />
+      ))}
+
+      {hasMore && (
+        <>
+          {expanded && hidden.map((ws) => <WsRow key={ws.id} ws={ws} />)}
+          <button
+            onClick={() => setExpanded((v) => !v)}
+            className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-md hover:bg-accent transition-colors text-left text-muted-foreground hover:text-foreground"
+          >
+            <div className="w-6 h-6 rounded-md border border-border/60 flex items-center justify-center flex-shrink-0">
+              <ChevronDown
+                className={cn(
+                  "w-3.5 h-3.5 transition-transform duration-150",
+                  expanded && "rotate-180",
+                )}
+              />
+            </div>
+            <span className="text-sm">
+              {expanded
+                ? "Show less"
+                : `${hidden.length} more workspace${hidden.length > 1 ? "s" : ""}`}
+            </span>
+          </button>
+        </>
+      )}
+
+      {canCreate && (
+        <button
+          onClick={() => {
+            navigate("/onboarding");
+            onClose();
+          }}
+          className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-md hover:bg-accent transition-colors text-left text-muted-foreground hover:text-foreground"
+        >
+          <div className="w-6 h-6 rounded-md border border-dashed border-border flex items-center justify-center flex-shrink-0">
+            <Plus className="w-3.5 h-3.5" />
+          </div>
+          <span className="text-sm">New workspace</span>
+        </button>
+      )}
+    </div>
   );
 }
 
 export default function UserPanel({
   user,
+  workspace,
+  workspaceId,
   isFocusMode,
   onEnableFocus,
   onDisableFocus,
@@ -140,7 +252,7 @@ export default function UserPanel({
   const [confirmLogout, setConfirmLogout] = useState(false);
   const ref = useRef(null);
 
-  const name = user?.display_name || "User";
+  const name = user?.full_name || "User";
 
   useEffect(() => {
     if (!open) return;
@@ -176,7 +288,10 @@ export default function UserPanel({
   ];
 
   return (
-    <div ref={ref} className="px-3 pb-3 pt-2 border-t border-border/60 relative">
+    <div
+      ref={ref}
+      className="px-3 pb-3 pt-2 border-t border-border/60 relative"
+    >
       {/* Trigger row */}
       <div className="flex items-center gap-1 px-1.5 py-1.5 rounded-lg hover:bg-accent transition-colors group">
         <button
@@ -192,7 +307,7 @@ export default function UserPanel({
               {name}
             </p>
             <p className="text-[11px] text-muted-foreground truncate leading-tight mt-0.5">
-              {user?.email}
+              {workspace?.name ?? user?.email}
             </p>
           </div>
         </button>
@@ -207,11 +322,11 @@ export default function UserPanel({
         </button>
       </div>
 
-      {/* Dropdown Menu */}
+      {/* Dropdown */}
       {open && (
         <div className="absolute left-3 right-3 bottom-full mb-1 z-50 bg-popover border border-border rounded-md shadow-popover py-1 animate-scale-in origin-bottom">
-          {/* Profile header card */}
-          <div className="flex items-center gap-3 px-3 py-2.5 mx-1 mb-1 rounded-md bg-muted/40">
+          {/* Profile header */}
+          <div className="flex items-center gap-3 px-3 py-2.5 mx-1 mt-1 mb-1 rounded-md bg-muted/40">
             <div className="relative flex-shrink-0">
               <Avatar name={name} size="lg" />
               <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 ring-2 ring-popover" />
@@ -230,6 +345,7 @@ export default function UserPanel({
             </div>
           </div>
 
+          {/* Account / settings items */}
           <div className="px-1">
             {menuItems.map((item) => (
               <DropdownItem
@@ -243,9 +359,15 @@ export default function UserPanel({
           </div>
 
           <div className="border-t border-border my-1" />
-          <ThemeSwitcher />
-          <div className="border-t border-border my-1" />
 
+          {/* Workspace switcher — after profile */}
+          <WorkspaceSwitcherSection
+            workspaceId={workspaceId}
+            canCreate={user?.can_create_workspace ?? false}
+            onClose={() => setOpen(false)}
+          />
+
+          <div className="border-t border-border my-1" />
           <div className="px-1">
             <FocusModeSection
               isFocusMode={isFocusMode}
@@ -254,7 +376,8 @@ export default function UserPanel({
               onClose={() => setOpen(false)}
             />
           </div>
-
+          <div className="border-t border-border my-1" />
+          <ThemeSwitcher />
           <div className="border-t border-border my-1" />
 
           <div className="px-1">
@@ -268,7 +391,6 @@ export default function UserPanel({
         </div>
       )}
 
-      {/* Logout Confirmation */}
       {confirmLogout && (
         <ConfirmModal
           title="Sign out?"

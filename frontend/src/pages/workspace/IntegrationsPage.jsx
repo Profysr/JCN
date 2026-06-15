@@ -595,7 +595,7 @@ export default function IntegrationsPage() {
 
   return (
     <div className="flex-1 overflow-auto">
-      <div className="max-w-3xl mx-auto px-6 py-8 space-y-6">
+      <div className="max-w-7xl p-8 space-y-6">
         <div>
           <h1 className="text-xl font-bold tracking-tight flex items-center gap-2">
             <Plug className="w-5 h-5 text-primary" /> Integrations

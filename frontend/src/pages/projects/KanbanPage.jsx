@@ -74,80 +74,80 @@ const VIEW_OPTIONS = [
   { id: "timeline", icon: GanttChartSquare, label: "Timeline" },
 ];
 
-const COLUMN_COLORS = ["#94a3b8", ...APP_COLORS];
+// const COLUMN_COLORS = ["#94a3b8", ...APP_COLORS];
 
-function AddColumnButton({ workspaceId, boardId }) {
-  const [adding, setAdding] = useState(false);
-  const [name, setName] = useState("");
-  const createStatus = useCreateStatus(workspaceId, boardId);
+// function AddColumnButton({ workspaceId, boardId }) {
+//   const [adding, setAdding] = useState(false);
+//   const [name, setName] = useState("");
+//   const createStatus = useCreateStatus(workspaceId, boardId);
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!name.trim()) return;
-    const color =
-      COLUMN_COLORS[Math.floor(Math.random() * COLUMN_COLORS.length)];
-    createStatus.mutate(
-      { name: name.trim(), color, is_done: false },
-      {
-        onSuccess: () => {
-          setName("");
-          setAdding(false);
-        },
-      },
-    );
-  };
+//   const handleSubmit = (e) => {
+//     e.preventDefault();
+//     if (!name.trim()) return;
+//     const color =
+//       COLUMN_COLORS[Math.floor(Math.random() * COLUMN_COLORS.length)];
+//     createStatus.mutate(
+//       { name: name.trim(), color, is_done: false },
+//       {
+//         onSuccess: () => {
+//           setName("");
+//           setAdding(false);
+//         },
+//       },
+//     );
+//   };
 
-  if (!adding) {
-    return (
-      <button
-        onClick={() => setAdding(true)}
-        className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground px-3 py-2 rounded-lg border border-dashed border-border hover:border-primary/40 transition-colors w-[180px] flex-shrink-0"
-      >
-        <Plus className="w-3.5 h-3.5" /> Add column
-      </button>
-    );
-  }
+//   if (!adding) {
+//     return (
+//       <button
+//         onClick={() => setAdding(true)}
+//         className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground px-3 py-2 rounded-lg border border-dashed border-border hover:border-primary/40 transition-colors w-[180px] flex-shrink-0"
+//       >
+//         <Plus className="w-3.5 h-3.5" /> Add column
+//       </button>
+//     );
+//   }
 
-  return (
-    <form onSubmit={handleSubmit} className="w-[272px] flex-shrink-0">
-      <div
-        className="bg-card border rounded-t-md border-t-[3px] px-2 py-2"
-        style={{ borderTopColor: "#6366f1" }}
-      >
-        <input
-          autoFocus
-          className="w-full text-sm bg-background border rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
-          placeholder="Column name…"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") setAdding(false);
-          }}
-        />
-        <div className="flex gap-1.5 mt-2">
-          <button
-            type="submit"
-            disabled={!name.trim() || createStatus.isPending}
-            className="flex-1 text-xs py-1.5 bg-primary text-primary-foreground rounded-md font-medium disabled:opacity-50"
-          >
-            {createStatus.isPending ? "Adding…" : "Add column"}
-          </button>
-          <button
-            type="button"
-            onClick={() => setAdding(false)}
-            className="px-2 text-xs border rounded-md text-muted-foreground hover:bg-accent transition-colors"
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    </form>
-  );
-}
+//   return (
+//     <form onSubmit={handleSubmit} className="w-[272px] flex-shrink-0">
+//       <div
+//         className="bg-card border rounded-t-md border-t-[3px] px-2 py-2"
+//         style={{ borderTopColor: "#6366f1" }}
+//       >
+//         <input
+//           autoFocus
+//           className="w-full text-sm bg-background border rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
+//           placeholder="Column name…"
+//           value={name}
+//           onChange={(e) => setName(e.target.value)}
+//           onKeyDown={(e) => {
+//             if (e.key === "Escape") setAdding(false);
+//           }}
+//         />
+//         <div className="flex gap-1.5 mt-2">
+//           <button
+//             type="submit"
+//             disabled={!name.trim() || createStatus.isPending}
+//             className="flex-1 text-xs py-1.5 bg-primary text-primary-foreground rounded-md font-medium disabled:opacity-50"
+//           >
+//             {createStatus.isPending ? "Adding…" : "Add column"}
+//           </button>
+//           <button
+//             type="button"
+//             onClick={() => setAdding(false)}
+//             className="px-2 text-xs border rounded-md text-muted-foreground hover:bg-accent transition-colors"
+//           >
+//             Cancel
+//           </button>
+//         </div>
+//       </div>
+//     </form>
+//   );
+// }
 
 export default function KanbanPage() {
-  const { workspaceId, boardId } = useParams();
   const navigate = useNavigate();
+  const { workspaceId, boardId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const { user } = useAuthStore();
@@ -163,6 +163,7 @@ export default function KanbanPage() {
   const moveTask = useMoveTask(workspaceId, boardId);
   const updateTask = useUpdateTask(workspaceId, boardId);
   const createLabel = useCreateLabel(workspaceId, boardId);
+  const bulkUpdate = useBulkUpdateTasks(workspaceId, boardId);
 
   const { data: savedViews = [] } = useSavedViews(workspaceId, boardId);
   const createView = useCreateSavedView(workspaceId, boardId);
@@ -191,8 +192,6 @@ export default function KanbanPage() {
     () => sprints.find((s) => s.status === "active") || null,
   );
   const [selectedIds, setSelectedIds] = useState(new Set());
-
-  const bulkUpdate = useBulkUpdateTasks(workspaceId, boardId);
 
   const toggleSelect = (taskId) => {
     setSelectedIds((prev) => {
@@ -540,12 +539,12 @@ export default function KanbanPage() {
                   />
                 ))}
                 {/* Add column button */}
-                {perms.canEdit && (
+                {/* {perms.canEdit && (
                   <AddColumnButton
                     workspaceId={workspaceId}
                     boardId={boardId}
                   />
-                )}
+                )} */}
               </div>
             </DragDropContext>
           </div>

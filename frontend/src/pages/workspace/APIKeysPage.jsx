@@ -316,7 +316,7 @@ export default function APIKeysPage() {
 
   return (
     <div className="flex-1 overflow-auto">
-      <div className="p-8 space-y-4">
+      <div className="max-w-7xl p-8 space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -354,7 +354,11 @@ export default function APIKeysPage() {
           ) : (
             <KeysTable
               keys={keys}
-              onRevoke={(id) => revoke.mutate(id, { onSuccess: () => toast.success("Key revoked") })}
+              onRevoke={(id) =>
+                revoke.mutate(id, {
+                  onSuccess: () => toast.success("Key revoked"),
+                })
+              }
             />
           )}
         </div>

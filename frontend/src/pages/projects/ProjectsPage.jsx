@@ -7,6 +7,7 @@ import CreateProjectModal from "@/components/projects/CreateProjectModal";
 import { Plus, ArrowRight, AlertTriangle, Zap } from "lucide-react";
 import { APP_COLORS as PROJECT_COLORS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { Loader } from "@/components/ui/Loader";
 
 const HEALTH = {
   on_track: {
@@ -54,10 +55,6 @@ export default function ProjectsPage() {
   const [showCreate, setShowCreate] = useState(false);
 
   const list = projects ?? [];
-  // const onTrack = list.filter((p) => p.health === "on_track").length;
-  // const atRisk = list.filter((p) => p.health === "at_risk").length;
-  // const offTrack = list.filter((p) => p.health === "off_track").length;
-  // const hasHealth = list.some((p) => p.health);
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
@@ -68,25 +65,6 @@ export default function ProjectsPage() {
               {list.length} board{list.length !== 1 ? "s" : ""} in this
               workspace
             </p>
-            {/* {hasHealth && (atRisk > 0 || offTrack > 0) && (
-              <>
-                {atRisk > 0 && (
-                  <span className="text-[11px] font-medium px-2 py-0.5 rounded bg-yellow-50 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300">
-                    {atRisk} at risk
-                  </span>
-                )}
-                {offTrack > 0 && (
-                  <span className="text-[11px] font-medium px-2 py-0.5 rounded bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300">
-                    {offTrack} off track
-                  </span>
-                )}
-                {onTrack > 0 && (
-                  <span className="text-[11px] font-medium px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-                    {onTrack} on track
-                  </span>
-                )}
-              </>
-            )} */}
           </div>
         </div>
         <Button onClick={() => setShowCreate(true)}>
@@ -94,9 +72,7 @@ export default function ProjectsPage() {
         </Button>
       </div>
 
-      {isLoading && (
-        <div className="text-muted-foreground text-sm">Loading…</div>
-      )}
+      {isLoading && <Loader className="min-h-screen" />}
 
       {!isLoading && list.length === 0 && (
         <EmptyState
@@ -111,33 +87,23 @@ export default function ProjectsPage() {
         />
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {list.map((project) => {
+      <div className="flex flex-wrap gap-4">
+        {list.map((itm) => {
           const color =
-            PROJECT_COLORS[project.name.charCodeAt(0) % PROJECT_COLORS.length];
-          const done = project.done_tasks ?? 0;
-          const total = project.total_tasks ?? 0;
+            PROJECT_COLORS[itm.name.charCodeAt(0) % PROJECT_COLORS.length];
+          const done = itm.done_tasks ?? 0;
+          const total = itm.total_tasks ?? 0;
           const pct =
-            project.completion_pct ??
+            itm.completion_pct ??
             (total > 0 ? Math.round((done / total) * 100) : 0);
-          const healthCfg = HEALTH[project.health];
+          const healthCfg = HEALTH[itm.health];
           const barCls = healthCfg ? healthCfg.bar : "bg-primary";
 
-          // "id": "f5a13197-9ea8-431a-85c9-45c9d63def23",
-          //         "name": "hello world",
-          //         "health": "at_risk",
-          //         "total_tasks": 12,
-          //         "done_tasks": 5,
-          //         "overdue_tasks": 3,
-          //         "completion_pct": 42,
-          //         "active_sprints": []
           return (
             <button
-              key={project.id}
-              onClick={() =>
-                navigate(`/w/${workspaceId}/boards/${project.id}`)
-              }
-              className="text-left rounded-md border bg-card p-5 hover:shadow-card-hover hover:border-primary/30 transition-all duration-200 group shadow-card"
+              key={itm.id}
+              onClick={() => navigate(`/w/${workspaceId}/boards/${itm.id}`)}
+              className="min-w-[320px] flex-1 text-left rounded-md border bg-card p-5 hover:shadow-card-hover hover:border-primary/30 transition-all duration-200 group shadow-card"
             >
               {/* Header */}
               <div className="flex items-start justify-between gap-2 mb-3">
@@ -145,18 +111,18 @@ export default function ProjectsPage() {
                   className="w-10 h-10 rounded-md flex items-center justify-center font-bold text-sm text-white shadow-sm flex-shrink-0"
                   style={{ backgroundColor: color }}
                 >
-                  {project.name[0].toUpperCase()}
+                  {itm.name[0].toUpperCase()}
                 </div>
                 <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                  {project.health && <HealthBadge health={project.health} />}
+                  {itm.health && <HealthBadge health={itm.health} />}
                   <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
                 </div>
               </div>
 
-              <p className="font-semibold truncate">{project.name}</p>
-              {project.description && (
+              <p className="font-semibold truncate">{itm.name}</p>
+              {itm.description && (
                 <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                  {project.description}
+                  {itm.description}
                 </p>
               )}
 
@@ -187,21 +153,23 @@ export default function ProjectsPage() {
 
               {/* Footer indicators */}
               <div className="flex items-center gap-3 mt-3 flex-wrap">
-                {project.overdue_tasks > 0 && (
+                {itm.overdue_tasks > 0 && (
                   <span className="flex items-center gap-1 text-[11px] font-medium text-red-500">
                     <AlertTriangle className="w-3 h-3" />
-                    {project.overdue_tasks} overdue
+                    {itm.overdue_tasks} overdue
                   </span>
                 )}
-                <span className={cn(
-                  "flex items-center gap-1 text-[11px] truncate",
-                  project.active_sprints?.length > 0
-                    ? "text-muted-foreground"
-                    : "text-muted-foreground/40 italic",
-                )}>
+                <span
+                  className={cn(
+                    "flex items-center gap-1 text-[11px] truncate",
+                    itm.active_sprints?.length > 0
+                      ? "text-muted-foreground"
+                      : "text-muted-foreground/40 italic",
+                  )}
+                >
                   <Zap className="w-3 h-3 flex-shrink-0" />
-                  {project.active_sprints?.length > 0
-                    ? project.active_sprints[0].name
+                  {itm.active_sprints?.length > 0
+                    ? itm.active_sprints[0].name
                     : "No active sprint"}
                 </span>
               </div>
@@ -211,6 +179,7 @@ export default function ProjectsPage() {
       </div>
 
       <CreateProjectModal
+        workspaceId={workspaceId}
         open={showCreate}
         onClose={() => setShowCreate(false)}
       />

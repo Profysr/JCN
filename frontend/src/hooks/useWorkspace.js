@@ -8,6 +8,8 @@ export function useWorkspace(workspaceId) {
     queryFn: () =>
       api.get(`/api/workspaces/${workspaceId}/`).then((r) => r.data),
     enabled: !!workspaceId,
+    staleTime: Infinity, // never auto-refetch
+    refetchOnWindowFocus: false, // don't refetch on tab switch
   });
 }
 
@@ -17,9 +19,23 @@ export function useWorkspaces() {
     queryKey: ["workspaces"],
     queryFn: () =>
       api.get("/api/workspaces/").then((r) => r.data.results || r.data),
-    staleTime: 60_000,
+    staleTime: Infinity, // never auto-refetch
+    refetchOnWindowFocus: false, // don't refetch on tab switch
   });
 }
+
+export const useCreateWorkspace = (options = {}) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data) =>
+      api.post("/api/workspaces/", data).then((r) => r.data),
+    onSuccess: (workspace) => {
+      qc.invalidateQueries({ queryKey: ["workspaces"] });
+      options.onSuccess?.(workspace);
+    },
+    onError: options.onError,
+  });
+};
 
 export const useUpdateWorkspace = (workspaceId) => {
   const qc = useQueryClient();

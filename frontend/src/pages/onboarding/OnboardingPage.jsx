@@ -1,22 +1,27 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useMutation } from "@tanstack/react-query";
-import api from "@/lib/api";
+import { useCreateWorkspace } from "@/hooks/useWorkspace";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 
 export default function OnboardingPage() {
   const navigate = useNavigate();
   const [name, setName] = useState("");
   const [error, setError] = useState("");
 
-  const { mutate, isPending } = useMutation({
-    mutationFn: (data) => api.post("/api/workspaces/", data).then((r) => r.data),
-    // Redirect to setup wizard instead of the workspace directly
+  const { mutate, isPending } = useCreateWorkspace({
     onSuccess: (workspace) => navigate(`/w/${workspace.id}/setup`),
-    onError:   (err) => setError(err.response?.data?.name?.[0] || "Something went wrong."),
+    onError: (err) =>
+      setError(err.response?.data?.name?.[0] || "Something went wrong."),
   });
 
   return (
@@ -28,7 +33,12 @@ export default function OnboardingPage() {
             This is where your team will collaborate. You can change this later.
           </CardDescription>
         </CardHeader>
-        <form onSubmit={(e) => { e.preventDefault(); mutate({ name }); }}>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            mutate({ name });
+          }}
+        >
           <CardContent className="space-y-4">
             {error && <p className="text-sm text-destructive">{error}</p>}
             <div className="space-y-1.5">
@@ -43,7 +53,11 @@ export default function OnboardingPage() {
             </div>
           </CardContent>
           <CardFooter>
-            <Button type="submit" className="w-full" disabled={isPending || !name.trim()}>
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={isPending || !name.trim()}
+            >
               {isPending ? "Creating…" : "Create workspace →"}
             </Button>
           </CardFooter>

@@ -85,16 +85,16 @@ export default function SettingsPage() {
   ];
 
   return (
-    <div className="p-8 space-y-4">
+    <div className="max-w-7xl p-8 space-y-4">
       <div>
         <h1 className="text-2xl font-semibold">Workspace Settings</h1>
         <p className="text-muted-foreground text-sm mt-0.5">
           Manage your workspace configuration
         </p>
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+      <div className="flex flex-col gap-2">
         {/* General settings */}
-        <section className="lg:col-span-2 rounded-md border bg-card p-4">
+        <section className="rounded-md border bg-card p-4">
           <h2 className="text-base font-medium mb-5">General</h2>
           <form onSubmit={handleSave} className="space-y-4">
             <div className="space-y-1.5">
@@ -141,7 +141,7 @@ export default function SettingsPage() {
         </section>
 
         {/* Developer & integration quick-links */}
-        <section className="lg:col-span-1 rounded-md border bg-card p-4">
+        <section className="rounded-md border bg-card p-4">
           <h2 className="text-base font-medium mb-1">
             Developer & Integrations
           </h2>
@@ -149,7 +149,12 @@ export default function SettingsPage() {
             Connect third-party tools, build on the JCN API, and migrate your
             data.
           </p>
-          <div className="grid grid-cols-1 gap-2">
+          <div
+            className="grid gap-2"
+            style={{
+              gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+            }}
+          >
             {OtherPages.map((item) => {
               const Icon = item.icon;
               return (

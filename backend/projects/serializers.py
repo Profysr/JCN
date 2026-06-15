@@ -15,7 +15,7 @@ from .models import (
     Approval, ApprovalReviewer,
     Objective, KeyResult,
 )
-from accounts.serializers import UserSerializer
+from accounts.serializers import MiniUserSerializer
 
 
 
@@ -54,8 +54,49 @@ class TaskFieldValueSerializer(serializers.ModelSerializer):
         return obj
 
 
+class BoardMiniSerializer(serializers.ModelSerializer):
+    task_count      = serializers.IntegerField()
+    done_task_count = serializers.IntegerField()
+
+    class Meta:
+        model  = Board
+        fields = ["id", "name", "description", "board_type", "is_private", "task_count", "done_task_count", "created_at"]
+
+
+class PortfolioBoardSerializer(serializers.ModelSerializer):
+    task_count      = serializers.IntegerField()
+    done_task_count = serializers.IntegerField()
+    overdue_tasks   = serializers.IntegerField()
+    completion_pct  = serializers.SerializerMethodField()
+    health          = serializers.SerializerMethodField()
+    active_sprints  = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = Board
+        fields = ["id", "name", "board_type", "status", "is_private",
+                  "task_count", "done_task_count", "overdue_tasks",
+                  "completion_pct", "health", "active_sprints"]
+
+    def get_completion_pct(self, obj):
+        return round(obj.done_task_count / obj.task_count * 100) if obj.task_count else 0
+
+    def get_health(self, obj):
+        overdue_pct = (obj.overdue_tasks / obj.task_count * 100) if obj.task_count else 0
+        if overdue_pct > 25:
+            return "off_track"
+        if overdue_pct > 10:
+            return "at_risk"
+        return "on_track"
+
+    def get_active_sprints(self, obj):
+        return [
+            {"id": str(s.id), "name": s.name, "start_date": s.start_date, "end_date": s.end_date}
+            for s in obj.active_sprints
+        ]
+
+
 class BoardSerializer(serializers.ModelSerializer):
-    created_by      = UserSerializer(read_only=True)
+    created_by      = MiniUserSerializer(read_only=True)
     statuses        = TaskStatusSerializer(many=True, read_only=True)
     task_count      = serializers.SerializerMethodField()
     done_task_count = serializers.SerializerMethodField()
@@ -69,14 +110,10 @@ class BoardSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_by", "statuses", "created_at", "updated_at"]
 
     def get_task_count(self, obj):
-        return obj.tasks.count()
+        return obj.task_count
 
     def get_done_task_count(self, obj):
-        done_statuses = obj.statuses.filter(is_done=True)
-        if done_statuses.exists():
-            return obj.tasks.filter(status__in=done_statuses).count()
-        last = obj.statuses.order_by("-order").first()
-        return obj.tasks.filter(status=last).count() if last else 0
+        return obj.done_task_count
 
     def get_my_role(self, obj):
         request = self.context.get("request")
@@ -96,8 +133,6 @@ class BoardSerializer(serializers.ModelSerializer):
             TaskStatus(board=board, **s) for s in DEFAULT_TASK_STATUSES
         ])
         return board
-
-
 
 class SavedViewSerializer(serializers.ModelSerializer):
     board_id = serializers.UUIDField(allow_null=True, required=False)
@@ -132,7 +167,7 @@ class SubTaskSerializer(serializers.ModelSerializer):
 
 
 class TaskCommentSerializer(serializers.ModelSerializer):
-    author    = UserSerializer(read_only=True)
+    author    = MiniUserSerializer(read_only=True)
     reactions = serializers.SerializerMethodField()
 
     class Meta:
@@ -154,7 +189,7 @@ class TaskCommentSerializer(serializers.ModelSerializer):
 
 
 class CommentReactionSerializer(serializers.ModelSerializer):
-    user = UserSerializer(read_only=True)
+    user = MiniUserSerializer(read_only=True)
 
     class Meta:
         model  = CommentReaction
@@ -162,7 +197,7 @@ class CommentReactionSerializer(serializers.ModelSerializer):
 
 
 class UserPresenceSerializer(serializers.ModelSerializer):
-    user = UserSerializer(read_only=True)
+    user = MiniUserSerializer(read_only=True)
 
     class Meta:
         model  = UserPresence
@@ -170,7 +205,7 @@ class UserPresenceSerializer(serializers.ModelSerializer):
 
 
 class TaskActivitySerializer(serializers.ModelSerializer):
-    actor = UserSerializer(read_only=True)
+    actor = MiniUserSerializer(read_only=True)
 
     class Meta:
         model = TaskActivity
@@ -178,9 +213,9 @@ class TaskActivitySerializer(serializers.ModelSerializer):
 
 
 class TaskSerializer(serializers.ModelSerializer):
-    assignee      = UserSerializer(read_only=True)
+    assignee      = MiniUserSerializer(read_only=True)
     assignee_id   = serializers.UUIDField(write_only=True, required=False, allow_null=True)
-    created_by    = UserSerializer(read_only=True)
+    created_by    = MiniUserSerializer(read_only=True)
     status_detail = TaskStatusSerializer(source="status", read_only=True)
     status_id     = serializers.UUIDField(write_only=True, required=False, allow_null=True)
     labels        = LabelSerializer(many=True, read_only=True)
@@ -266,7 +301,7 @@ class MyWorkTaskSerializer(TaskSerializer):
 
 
 class TaskAttachmentSerializer(serializers.ModelSerializer):
-    uploaded_by  = UserSerializer(read_only=True)
+    uploaded_by  = MiniUserSerializer(read_only=True)
     url          = serializers.SerializerMethodField()
 
     class Meta:
@@ -394,7 +429,7 @@ class BoardSearchSerializer(serializers.ModelSerializer):
 
 
 class BoardMemberSerializer(serializers.ModelSerializer):
-    user = UserSerializer(read_only=True)
+    user = MiniUserSerializer(read_only=True)
     user_id = serializers.UUIDField(write_only=True)
 
     class Meta:
@@ -418,7 +453,7 @@ class BoardMemberSerializer(serializers.ModelSerializer):
 # ── v2.5.0 — Wiki & Documents ─────────────────────────────────────────────────
 
 class WikiRevisionSerializer(serializers.ModelSerializer):
-    author = UserSerializer(read_only=True)
+    author = MiniUserSerializer(read_only=True)
 
     class Meta:
         model  = WikiRevision
@@ -427,7 +462,7 @@ class WikiRevisionSerializer(serializers.ModelSerializer):
 
 
 class WikiPageSerializer(serializers.ModelSerializer):
-    created_by     = UserSerializer(read_only=True)
+    created_by     = MiniUserSerializer(read_only=True)
     children_count = serializers.SerializerMethodField()
 
     class Meta:
@@ -456,7 +491,7 @@ class WikiPageSerializer(serializers.ModelSerializer):
 
 
 class DocumentSerializer(serializers.ModelSerializer):
-    created_by = UserSerializer(read_only=True)
+    created_by = MiniUserSerializer(read_only=True)
 
     class Meta:
         model  = Document
@@ -475,7 +510,7 @@ class FormFieldSerializer(serializers.ModelSerializer):
 
 class FormSerializer(serializers.ModelSerializer):
     fields    = FormFieldSerializer(many=True, read_only=True)
-    created_by = UserSerializer(read_only=True)
+    created_by = MiniUserSerializer(read_only=True)
     submission_count = serializers.SerializerMethodField()
 
     class Meta:
@@ -536,7 +571,7 @@ class AutomationRuleSerializer(serializers.ModelSerializer):
 # ── v3.6.0 — Approval Workflows ──────────────────────────────────────────────
 
 class ApprovalReviewerSerializer(serializers.ModelSerializer):
-    user = UserSerializer(read_only=True)
+    user = MiniUserSerializer(read_only=True)
     user_id = serializers.UUIDField(write_only=True)
 
     class Meta:
@@ -546,7 +581,7 @@ class ApprovalReviewerSerializer(serializers.ModelSerializer):
 
 
 class ApprovalSerializer(serializers.ModelSerializer):
-    requested_by = UserSerializer(read_only=True)
+    requested_by = MiniUserSerializer(read_only=True)
     reviewers    = ApprovalReviewerSerializer(many=True, read_only=True)
     reviewer_ids = serializers.ListField(
         child=serializers.UUIDField(), write_only=True, required=True
@@ -610,7 +645,7 @@ class KeyResultSerializer(serializers.ModelSerializer):
 
 
 class ObjectiveSerializer(serializers.ModelSerializer):
-    owner       = UserSerializer(read_only=True)
+    owner       = MiniUserSerializer(read_only=True)
     owner_id    = serializers.UUIDField(write_only=True, required=False, allow_null=True)
     key_results = KeyResultSerializer(many=True, read_only=True)
     progress    = serializers.SerializerMethodField()

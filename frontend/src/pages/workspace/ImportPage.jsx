@@ -583,7 +583,7 @@ export default function ImportPage() {
 
   return (
     <div className="flex-1 overflow-auto">
-      <div className="p-8 space-y-4">
+      <div className="max-w-7xl p-8 space-y-4">
         {/* Header */}
         <div>
           <h1 className="text-xl font-bold flex items-center gap-2">

@@ -1,28 +1,20 @@
 import { useState } from "react";
-import * as Dialog from "@radix-ui/react-dialog";
+import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
+import Modal from "@/components/ui/Modal";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
-import { X, Plus, Trash2, Check, GripVertical, Settings2 } from "lucide-react";
+import { Plus, Trash2, Check, GripVertical, Settings2 } from "lucide-react";
 import {
   useCreateStatus,
   useUpdateStatus,
   useDeleteStatus,
+  useReorderStatuses,
 } from "@/hooks/useStatusManagement";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const PRESET_COLORS = [
-  "#94a3b8",
-  "#6366f1",
-  "#8b5cf6",
-  "#ec4899",
-  "#f59e0b",
-  "#22c55e",
-  "#14b8a6",
-  "#3b82f6",
-  "#ef4444",
-  "#f97316",
-  "#64748b",
-  "#0ea5e9",
+  "#94a3b8", "#6366f1", "#8b5cf6", "#ec4899", "#f59e0b", "#22c55e",
+  "#14b8a6", "#3b82f6", "#ef4444", "#f97316", "#64748b", "#0ea5e9",
 ];
 
 export default function BoardSettingsModal({
@@ -32,13 +24,32 @@ export default function BoardSettingsModal({
   boardId,
   statuses = [],
 }) {
-  const createStatus = useCreateStatus(workspaceId, boardId);
-  const updateStatus = useUpdateStatus(workspaceId, boardId);
-  const deleteStatus = useDeleteStatus(workspaceId, boardId);
+  const createStatus    = useCreateStatus(workspaceId, boardId);
+  const updateStatus    = useUpdateStatus(workspaceId, boardId);
+  const deleteStatus    = useDeleteStatus(workspaceId, boardId);
+  const reorderStatuses = useReorderStatuses(workspaceId, boardId);
 
-  const [newName, setNewName] = useState("");
+  const [newName, setNewName]   = useState("");
   const [newColor, setNewColor] = useState("#6366f1");
-  const [adding, setAdding] = useState(false);
+  const [adding, setAdding]     = useState(false);
+
+  // Optimistic local order — null means "use server order"
+  const [localOrder, setLocalOrder] = useState(null);
+  const orderedStatuses = localOrder ?? statuses;
+
+  const handleDragEnd = ({ source, destination }) => {
+    if (!destination || destination.index === source.index) return;
+
+    const next = [...orderedStatuses];
+    const [moved] = next.splice(source.index, 1);
+    next.splice(destination.index, 0, moved);
+    setLocalOrder(next);
+
+    reorderStatuses.mutate(next.map((s) => s.id), {
+      onSuccess: () => setLocalOrder(null),
+      onError:   () => setLocalOrder(null),
+    });
+  };
 
   const handleAdd = (e) => {
     e.preventDefault();
@@ -56,163 +67,185 @@ export default function BoardSettingsModal({
   };
 
   return (
-    <Dialog.Root open={open} onOpenChange={onClose}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 bg-black/40 z-40 animate-fade-in" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-card border rounded-md shadow-xl w-full max-w-lg animate-scale-in">
-          <div className="flex items-center justify-between px-5 py-4 border-b">
-            <div className="flex items-center gap-2">
-              <Settings2 className="w-4 h-4 text-muted-foreground" />
-              <Dialog.Title className="text-sm font-semibold">
-                Board Columns
-              </Dialog.Title>
-            </div>
-            <Dialog.Close asChild>
-              <button className="text-muted-foreground hover:text-foreground p-1 rounded hover:bg-accent transition-colors">
-                <X className="w-4 h-4" />
-              </button>
-            </Dialog.Close>
-          </div>
+    <Modal
+      isOpen={open}
+      onClose={onClose}
+      title="Board Columns"
+      icon={Settings2}
+      showFooter={false}
+      padding="p-0"
+    >
+      <div className="p-5 max-h-[60vh] overflow-y-auto">
+        <p className="text-xs text-muted-foreground mb-3">
+          Drag rows to reorder. Mark a column as{" "}
+          <span className="font-semibold text-emerald-600">Done</span> to count
+          its tasks toward the project completion %.
+        </p>
 
-          <div className="p-5 space-y-2 max-h-[60vh] overflow-y-auto">
-            <p className="text-xs text-muted-foreground mb-3">
-              Mark a column as{" "}
-              <span className="font-semibold text-emerald-600">Done</span> to
-              count its tasks toward the project completion %.
-            </p>
-
-            {statuses.map((s) => (
-              <StatusRow
-                key={s.id}
-                status={s}
-                onUpdate={(data) =>
-                  updateStatus.mutate({ statusId: s.id, ...data })
-                }
-                onDelete={() => deleteStatus.mutate(s.id)}
-                isDeleting={deleteStatus.isPending}
-              />
-            ))}
-
-            {/* Add new column */}
-            {adding ? (
-              <form
-                onSubmit={handleAdd}
-                className="flex items-center gap-2 pt-2 border-t mt-3"
+        <DragDropContext onDragEnd={handleDragEnd}>
+          <Droppable droppableId="board-statuses">
+            {(provided) => (
+              <div
+                ref={provided.innerRef}
+                {...provided.droppableProps}
+                className="space-y-1.5"
               >
-                <ColorPicker value={newColor} onChange={setNewColor} />
-                <input
-                  autoFocus
-                  className="flex-1 text-sm border rounded-md px-2.5 py-1.5 bg-background outline-none focus:ring-1 focus:ring-ring"
-                  placeholder="Column name…"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  required
-                />
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={createStatus.isPending}
-                >
-                  {createStatus.isPending ? "Adding…" : "Add"}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setAdding(false)}
-                >
-                  Cancel
-                </Button>
-              </form>
-            ) : (
-              <button
-                onClick={() => setAdding(true)}
-                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mt-2 pt-2 border-t w-full transition-colors"
-              >
-                <Plus className="w-4 h-4" /> Add column
-              </button>
+                {orderedStatuses.map((s, i) => (
+                  <Draggable key={s.id} draggableId={String(s.id)} index={i}>
+                    {(drag, snapshot) => (
+                      <div
+                        ref={drag.innerRef}
+                        {...drag.draggableProps}
+                        className={cn(
+                          "flex items-center gap-2.5 px-2 py-1.5 rounded-lg border bg-background group",
+                          "transition-colors duration-100",
+                          snapshot.isDragging
+                            ? "shadow-lg border-primary/40 bg-accent"
+                            : "hover:border-border/80",
+                        )}
+                      >
+                        <div
+                          {...drag.dragHandleProps}
+                          className="flex items-center text-muted-foreground/40 hover:text-muted-foreground transition-colors cursor-grab active:cursor-grabbing"
+                        >
+                          <GripVertical className="w-3.5 h-3.5 flex-shrink-0" />
+                        </div>
+
+                        <ColorPicker
+                          value={s.color}
+                          onChange={(color) =>
+                            updateStatus.mutate({ statusId: s.id, color })
+                          }
+                        />
+
+                        <StatusName
+                          status={s}
+                          onRename={(name) =>
+                            updateStatus.mutate({ statusId: s.id, name })
+                          }
+                        />
+
+                        <button
+                          onClick={() =>
+                            updateStatus.mutate({
+                              statusId: s.id,
+                              is_done: !s.is_done,
+                            })
+                          }
+                          title={
+                            s.is_done
+                              ? "Marked as Done — click to unmark"
+                              : "Mark as Done column"
+                          }
+                          className={cn(
+                            "flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded border transition-all shrink-0",
+                            s.is_done
+                              ? "bg-emerald-50 text-emerald-600 border-emerald-200"
+                              : "text-muted-foreground border-transparent hover:border-border",
+                          )}
+                        >
+                          <Check className="w-3 h-3" />
+                          {s.is_done ? "Done" : "Mark done"}
+                        </button>
+
+                        <DeleteButton
+                          statusName={s.name}
+                          onDelete={() => deleteStatus.mutate(s.id)}
+                          isDeleting={deleteStatus.isPending}
+                        />
+                      </div>
+                    )}
+                  </Draggable>
+                ))}
+                {provided.placeholder}
+              </div>
             )}
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+          </Droppable>
+        </DragDropContext>
+
+        {adding ? (
+          <form
+            onSubmit={handleAdd}
+            className="flex items-center gap-2 pt-2 border-t mt-3"
+          >
+            <ColorPicker value={newColor} onChange={setNewColor} />
+            <input
+              autoFocus
+              className="flex-1 text-sm border rounded-md px-2.5 py-1.5 bg-background outline-none focus:ring-1 focus:ring-ring"
+              placeholder="Column name…"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              required
+            />
+            <Button type="submit" size="sm" disabled={createStatus.isPending}>
+              {createStatus.isPending ? "Adding…" : "Add"}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => setAdding(false)}
+            >
+              Cancel
+            </Button>
+          </form>
+        ) : (
+          <button
+            onClick={() => setAdding(true)}
+            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mt-3 pt-2 border-t w-full transition-colors"
+          >
+            <Plus className="w-4 h-4" /> Add column
+          </button>
+        )}
+      </div>
+    </Modal>
   );
 }
 
-function StatusRow({ status, onUpdate, onDelete, isDeleting }) {
-  const [name, setName] = useState(status.name);
+function StatusName({ status, onRename }) {
+  const [name, setName]       = useState(status.name);
   const [editing, setEditing] = useState(false);
-  const [confirmState, setConfirmState] = useState(null);
 
-  const saveName = () => {
+  const save = () => {
     setEditing(false);
-    if (name.trim() && name !== status.name) onUpdate({ name: name.trim() });
+    if (name.trim() && name.trim() !== status.name) onRename(name.trim());
     else setName(status.name);
   };
 
-  return (
-    <div className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg border bg-background group">
-      <GripVertical className="w-3.5 h-3.5 text-muted-foreground/40 cursor-grab flex-shrink-0" />
-
-      {/* Color picker */}
-      <ColorPicker
-        value={status.color}
-        onChange={(color) => onUpdate({ color })}
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        className="flex-1 text-sm bg-transparent outline-none border-b border-primary"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onBlur={save}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") save();
+          if (e.key === "Escape") { setName(status.name); setEditing(false); }
+        }}
       />
+    );
+  }
 
-      {/* Name */}
-      {editing ? (
-        <input
-          autoFocus
-          className="flex-1 text-sm bg-transparent outline-none border-b border-primary"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onBlur={saveName}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") saveName();
-            if (e.key === "Escape") {
-              setName(status.name);
-              setEditing(false);
-            }
-          }}
-        />
-      ) : (
-        <span
-          className="flex-1 text-sm cursor-text hover:text-primary transition-colors"
-          onClick={() => setEditing(true)}
-          title="Click to rename"
-        >
-          {status.name}
-        </span>
-      )}
+  return (
+    <span
+      className="flex-1 text-sm cursor-text hover:text-primary transition-colors"
+      onClick={() => setEditing(true)}
+      title="Click to rename"
+    >
+      {status.name}
+    </span>
+  );
+}
 
-      {/* Done toggle */}
+function DeleteButton({ statusName, onDelete, isDeleting }) {
+  const [confirming, setConfirming] = useState(false);
+
+  return (
+    <>
       <button
-        onClick={() => onUpdate({ is_done: !status.is_done })}
-        title={
-          status.is_done
-            ? "Marked as Done — click to unmark"
-            : "Mark as Done column"
-        }
-        className={cn(
-          "flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded border transition-all",
-          status.is_done
-            ? "bg-emerald-50 text-emerald-600 border-emerald-200"
-            : "text-muted-foreground border-transparent hover:border-border",
-        )}
-      >
-        <Check className="w-3 h-3" />
-        {status.is_done ? "Done" : "Mark done"}
-      </button>
-
-      {/* Delete */}
-      <button
-        onClick={() =>
-          setConfirmState({
-            message: `Move tasks out of "${status.name}" first.`,
-            onConfirm: onDelete,
-          })
-        }
+        onClick={() => setConfirming(true)}
         disabled={isDeleting}
         className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive p-1 rounded hover:bg-destructive/10 transition-all flex-shrink-0"
         title="Delete column"
@@ -220,28 +253,26 @@ function StatusRow({ status, onUpdate, onDelete, isDeleting }) {
         <Trash2 className="w-3.5 h-3.5" />
       </button>
 
-      {confirmState && (
+      {confirming && (
         <ConfirmModal
           title="Delete status?"
-          message={confirmState.message}
-          onConfirm={() => {
-            confirmState.onConfirm();
-            setConfirmState(null);
-          }}
-          onCancel={() => setConfirmState(null)}
+          message={`Move tasks out of "${statusName}" first.`}
+          onConfirm={() => { onDelete(); setConfirming(false); }}
+          onCancel={() => setConfirming(false)}
         />
       )}
-    </div>
+    </>
   );
 }
 
 function ColorPicker({ value, onChange }) {
   const [open, setOpen] = useState(false);
+
   return (
     <div className="relative flex-shrink-0">
       <button
         type="button"
-        className="w-5 h-5 rounded-full border-2 border-white shadow-sm flex-shrink-0"
+        className="w-5 h-5 rounded-full border-2 border-white shadow-sm"
         style={{ backgroundColor: value }}
         onClick={() => setOpen((o) => !o)}
       />
@@ -253,15 +284,10 @@ function ColorPicker({ value, onChange }) {
               type="button"
               className={cn(
                 "w-5 h-5 rounded-full border-2 transition-transform hover:scale-110",
-                c === value
-                  ? "border-foreground scale-110"
-                  : "border-transparent",
+                c === value ? "border-foreground scale-110" : "border-transparent",
               )}
               style={{ backgroundColor: c }}
-              onClick={() => {
-                onChange(c);
-                setOpen(false);
-              }}
+              onClick={() => { onChange(c); setOpen(false); }}
             />
           ))}
         </div>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Loader } from "@/components/ui/Loader";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "@/store/authStore";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -35,12 +35,13 @@ export default function AcceptInvitePage() {
     retry: false,
   });
 
-  // mutations are used to modify data on the server (POST/PUT/DELETE requests)
+  const qc = useQueryClient();
   const acceptMutation = useMutation({
     mutationFn: () =>
       api.post(`/api/invites/${token}/accept/`).then((r) => r.data),
     onSuccess: (workspace) => {
       setAccepted(true);
+      qc.invalidateQueries({ queryKey: ["workspaces"] });
       setTimeout(() => navigate(`/w/${workspace.id}`), 2000);
     },
     onError: (err) => {

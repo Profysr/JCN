@@ -271,7 +271,7 @@ export default function MembersPage() {
   };
 
   return (
-    <div className="p-8 max-w-3xl space-y-6">
+    <div className="p-8 max-w-7xl space-y-6">
       {/* 1. Page Title Header Block */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Team Members</h1>
