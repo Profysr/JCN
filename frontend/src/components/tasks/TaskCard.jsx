@@ -12,7 +12,6 @@ export default function TaskCard({
   isBulkSelected,
   onToggleSelect,
   canEdit = true,
-  viewers = [],
 }) {
   const _p = getPriority(task.priority);
   const priority = { ..._p, dot: _p.dotCls, cls: _p.textCls }; // shape compat
@@ -156,12 +155,12 @@ export default function TaskCard({
                   {task.done_subtask_count}/{task.subtask_count}
                 </span>
               )}
-              {task.comment_count > 0 && (
+              {/* {task.comment_count > 0 && (
                 <span className="flex items-center gap-0.5 text-[11px]">
                   <MessageSquare className="w-3 h-3" />
                   {task.comment_count}
                 </span>
-              )}
+              )} */}
 
               {/* Approval badge — v3.6.0 */}
               {(task.pending_approval_count > 0 || task.approved_approval_count > 0) && (
@@ -177,27 +176,6 @@ export default function TaskCard({
                   <ShieldCheck className="w-3 h-3" />
                   {task.approved_approval_count}/{task.pending_approval_count + task.approved_approval_count}
                 </span>
-              )}
-
-              {/* Viewer avatar stack */}
-              {viewers.length > 0 && (
-                <div className="flex items-center -space-x-1 ml-auto">
-                  {viewers.slice(0, 3).map((v) => (
-                    <div key={v.user.id} title={`${v.user.full_name || v.user.email} is viewing`}>
-                      <Avatar
-                        name={v.user.display_name || v.user.full_name || v.user.email}
-                        src={v.user.avatar}
-                        size="xs"
-                        className="ring-1 ring-background"
-                      />
-                    </div>
-                  ))}
-                  {viewers.length > 3 && (
-                    <span className="text-[9px] text-muted-foreground pl-1.5">
-                      +{viewers.length - 3}
-                    </span>
-                  )}
-                </div>
               )}
 
               {task.assignee && (

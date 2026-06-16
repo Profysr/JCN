@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Droppable } from "@hello-pangea/dnd";
-import { Plus, ChevronLeft, ChevronRight, CheckCircle } from "lucide-react";
+import { Plus, ChevronLeft, CheckCircle, Expand, Minimize2 } from "lucide-react";
 import TaskCard from "./TaskCard";
 import { cn } from "@/lib/utils";
-import { Avatar } from "@/components/ui/avatar";
+import { Loader } from "@/components/ui/Loader";
 
 export default function KanbanColumn({
   column,
@@ -16,15 +16,16 @@ export default function KanbanColumn({
   workspaceId,
   boardId,
   canEdit,
-  columnViewers = [],
-  taskViewerMap = {},
 }) {
   const [collapsed, setCollapsed] = useState(false);
+  const [expanding, setExpanding] = useState(false);
 
   const handleExpand = () => {
-    // Defer the full column render by one frame so the browser can finish any
-    // in-progress paints before mounting all the task cards at once.
-    setTimeout(() => setCollapsed(false), 150);
+    setExpanding(true);
+    setTimeout(() => {
+      setExpanding(false);
+      setCollapsed(false);
+    }, 500);
   };
 
   if (collapsed) {
@@ -33,16 +34,8 @@ export default function KanbanColumn({
         className="flex flex-col items-center w-10 flex-shrink-0 rounded-md border border-t-[3px] border-border bg-card py-2 gap-3"
         style={{ borderTopColor: column.color }}
       >
-        <button
-          onClick={handleExpand}
-          className="text-muted-foreground hover:text-foreground p-0.5 rounded hover:bg-accent transition-colors"
-          title={`Expand ${column.name}`}
-        >
-          <ChevronRight className="w-3.5 h-3.5" />
-        </button>
-
         <span
-          className="flex-1 text-xs font-semibold text-foreground tracking-wide select-none"
+          className="flex-1 text-xs font-semibold text-foreground tracking-wide select-none whitespace-nowrap"
           style={{ writingMode: "vertical-rl" }}
         >
           {column.name}
@@ -51,33 +44,24 @@ export default function KanbanColumn({
         <span className="text-[11px] text-muted-foreground font-mono tabular-nums">
           {tasks.length}
         </span>
+
+        <button
+          onClick={handleExpand}
+          disabled={expanding}
+          className="text-muted-foreground hover:text-foreground p-0.5 rounded transition-colors disabled:cursor-default"
+          title={`Expand ${column.name}`}
+        >
+          {expanding
+            ? <Loader size="xs" className="" />
+            : <Expand size={16} />
+          }
+        </button>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col w-[272px] flex-shrink-0">
-      {/* Active-user avatar strip above header */}
-      {/* {columnViewers.length > 0 && (
-        <div className="flex items-center gap-1 px-2 pb-1">
-          {columnViewers.slice(0, 5).map((v) => (
-            <div key={v.user.id} title={v.user.full_name || v.user.email}>
-              <Avatar
-                name={v.user.display_name || v.user.full_name || v.user.email}
-                src={v.user.avatar}
-                size="xs"
-                className="ring-1 ring-background"
-              />
-            </div>
-          ))}
-          {columnViewers.length > 5 && (
-            <span className="text-[9px] text-muted-foreground">
-              +{columnViewers.length - 5}
-            </span>
-          )}
-        </div>
-      )} */}
-
+    <div className="flex flex-col w-[272px] flex-shrink-0 animate-column-expand">
       {/* Column header */}
       <div
         className="group flex items-center justify-between px-2 py-2 mb-1.5 rounded-t-md border-t-[3px] bg-card border-x border-border"
@@ -98,19 +82,19 @@ export default function KanbanColumn({
         <div className="flex items-center gap-0.5">
           <button
             onClick={() => setCollapsed(true)}
-            className="text-muted-foreground hover:text-foreground p-0.5 rounded hover:bg-accent transition-all opacity-0 group-hover:opacity-100"
+            className="text-muted-foreground hover:text-foreground p-0.5 rounded transition-all opacity-0 group-hover:opacity-100"
             title="Collapse column"
           >
-            <ChevronLeft className="w-3.5 h-3.5" />
+            <Minimize2 size={16} />
           </button>
 
           {canEdit && (
             <button
               onClick={() => onAddTask(column.id)}
-              className="text-muted-foreground hover:text-foreground p-0.5 rounded hover:bg-accent transition-colors"
+              className="text-muted-foreground hover:text-foreground p-0.5 rounded transition-colors"
               title={`Add task to ${column.name}`}
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus size={16} />
             </button>
           )}
         </div>
@@ -137,7 +121,6 @@ export default function KanbanColumn({
                 isBulkSelected={selectedIds.has(task.id)}
                 onToggleSelect={canEdit ? onToggleSelect : undefined}
                 canEdit={canEdit}
-                viewers={taskViewerMap[task.id] || []}
               />
             ))}
             {provided.placeholder}

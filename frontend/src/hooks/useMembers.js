@@ -9,6 +9,7 @@ export const useMembers = (workspaceId) =>
     queryFn: () =>
       api.get(`/api/workspaces/${workspaceId}/members/`).then((r) => r.data.results || r.data),
     enabled: !!workspaceId,
+    staleTime: Infinity, // members only change via mutations — each one already invalidates this key
   });
 
 export const useInviteMember = (workspaceId) => {
@@ -35,5 +36,18 @@ export const useRemoveMember = (workspaceId) => {
     mutationFn: (memberId) =>
       api.delete(`/api/workspaces/${workspaceId}/members/${memberId}/`),
     onSuccess: () => qc.invalidateQueries({ queryKey: membersKey(workspaceId) }),
+  });
+};
+
+// Accepts an invite by token. Invalidates workspaces + member list on success.
+// UI callbacks (navigate, setAccepted, setError) are passed at call-site via mutate's second arg.
+export const useAcceptInvite = (token) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post(`/api/invites/${token}/accept/`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["workspaces"] });
+      qc.invalidateQueries({ queryKey: ["workspace-members"] });
+    },
   });
 };

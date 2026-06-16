@@ -1,9 +1,10 @@
-import { lazy, Suspense, useState, useMemo, useEffect } from "react";
+import { lazy, Suspense, useState, useMemo, useEffect, useRef } from "react";
 import { Loader } from "@/components/ui/Loader";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { DragDropContext } from "@hello-pangea/dnd";
 import { useBoard } from "@/hooks/useProjects";
 import { useTasks, useMoveTask, useUpdateTask } from "@/hooks/useTasks";
+import { useDebounce } from "@/hooks/useDebounce";
 import { useLabels, useCreateLabel } from "@/hooks/useLabels";
 import { useMembers } from "@/hooks/useMembers";
 import { useCreateStatus } from "@/hooks/useStatusManagement";
@@ -30,6 +31,7 @@ import BulkActionBar from "@/components/tasks/BulkActionBar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@/components/ui/tooltip";
+import { OnlineUsersIndicator } from "@/components/ui/OnlineUsersIndicator";
 import {
   Plus,
   ArrowLeft,
@@ -152,8 +154,13 @@ export default function KanbanPage() {
 
   const { user } = useAuthStore();
   const { toast } = useToast();
+
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const debouncedSearch = useDebounce(filters.search, 350);
+  const apiFilters = { ...filters, search: debouncedSearch };
+
   const { data: board, isError: boardError, error: boardErrorDetail } = useBoard(workspaceId, boardId);
-  const { data: allTasks = [] } = useTasks(workspaceId, boardId);
+  const { data: allTasks = [] } = useTasks(workspaceId, boardId, apiFilters);
   const { data: labels = [] } = useLabels(workspaceId, boardId);
   const { data: members = [] } = useMembers(workspaceId);
   const { data: fields = [] } = useBoardFields(workspaceId, boardId);
@@ -186,8 +193,6 @@ export default function KanbanPage() {
     const param = searchParams.get("task") || null;
     setSelectedTaskId(param);
   }, [searchParams]);
-
-  const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [activeSprint, setActiveSprint] = useState(
     () => sprints.find((s) => s.status === "active") || null,
   );
@@ -241,15 +246,15 @@ export default function KanbanPage() {
   );
 
   // Map task-scoped presence to individual task cards
-  const taskViewerMap = useMemo(() => {
-    const map = {};
-    boardPresence
-      .filter((p) => p.resource_type === "task")
-      .forEach((p) => {
-        (map[p.resource_id] ||= []).push(p);
-      });
-    return map;
-  }, [boardPresence]);
+  // const taskViewerMap = useMemo(() => {
+  //   const map = {};
+  //   boardPresence
+  //     .filter((p) => p.resource_type === "task")
+  //     .forEach((p) => {
+  //       (map[p.resource_id] ||= []).push(p);
+  //     });
+  //   return map;
+  // }, [boardPresence]);
 
   const openTask = (taskId) => {
     setSelectedTaskId(taskId);
@@ -260,103 +265,61 @@ export default function KanbanPage() {
     setSearchParams({}, { replace: true });
   };
 
-  // Sprint mode: filter tasks by selected sprint
+  // Sprint view: further narrow the server-filtered list to the active sprint.
+  // All other filters are already applied by the backend via apiFilters.
   const tasks = useMemo(() => {
     if (view === "sprint" && activeSprint) {
-      return allTasks.filter((t) => t.sprint_detail?.id === activeSprint.id);
+      return allTasks.filter((t) => t.sprint_id === activeSprint.id);
     }
     return allTasks;
   }, [allTasks, view, activeSprint]);
 
   const backlogTasks = useMemo(
-    () => (view === "sprint" ? allTasks.filter((t) => !t.sprint_detail) : []),
+    () => (view === "sprint" ? allTasks.filter((t) => !t.sprint_id) : []),
     [allTasks, view],
   );
-
-  const filteredTasks = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const weekEnd = new Date(today);
-    weekEnd.setDate(today.getDate() + 7);
-
-    const searchLower = filters.search?.toLowerCase();
-
-    return tasks.filter((task) => {
-      // 1. Search Filter
-      if (searchLower && !task.title.toLowerCase().includes(searchLower)) {
-        return false;
-      }
-
-      // 2. Array-based Filters (Priorities, Assignees, Types)
-      if (
-        filters.priorities?.length &&
-        !filters.priorities.includes(task.priority)
-      ) {
-        return false;
-      }
-      if (
-        filters.assignees?.length &&
-        !filters.assignees.includes(task.assignee?.id)
-      ) {
-        return false;
-      }
-      if (filters.types?.length && !filters.types.includes(task.task_type)) {
-        return false;
-      }
-
-      // 3. Nested Array Filter (Labels)
-      if (
-        filters.labels?.length &&
-        !task.labels?.some((l) => filters.labels.includes(l.id))
-      ) {
-        return false;
-      }
-
-      // 4. Due Date Filter
-      if (filters.due?.length) {
-        if (!task.due_date) {
-          return filters.due.includes("no_date");
-        }
-
-        const dueDate = new Date(task.due_date + "T00:00:00");
-        const dueTime = dueDate.getTime();
-
-        const matchesOverdue =
-          filters.due.includes("overdue") && dueDate < today;
-        const matchesToday =
-          filters.due.includes("today") && dueTime === today.getTime();
-        const matchesWeek =
-          filters.due.includes("this_week") &&
-          dueDate >= today &&
-          dueDate <= weekEnd;
-
-        if (!matchesOverdue && !matchesToday && !matchesWeek) {
-          return false;
-        }
-      }
-
-      // If it passes all active filters, keep the task
-      return true;
-    });
-  }, [tasks, filters]);
 
   const handleDragEnd = (result) => {
     if (!result.destination) return;
     if (!perms.canEdit) return;
+
+    const { draggableId, source, destination } = result;
+
+    // No-op: dropped back in the exact same spot.
+    if (
+      source.droppableId === destination.droppableId &&
+      source.index === destination.index
+    ) return;
+
+    // Approval gate: block move to a done column if the task still has pending
+    // approvals — mirrors the server-side check so we never fire the request.
+    if (source.droppableId !== destination.droppableId) {
+      const destStatus = board?.statuses?.find((s) => s.id === destination.droppableId);
+      if (destStatus?.is_done) {
+        const task = tasks.find((t) => t.id === draggableId);
+        if (task?.pending_approval_count > 0) {
+          toast({
+            title: "Approval required",
+            description: "Resolve pending approvals before marking this task done.",
+            type: "error",
+          });
+          return;
+        }
+      }
+    }
+
     moveTask.mutate(
       {
-        taskId: result.draggableId,
-        status_id: result.destination.droppableId,
-        order: result.destination.index,
+        taskId: draggableId,
+        status_id: destination.droppableId,
+        order: destination.index,
       },
       {
         onError: (err) => {
           if (err?.response?.data?.approval_required) {
             toast({
               title: "Approval required",
-              description:
-                "Resolve pending approvals before marking this task done.",
+              description: "Resolve pending approvals before marking this task done.",
               type: "error",
             });
           }
@@ -366,7 +329,7 @@ export default function KanbanPage() {
   };
 
   const tasksByStatus = (statusId) =>
-    filteredTasks
+    tasks
       .filter((t) => t.status_detail?.id === statusId)
       .sort((a, b) => a.order - b.order);
 
@@ -432,16 +395,7 @@ export default function KanbanPage() {
                     {perms.role}
                   </Badge>
                 )}
-                {boardPresence.length > 0 && (
-                  <Tooltip
-                    content={`${boardPresence.length} ${boardPresence.length === 1 ? "person" : "people"} online`}
-                  >
-                    <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 text-[11px] font-medium cursor-default">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      {boardPresence.length} online
-                    </span>
-                  </Tooltip>
-                )}
+                <OnlineUsersIndicator users={boardPresence} />
               </div>
               {board?.description && (
                 <p className="text-xs text-muted-foreground leading-tight mt-0.5">
@@ -577,11 +531,11 @@ export default function KanbanPage() {
                     workspaceId={workspaceId}
                     boardId={boardId}
                     canEdit={perms.canEdit}
-                    columnViewers={boardPresence.filter(
-                      (p) =>
-                        p.resource_type === "board" && p.resource_id === col.id,
-                    )}
-                    taskViewerMap={taskViewerMap}
+                    // columnViewers={boardPresence.filter(
+                    //   (p) =>
+                    //     p.resource_type === "board" && p.resource_id === col.id,
+                    // )}
+                    // taskViewerMap={taskViewerMap}
                   />
                 ))}
                 {/* Add column button */}
@@ -598,7 +552,7 @@ export default function KanbanPage() {
 
         {view === "list" && (
           <ListView
-            tasks={filteredTasks}
+            tasks={tasks}
             statuses={board?.statuses || []}
             members={members}
             onTaskClick={(id) => openTask(id)}
@@ -629,12 +583,12 @@ export default function KanbanPage() {
                       workspaceId={workspaceId}
                       boardId={boardId}
                       canEdit={perms.canEdit}
-                      columnViewers={boardPresence.filter(
-                        (p) =>
-                          p.resource_type === "board" &&
-                          p.resource_id === col.id,
-                      )}
-                      taskViewerMap={taskViewerMap}
+                      // columnViewers={boardPresence.filter(
+                      //   (p) =>
+                      //     p.resource_type === "board" &&
+                      //     p.resource_id === col.id,
+                      // )}
+                      // taskViewerMap={taskViewerMap}
                     />
                   ))}
                 </div>
@@ -673,7 +627,7 @@ export default function KanbanPage() {
         {view === "calendar" && (
           <Suspense fallback={<Loader className="flex-1" />}>
             <CalendarView
-              tasks={filteredTasks}
+              tasks={tasks}
               statuses={board?.statuses || []}
               onTaskClick={openTask}
               onCreateTask={(date) =>
@@ -690,7 +644,7 @@ export default function KanbanPage() {
         {view === "timeline" && (
           <Suspense fallback={<Loader className="flex-1" />}>
             <GanttView
-              tasks={filteredTasks}
+              tasks={tasks}
               statuses={board?.statuses || []}
               members={members}
               sprints={sprints}

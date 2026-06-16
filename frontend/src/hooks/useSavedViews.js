@@ -8,6 +8,7 @@ export const useSavedViews = (workspaceId, boardId) =>
     queryKey: key(workspaceId, boardId),
     queryFn: () => api.get(`/api/workspaces/${workspaceId}/boards/${boardId}/saved-views/`).then(r => r.data),
     enabled: !!workspaceId && !!boardId,
+    staleTime: Infinity, // only changes via create/delete — both already invalidate this key
   });
 
 export const useCreateSavedView = (workspaceId, boardId) => {

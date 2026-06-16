@@ -69,9 +69,7 @@ function AssigneeFilter({ members, selected, onChange }) {
               className="ring-2 ring-background rounded-full hover:ring-destructive/50 transition-all"
             >
               <Avatar
-                name={
-                  m.user?.display_name || m.user?.full_name || m.user?.email
-                }
+                name={m.user?.full_name || m.user?.email}
                 src={m.user?.avatar}
                 size="sm"
               />
@@ -108,14 +106,12 @@ function AssigneeFilter({ members, selected, onChange }) {
                 className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-accent transition-colors text-left"
               >
                 <Avatar
-                  name={
-                    m.user?.display_name || m.user?.full_name || m.user?.email
-                  }
+                  name={m.user?.full_name || m.user?.email}
                   src={m.user?.avatar}
                   size="sm"
                 />
                 <span className="text-sm flex-1 truncate">
-                  {m.user?.display_name || m.user?.full_name || m.user?.email}
+                  {m.user?.full_name || m.user?.email}
                 </span>
                 {active && (
                   <Check className="w-3.5 h-3.5 text-primary flex-shrink-0" />
@@ -135,28 +131,39 @@ function AssigneeFilter({ members, selected, onChange }) {
 }
 
 /* ── Advanced filters dropdown ───────────────────────────────────────────── */
-function AdvancedFilters({ filters, onChange, labels }) {
+const FILTER_SECTIONS = [
+  { key: "types", title: "Task type", options: TASK_TYPES },
+  { key: "due", title: "Due date", options: DUE_OPTIONS },
+];
+
+export function AdvancedFilters({ filters = {}, onChange, labels = [] }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
+
   useClickOutside(ref, () => setOpen(false));
 
+  const { types = [], due = [], labels: activeLabels = [] } = filters;
+  const advancedActive = types.length + due.length + activeLabels.length;
+
   const toggleArr = (key, val) => {
-    const arr = filters[key] || [];
-    onChange({
-      ...filters,
-      [key]: arr.includes(val) ? arr.filter((v) => v !== val) : [...arr, val],
-    });
+    const currentArr = filters[key] || [];
+    const updatedArr = currentArr.includes(val)
+      ? currentArr.filter((v) => v !== val)
+      : [...currentArr, val];
+
+    onChange({ ...filters, [key]: updatedArr });
   };
 
-  const advancedActive =
-    (filters.types?.length || 0) +
-    (filters.labels?.length || 0) +
-    (filters.due?.length || 0);
+  const handleClearAll = () => {
+    onChange({ ...filters, types: [], labels: [], due: [] });
+    setOpen(false);
+  };
 
   return (
     <div ref={ref} className="relative">
+      {/* Trigger Button */}
       <button
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => setOpen((prev) => !prev)}
         className={cn(
           "flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border transition-colors",
           advancedActive > 0
@@ -174,61 +181,38 @@ function AdvancedFilters({ filters, onChange, labels }) {
         <ChevronDown className="w-3 h-3" />
       </button>
 
+      {/* Dropdown Menu */}
       {open && (
         <div className="absolute top-full right-0 mt-1.5 z-50 bg-popover border rounded-md shadow-popover p-3 w-64 space-y-4">
-          {/* Task type */}
-          <div>
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-              Task type
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {TASK_TYPES.map((t) => {
-                const active = (filters.types || []).includes(t.value);
-                return (
-                  <button
-                    key={t.value}
-                    onClick={() => toggleArr("types", t.value)}
-                    className={cn(
-                      "px-2 py-1 rounded text-xs font-medium border transition-colors",
-                      active
-                        ? "border-primary/40 bg-primary/10 text-primary"
-                        : "border-border text-muted-foreground hover:bg-accent",
-                    )}
-                  >
-                    {t.label}
-                  </button>
-                );
-              })}
+          {/* Standard Standard Sections (Task Type & Due Date) */}
+          {FILTER_SECTIONS.map(({ key, title, options }) => (
+            <div key={key}>
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                {title}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {options.map((opt) => {
+                  const isActive = (filters[key] || []).includes(opt.value);
+                  return (
+                    <button
+                      key={opt.value}
+                      onClick={() => toggleArr(key, opt.value)}
+                      className={cn(
+                        "px-2 py-1 rounded text-xs font-medium border transition-colors",
+                        isActive
+                          ? "border-primary/40 bg-primary/10 text-primary"
+                          : "border-border text-muted-foreground hover:bg-accent",
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          ))}
 
-          {/* Due date */}
-          <div>
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-              Due date
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {DUE_OPTIONS.map((d) => {
-                const active = (filters.due || []).includes(d.value);
-                return (
-                  <button
-                    key={d.value}
-                    onClick={() => toggleArr("due", d.value)}
-                    className={cn(
-                      "px-2 py-1 rounded text-xs font-medium border transition-colors",
-                      active
-                        ? "border-primary/40 bg-primary/10 text-primary"
-                        : "border-border text-muted-foreground hover:bg-accent",
-                    )}
-                  >
-                    {d.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Labels */}
+          {/* Dynamic Labels Section */}
           {labels.length > 0 && (
             <div>
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
@@ -236,20 +220,22 @@ function AdvancedFilters({ filters, onChange, labels }) {
               </p>
               <div className="flex flex-wrap gap-1.5">
                 {labels.map((l) => {
-                  const active = (filters.labels || []).includes(l.id);
+                  const isActive = activeLabels.includes(l.id);
                   return (
                     <button
                       key={l.id}
                       onClick={() => toggleArr("labels", l.id)}
                       className={cn(
                         "px-2 py-0.5 rounded-full text-xs font-medium border transition-colors",
-                        active ? "opacity-100" : "opacity-50 hover:opacity-75",
+                        isActive
+                          ? "opacity-100"
+                          : "opacity-50 hover:opacity-75",
                       )}
                       style={{
                         borderColor: l.color,
                         color: l.color,
-                        backgroundColor: active
-                          ? l.color + "22"
+                        backgroundColor: isActive
+                          ? `${l.color}22`
                           : "transparent",
                       }}
                     >
@@ -261,13 +247,10 @@ function AdvancedFilters({ filters, onChange, labels }) {
             </div>
           )}
 
-          {/* Clear advanced */}
+          {/* Clear Action Button */}
           {advancedActive > 0 && (
             <button
-              onClick={() => {
-                onChange({ ...filters, types: [], labels: [], due: [] });
-                setOpen(false);
-              }}
+              onClick={handleClearAll}
               className="w-full text-center text-xs text-muted-foreground hover:text-destructive transition-colors pt-1 border-t"
             >
               Clear advanced filters

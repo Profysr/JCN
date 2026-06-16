@@ -12,8 +12,6 @@ from .board import (
 
 from .tasks import (
     TaskStatusListCreateView,
-    TaskStatusDetailView,
-    TaskStatusReorderView,
     TaskStatusBulkUpdateView,
     TaskListCreateView,
     TaskDetailView,
@@ -94,8 +92,6 @@ __all__ = [
     "MyWorkView",
     # tasks
     "TaskStatusListCreateView",
-    "TaskStatusDetailView",
-    "TaskStatusReorderView",
     "TaskStatusBulkUpdateView",
     "TaskListCreateView",
     "TaskDetailView",

@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { Loader } from "@/components/ui/Loader";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "@/store/authStore";
+import { useAcceptInvite } from "@/hooks/useMembers";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { CheckCircle, XCircle, LogIn } from "lucide-react";
@@ -35,24 +36,18 @@ export default function AcceptInvitePage() {
     retry: false,
   });
 
-  const qc = useQueryClient();
-  const acceptMutation = useMutation({
-    mutationFn: () =>
-      api.post(`/api/invites/${token}/accept/`).then((r) => r.data),
-    onSuccess: (workspace) => {
-      setAccepted(true);
-      qc.invalidateQueries({ queryKey: ["workspaces"] });
-      setTimeout(() => navigate(`/w/${workspace.id}`), 2000);
-    },
-    onError: (err) => {
-      setError(err.response?.data?.detail || "Failed to accept invite.");
-    },
-  });
+  const acceptMutation = useAcceptInvite(token);
 
   // Auto-accept if user is already logged in with the right email
   useEffect(() => {
     if (invite && accessToken && user?.email === invite.email) {
-      acceptMutation.mutate();
+      acceptMutation.mutate(undefined, {
+        onSuccess: (workspace) => {
+          setAccepted(true);
+          setTimeout(() => navigate(`/w/${workspace.id}`), 2000);
+        },
+        onError: (err) => setError(err.response?.data?.detail || "Failed to accept invite."),
+      });
     }
   }, [invite, accessToken]);
 

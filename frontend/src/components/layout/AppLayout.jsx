@@ -39,6 +39,8 @@ export default function AppLayout() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState("me");
 
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
   const [focusModeUntil, setFocusModeUntil] = useState(() => {
     const stored = localStorage.getItem("jcn_focus_until");
     return stored ? parseInt(stored, 10) : null;
@@ -74,6 +76,8 @@ export default function AppLayout() {
         workspaceId={workspaceId}
         user={user}
         isFocusMode={isFocusMode}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed((v) => !v)}
         onOpenPalette={() => setPaletteOpen(true)}
         onOpenSettings={(tab) => {
           setSettingsTab(tab);

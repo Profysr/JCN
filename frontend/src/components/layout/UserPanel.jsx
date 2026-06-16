@@ -242,6 +242,7 @@ export default function UserPanel({
   workspace,
   workspaceId,
   isFocusMode,
+  collapsed = false,
   onEnableFocus,
   onDisableFocus,
   onOpenSettings,
@@ -287,12 +288,113 @@ export default function UserPanel({
     },
   ];
 
+  // Shared dropdown body used in both expanded and collapsed layouts
+  const dropdownContent = (
+    <>
+      {/* Profile header */}
+      <div className="flex items-center gap-3 px-3 py-2.5 mx-1 mt-1 mb-1 rounded-md bg-muted/40">
+        <div className="relative flex-shrink-0">
+          <Avatar name={name} size="lg" />
+          <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 ring-2 ring-popover" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold truncate leading-tight">{name}</p>
+          <p className="text-[11px] text-muted-foreground truncate leading-tight mt-0.5">
+            {user?.email}
+          </p>
+          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            Online
+          </span>
+        </div>
+      </div>
+
+      {/* Account / settings items */}
+      <div className="px-1">
+        {menuItems.map((item) => (
+          <DropdownItem
+            key={item.label}
+            icon={item.icon}
+            label={item.label}
+            onClick={action(item.onClick)}
+            shortcut={item.shortcut ?? undefined}
+          />
+        ))}
+      </div>
+
+      <div className="border-t border-border my-1" />
+
+      <WorkspaceSwitcherSection
+        workspaceId={workspaceId}
+        canCreate={user?.can_create_workspace ?? false}
+        onClose={() => setOpen(false)}
+      />
+
+      <div className="border-t border-border my-1" />
+      <div className="px-1">
+        <FocusModeSection
+          isFocusMode={isFocusMode}
+          onEnable={onEnableFocus}
+          onDisable={onDisableFocus}
+          onClose={() => setOpen(false)}
+        />
+      </div>
+      <div className="border-t border-border my-1" />
+      <ThemeSwitcher />
+      <div className="border-t border-border my-1" />
+
+      <div className="px-1">
+        <DropdownItem
+          icon={LogOut}
+          label="Sign out"
+          onClick={action(() => setConfirmLogout(true))}
+          variant="destructive"
+        />
+      </div>
+    </>
+  );
+
+  const confirmModal = confirmLogout && (
+    <ConfirmModal
+      title="Sign out?"
+      message="Are you sure you want to log out? You'll be returned to the login screen."
+      confirmLabel="Sign out"
+      onConfirm={() => {
+        setConfirmLogout(false);
+        onLogout();
+      }}
+      onCancel={() => setConfirmLogout(false)}
+    />
+  );
+
+  // ── Collapsed: just the avatar, dropdown flies out to the right ──────────────
+  if (collapsed) {
+    return (
+      <div ref={ref} className="border-t border-border/60 py-3 flex justify-center relative">
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="relative"
+          title={name}
+          aria-label="Account menu"
+        >
+          <Avatar name={name} size="md" />
+          <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-[hsl(var(--sidebar-bg))]" />
+        </button>
+
+        {open && (
+          <div className="absolute left-full bottom-0 ml-2 z-50 w-64 bg-popover border border-border rounded-md shadow-popover py-1 animate-scale-in origin-bottom-left">
+            {dropdownContent}
+          </div>
+        )}
+
+        {confirmModal}
+      </div>
+    );
+  }
+
+  // ── Expanded: full trigger row, dropdown opens upward ────────────────────────
   return (
-    <div
-      ref={ref}
-      className="px-3 pb-3 pt-2 border-t border-border/60 relative"
-    >
-      {/* Trigger row */}
+    <div ref={ref} className="px-3 pb-3 pt-2 border-t border-border/60 relative">
       <div className="flex items-center gap-1 px-1.5 py-1.5 rounded-lg hover:bg-accent transition-colors group">
         <button
           onClick={() => setOpen((v) => !v)}
@@ -322,87 +424,13 @@ export default function UserPanel({
         </button>
       </div>
 
-      {/* Dropdown */}
       {open && (
         <div className="absolute left-3 right-3 bottom-full mb-1 z-50 bg-popover border border-border rounded-md shadow-popover py-1 animate-scale-in origin-bottom">
-          {/* Profile header */}
-          <div className="flex items-center gap-3 px-3 py-2.5 mx-1 mt-1 mb-1 rounded-md bg-muted/40">
-            <div className="relative flex-shrink-0">
-              <Avatar name={name} size="lg" />
-              <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 ring-2 ring-popover" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm font-semibold truncate leading-tight">
-                {name}
-              </p>
-              <p className="text-[11px] text-muted-foreground truncate leading-tight mt-0.5">
-                {user?.email}
-              </p>
-              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                Online
-              </span>
-            </div>
-          </div>
-
-          {/* Account / settings items */}
-          <div className="px-1">
-            {menuItems.map((item) => (
-              <DropdownItem
-                key={item.label}
-                icon={item.icon}
-                label={item.label}
-                onClick={action(item.onClick)}
-                shortcut={item.shortcut ?? undefined}
-              />
-            ))}
-          </div>
-
-          <div className="border-t border-border my-1" />
-
-          {/* Workspace switcher — after profile */}
-          <WorkspaceSwitcherSection
-            workspaceId={workspaceId}
-            canCreate={user?.can_create_workspace ?? false}
-            onClose={() => setOpen(false)}
-          />
-
-          <div className="border-t border-border my-1" />
-          <div className="px-1">
-            <FocusModeSection
-              isFocusMode={isFocusMode}
-              onEnable={onEnableFocus}
-              onDisable={onDisableFocus}
-              onClose={() => setOpen(false)}
-            />
-          </div>
-          <div className="border-t border-border my-1" />
-          <ThemeSwitcher />
-          <div className="border-t border-border my-1" />
-
-          <div className="px-1">
-            <DropdownItem
-              icon={LogOut}
-              label="Sign out"
-              onClick={action(() => setConfirmLogout(true))}
-              variant="destructive"
-            />
-          </div>
+          {dropdownContent}
         </div>
       )}
 
-      {confirmLogout && (
-        <ConfirmModal
-          title="Sign out?"
-          message="Are you sure you want to log out? You'll be returned to the login screen."
-          confirmLabel="Sign out"
-          onConfirm={() => {
-            setConfirmLogout(false);
-            onLogout();
-          }}
-          onCancel={() => setConfirmLogout(false)}
-        />
-      )}
+      {confirmModal}
     </div>
   );
 }

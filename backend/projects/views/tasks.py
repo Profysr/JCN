@@ -33,6 +33,7 @@ from ..serializers import (
     TaskStatusSerializer,
     BulkStatusUpdateSerializer,
     TaskSerializer,
+    TaskCardSerializer,
     TaskDetailSerializer,
     SubTaskSerializer,
     TaskCommentSerializer,
@@ -59,6 +60,7 @@ from .helpers import (
     _get_subtask,
     _task_list_qs,
     _task_detail_qs,
+    _apply_task_filters,
     _log_task_patch_changes,
     _require_board_perm,
     broadcast,
@@ -85,10 +87,12 @@ class TaskStatusListCreateView(APIView):
         # 4. Fallback: If the board has 0 columns, start at 0
         # 5. Add 1 to get the next position: 4
         next_order = (
-            board.statuses.order_by("-order").values_list("order", flat=True).first() or 0
+            board.statuses.order_by("-order").values_list("order", flat=True).first()
+            or 0
         ) + 1
         serializer.save(board=board, order=next_order)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
 
 def _guard_deletions(existing, incoming_ids):
     """Return an error string if any status being removed still has tasks, else None."""
@@ -105,19 +109,21 @@ def _apply_status_items(board, existing, items):
         sid = str(item.get("id", ""))
         if sid in existing:
             s = existing[sid]
-            s.name    = item["name"]
-            s.color   = item["color"]
+            s.name = item["name"]
+            s.color = item["color"]
             s.is_done = item["is_done"]
-            s.order   = i
+            s.order = i
             to_update.append(s)
         else:
-            to_create.append(TaskStatus(
-                board=board,
-                name=item["name"],
-                color=item["color"],
-                is_done=item["is_done"],
-                order=i,
-            ))
+            to_create.append(
+                TaskStatus(
+                    board=board,
+                    name=item["name"],
+                    color=item["color"],
+                    is_done=item["is_done"],
+                    order=i,
+                )
+            )
     if to_create:
         TaskStatus.objects.bulk_create(to_create)
     return to_update
@@ -142,43 +148,64 @@ class TaskStatusBulkUpdateView(APIView):
 
             board.statuses.exclude(id__in=incoming_ids).delete()
             to_update = _apply_status_items(board, existing, items)
-            TaskStatus.objects.bulk_update(to_update, ["name", "color", "is_done", "order"])
+            TaskStatus.objects.bulk_update(
+                to_update, ["name", "color", "is_done", "order"]
+            )
 
         return Response(TaskStatusSerializer(board.statuses.all(), many=True).data)
 
-# ── Tasks ─────────────────────────────────────────────────────────────────────
+
+# ── Task helpers ──────────────────────────────────────────────────────────────
+def _check_version_conflict(task, incoming_version):
+    """Return a 409 Response if the client's version is stale, else None."""
+    if incoming_version is not None and int(incoming_version) != task.version:
+        return Response(
+            {
+                "conflict": True,
+                "current_version": task.version,
+                "updated_at": task.updated_at.isoformat(),
+            },
+            status=status.HTTP_409_CONFLICT,
+        )
+    return None
+
+
+def _broadcast_task_card(workspace_id, task_pk, event="task.updated"):
+    """Re-fetch task with card annotations, broadcast to kanban clients, return the task."""
+    card_task = _task_list_qs().get(pk=task_pk)
+    broadcast(workspace_id, event, TaskCardSerializer(card_task).data)
+    return card_task
+
+
+# ── Tasks ✅────────────────────────────────────────────────────────────────────
 class TaskListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_id, project_id):
         board = _get_board(workspace_id, project_id, request.user)
         tasks = _task_list_qs().filter(board=board)
-
-        sprint_param = request.query_params.get("sprint")
-        if sprint_param == "none":
-            tasks = tasks.filter(sprint__isnull=True)
-        elif sprint_param:
-            tasks = tasks.filter(sprint_id=sprint_param)
-
-        # Optional date-range filter (used by calendar view)
-        start = request.query_params.get("start")
-        end   = request.query_params.get("end")
-        if start:
-            tasks = tasks.filter(due_date__gte=start)
-        if end:
-            tasks = tasks.filter(due_date__lte=end)
-
-        return Response(TaskSerializer(tasks, many=True, context={"request": request}).data)
+        tasks = _apply_task_filters(tasks, request.query_params, user=request.user)
+        return Response(TaskCardSerializer(tasks, many=True).data)
 
     def post(self, request, workspace_id, project_id):
         board = _get_board(workspace_id, project_id, request.user)
         serializer = TaskSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         task = serializer.save(board=board)
+
+        # Logging who created task, and whom assigned to
         log_activity(task, request.user, TaskActivity.Verb.CREATED)
         if task.assignee and task.assignee != request.user:
-            notify(task.assignee, request.user, InboxItem.Verb.TASK_ASSIGNED, board.workspace, task)
-        data = TaskSerializer(task, context={"request": request}).data
+            notify(
+                task.assignee,
+                request.user,
+                InboxItem.Verb.TASK_ASSIGNED,
+                board.workspace,
+                task,
+            )
+
+        task = _task_list_qs().get(pk=task.pk)
+        data = TaskCardSerializer(task).data
         broadcast(workspace_id, "task.created", data)
         return Response(data, status=status.HTTP_201_CREATED)
 
@@ -187,89 +214,101 @@ class TaskDetailView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_id, project_id, task_id):
-        task = _get_task(workspace_id, project_id, task_id, request.user, qs=_task_detail_qs())
+        task = _get_task(
+            workspace_id, project_id, task_id, request.user, qs=_task_detail_qs()
+        )
         return Response(TaskDetailSerializer(task, context={"request": request}).data)
 
     def patch(self, request, workspace_id, project_id, task_id):
-        task = _get_task(workspace_id, project_id, task_id, request.user, qs=_task_detail_qs())
+        task = _get_task(
+            workspace_id, project_id, task_id, request.user, qs=_task_list_qs()
+        )
 
-        # Optimistic locking: reject writes that are based on a stale version
-        incoming_version = request.data.get("version")
-        if incoming_version is not None and int(incoming_version) != task.version:
-            return Response(
-                {
-                    "conflict": True,
-                    "current_version": task.version,
-                    "updated_at": task.updated_at.isoformat(),
-                },
-                status=status.HTTP_409_CONFLICT,
-            )
+        conflict = _check_version_conflict(task, request.data.get("version"))
+        if conflict:
+            return conflict
 
-        old_status   = task.status
-        old_priority = task.priority
-        old_assignee = task.assignee
+        old_status, old_priority, old_assignee = task.status, task.priority, task.assignee
 
-        serializer = TaskSerializer(task, data=request.data, partial=True, context={"request": request})
+        serializer = TaskSerializer(
+            task, data=request.data, partial=True, context={"request": request}
+        )
         serializer.is_valid(raise_exception=True)
         serializer.save()
         Task.objects.filter(pk=task.pk).update(version=task.version + 1)
-        task.refresh_from_db()
 
-        _log_task_patch_changes(task, request.user, request.data, old_status, old_priority, old_assignee)
+        # Broadcast card-level data to kanban clients; log after so activity
+        # is recorded against the already-saved state.
+        card_task = _broadcast_task_card(workspace_id, task.pk)
+        _log_task_patch_changes(card_task, request.user, request.data, old_status, old_priority, old_assignee)
 
-        data = TaskSerializer(task, context={"request": request}).data
-        broadcast(workspace_id, "task.updated", data)
-        return Response(data)
+        # Return full detail data so TaskDetailPanel gets a fresh snapshot
+        # (subtasks, comments, activities, field_values, etc.)
+        detail_task = _task_detail_qs().get(pk=task.pk)
+        return Response(TaskDetailSerializer(detail_task, context={"request": request}).data)
 
     def delete(self, request, workspace_id, project_id, task_id):
         task = _get_task(workspace_id, project_id, task_id, request.user)
         task_id_str = str(task.id)
         task.delete()
-        broadcast(workspace_id, "task.deleted", {"id": task_id_str, "board_id": str(project_id)})
+        broadcast(
+            workspace_id,
+            "task.deleted",
+            {"id": task_id_str, "board_id": str(project_id)},
+        )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-# ── Task Move (Kanban drag & drop) ────────────────────────────────────────────
+# ── Task Move (Kanban drag & drop) ✅───────────────────────────────────────────
+def _check_move_blocked(task, task_status):
+    """Return a 403 Response if the move should be blocked, else None."""
+    if task_status.is_done and task.approvals.filter(status=Approval.Status.PENDING).exists():
+        return Response(
+            {
+                "approval_required": True,
+                "detail": "This task has pending approvals. Resolve them before marking it done.",
+            },
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    return None
+
+
 class TaskMoveView(APIView):
     """PATCH: atomically update a task's status column and sort order."""
 
     permission_classes = [permissions.IsAuthenticated]
 
     def patch(self, request, workspace_id, project_id, task_id):
-        board      = _get_board(workspace_id, project_id, request.user)
-        task       = get_object_or_404(Task, id=_parse_pk(task_id), board=board)
+        board = _get_board(workspace_id, project_id, request.user)
+        task = get_object_or_404(Task, id=_parse_pk(task_id), board=board)
         old_status = task.status
 
         status_id = request.data.get("status_id")
-        order     = request.data.get("order")
+        order = request.data.get("order")
 
         if status_id is not None:
             task_status = get_object_or_404(TaskStatus, id=status_id, board=board)
-            # Approval gate: block move to a done column while any approval is still pending.
-            # (changes_requested / rejected are closed states — those are fine to pass.)
-            if task_status.is_done and task.approvals.filter(status=Approval.Status.PENDING).exists():
-                return Response(
-                    {
-                        "approval_required": True,
-                        "detail": "This task has pending approvals. Resolve them before marking it done.",
-                    },
-                    status=status.HTTP_403_FORBIDDEN,
-                )
+            blocked = _check_move_blocked(task, task_status)
+            if blocked:
+                return blocked
             task.status = task_status
+
         if order is not None:
             task.order = order
 
         task.save(update_fields=["status", "order", "updated_at"])
 
         if task.status != old_status:
-            log_activity(task, request.user, TaskActivity.Verb.STATUS, {
-                "from": old_status.name if old_status else None,
-                "to":   task.status.name if task.status else None,
-            })
+            log_activity(
+                task,
+                request.user,
+                TaskActivity.Verb.STATUS,
+                {"from": old_status.name if old_status else None, "to": task.status.name},
+            )
 
-        data = TaskSerializer(task, context={"request": request}).data
-        broadcast(workspace_id, "task.moved", data)
-        return Response(data)
+        # Both broadcast and response use card shape — move only affects the kanban board.
+        card_task = _broadcast_task_card(workspace_id, task.pk, event="task.moved")
+        return Response(TaskCardSerializer(card_task).data)
 
 
 # ── Subtasks ──────────────────────────────────────────────────────────────────
@@ -285,7 +324,9 @@ class SubTaskListCreateView(APIView):
         serializer = SubTaskSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         subtask = serializer.save(task=task)
-        log_activity(task, request.user, TaskActivity.Verb.SUBTASK, {"title": subtask.title})
+        log_activity(
+            task, request.user, TaskActivity.Verb.SUBTASK, {"title": subtask.title}
+        )
         return Response(SubTaskSerializer(subtask).data, status=status.HTTP_201_CREATED)
 
 
@@ -293,14 +334,18 @@ class SubTaskDetailView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def patch(self, request, workspace_id, project_id, task_id, subtask_id):
-        subtask = _get_subtask(workspace_id, project_id, task_id, subtask_id, request.user)
+        subtask = _get_subtask(
+            workspace_id, project_id, task_id, subtask_id, request.user
+        )
         serializer = SubTaskSerializer(subtask, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
 
     def delete(self, request, workspace_id, project_id, task_id, subtask_id):
-        subtask = _get_subtask(workspace_id, project_id, task_id, subtask_id, request.user)
+        subtask = _get_subtask(
+            workspace_id, project_id, task_id, subtask_id, request.user
+        )
         subtask.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -518,8 +563,9 @@ class TaskFieldValueView(APIView):
         return Response(TaskFieldValueSerializer(field_value).data)
 
 
-# ── Saved Views (v0.8.0) ──────────────────────────────────────────────────────
+# ── Saved Views (v0.8.0) ✅─────────────────────────────────────────────────────
 class SavedViewListCreateView(APIView):
+    """Helps to store the filter views so that user can choose from existing filtered views"""
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_id, project_id):

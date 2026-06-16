@@ -94,6 +94,15 @@ export default {
         14: "var(--space-14)",
         16: "var(--space-16)",
       },
+      keyframes: {
+        "column-expand": {
+          "0%":   { opacity: "0", transform: "translateX(-12px) scaleY(0.97)" },
+          "100%": { opacity: "1", transform: "translateX(0)     scaleY(1)" },
+        },
+      },
+      animation: {
+        "column-expand": "column-expand 280ms cubic-bezier(0.16,1,0.3,1) forwards",
+      },
       transitionTimingFunction: {
         "ease-out-expo": "var(--ease-out)",
         spring: "var(--ease-spring)",

@@ -20,15 +20,17 @@ export function useWorkspaceSocket(workspaceId) {
       const { type, payload } = JSON.parse(e.data);
 
       // ── Task events ────────────────────────────────────────────
+      // All use setQueriesData (prefix match) because useTasks stores data under a
+      // 4-element key ["tasks", workspaceId, boardId, filters]. setQueryData (exact match)
+      // would miss it and write to a ghost entry nobody reads.
       if (type === "task.created") {
-        qc.setQueryData(["tasks", workspaceId, payload.project_id], (old) => {
-          if (!old) return [payload];
-          return old.find((t) => t.id === payload.id) ? old : [...old, payload];
-        });
+        // Invalidate so the refetch respects active filters — we can't know if the new
+        // task matches whatever filters are currently applied.
+        qc.invalidateQueries({ queryKey: ["tasks", workspaceId, payload.project_id] });
       }
 
       if (type === "task.updated") {
-        qc.setQueryData(["tasks", workspaceId, payload.project_id], (old) => {
+        qc.setQueriesData({ queryKey: ["tasks", workspaceId, payload.project_id] }, (old) => {
           if (!old) return old;
           return old.map((t) => (t.id === payload.id ? payload : t));
         });
@@ -38,7 +40,7 @@ export function useWorkspaceSocket(workspaceId) {
         // Merge server data but KEEP the optimistic `order` value already in the cache.
         // The server recalculates order server-side; our DnD position is already visually
         // correct. Using the server order would re-sort columns and cause a visible flicker.
-        qc.setQueryData(["tasks", workspaceId, payload.project_id], (old) => {
+        qc.setQueriesData({ queryKey: ["tasks", workspaceId, payload.project_id] }, (old) => {
           if (!old) return old;
           return old.map((t) =>
             t.id === payload.id
@@ -49,7 +51,7 @@ export function useWorkspaceSocket(workspaceId) {
       }
 
       if (type === "task.deleted") {
-        qc.setQueryData(["tasks", workspaceId, payload.project_id], (old) =>
+        qc.setQueriesData({ queryKey: ["tasks", workspaceId, payload.project_id] }, (old) =>
           old?.filter((t) => t.id !== payload.id)
         );
       }

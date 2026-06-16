@@ -47,7 +47,9 @@ from ..models import (
     KeyResult,
 )
 from ..serializers import (
-    BoardSerializer, BoardMiniSerializer, PortfolioBoardSerializer,
+    BoardSerializer,
+    BoardMiniSerializer,
+    PortfolioBoardSerializer,
     TaskStatusSerializer,
     BulkStatusUpdateSerializer,
     TaskSerializer,
@@ -87,6 +89,7 @@ from ..serializers import (
 )
 from ..permissions import has_project_permission, log_audit
 
+
 def _parse_pk(value):
     """Accepts a prefixed ID (e.g. 'brd_018e...') or a plain UUID string."""
     try:
@@ -94,8 +97,10 @@ def _parse_pk(value):
     except (ValueError, AttributeError, TypeError):
         return value
 
+
 def get_workspace_for_user(workspace_id, user):
     return get_object_or_404(Workspace, id=_parse_pk(workspace_id), members__user=user)
+
 
 def _is_workspace_admin(workspace, user):
     return WorkspaceMember.objects.filter(
@@ -123,10 +128,81 @@ def _get_subtask(workspace_id, board_id, task_id, subtask_id, user):
 
 
 def _task_list_qs():
-    """Queryset for task list endpoints — no activity/comment detail (too heavy)."""
-    return Task.objects.select_related(
-        "status", "assignee", "created_by", "sprint"
-    ).prefetch_related("subtasks", "comments", "labels", "blocked_by_deps")
+    """Queryset for task card/list endpoints.
+
+    Annotations compute all five count fields that TaskCardSerializer renders
+    so no per-task COUNT queries fire. prefetch_related("subtasks") and
+    ("comments") are intentionally absent — .count() bypasses the prefetch
+    cache and would fire anyway.
+    """
+    from django.db.models import Count, Q as DQ
+
+    return (
+        Task.objects.select_related("status", "assignee", "sprint")
+        .prefetch_related("labels", "blocked_by_deps")
+        .annotate(
+            _subtask_count=Count("subtasks", distinct=True),
+            _done_subtask_count=Count(
+                "subtasks", filter=DQ(subtasks__is_done=True), distinct=True
+            ),
+            _pending_approval_count=Count(
+                "approvals",
+                filter=DQ(approvals__status__in=["pending", "changes_requested"]),
+                distinct=True,
+            ),
+            _approved_approval_count=Count(
+                "approvals",
+                filter=DQ(approvals__status="approved"),
+                distinct=True,
+            ),
+        )
+    )
+
+
+def _apply_task_filters(qs, params, user=None):
+    """Apply FilterBar query params to a Task queryset. All params are optional."""
+    search = params.get("search", "").strip()
+    if search:
+        qs = qs.filter(title__icontains=search)
+
+    priorities = params.getlist("priority")
+    if priorities:
+        qs = qs.filter(priority__in=priorities)
+
+    assignees = params.getlist("assignee")
+    if assignees:
+        qs = qs.filter(assignee_id__in=assignees)
+
+    labels = params.getlist("label")
+    if labels:
+        qs = qs.filter(labels__id__in=labels).distinct()
+
+    types = params.getlist("type")
+    if types:
+        qs = qs.filter(task_type__in=types)
+
+    due = params.getlist("due")
+    if due:
+        today = timezone.now().date()
+        week_end = today + datetime.timedelta(days=7)
+        due_q = Q()
+        if "overdue" in due:
+            due_q |= Q(due_date__lt=today, due_date__isnull=False)
+        if "today" in due:
+            due_q |= Q(due_date=today)
+        if "this_week" in due:
+            due_q |= Q(due_date__gte=today, due_date__lte=week_end)
+        if "no_date" in due:
+            due_q |= Q(due_date__isnull=True)
+        qs = qs.filter(due_q)
+
+    if params.get("pending_approval") == "true" and user:
+        qs = qs.filter(
+            approvals__reviewer__user=user,
+            approvals__status__in=["pending", "changes_requested"],
+        ).distinct()
+
+    return qs
 
 
 def _task_detail_qs():
@@ -322,7 +398,9 @@ _PERM_MSG = {"admin": "Admin role required.", "edit": "Editor role required."}
 
 def _require_board_perm(user, board, role):
     if not has_project_permission(user, board, role):
-        raise PermissionDenied(_PERM_MSG.get(role, f"{role.capitalize()} role required."))
+        raise PermissionDenied(
+            _PERM_MSG.get(role, f"{role.capitalize()} role required.")
+        )
 
 
 def _require_board_admin(request, workspace_id, board_id):
