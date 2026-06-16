@@ -139,7 +139,7 @@ export default function Sidebar({
                                 to={item.to}
                                 className={({ isActive }) =>
                                   cn(
-                                    "flex items-center gap-2 rounded px-3 py-1.5 text-sm transition-colors",
+                                    "flex items-center gap-2 rounded px-3 py-1.5 text-xs transition-colors",
                                     isActive
                                       ? "bg-primary/10 text-primary font-medium"
                                       : "text-muted-foreground hover:bg-accent hover:text-foreground",
@@ -148,7 +148,7 @@ export default function Sidebar({
                               >
                                 <span
                                   className={cn(
-                                    "w-2 h-2 rounded-sm flex-shrink-0",
+                                    "w-1.5 h-1.5 rounded flex-shrink-0",
                                     item.colorClass,
                                   )}
                                 />

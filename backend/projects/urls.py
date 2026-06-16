@@ -4,7 +4,6 @@ from .views import (
     BoardDetailView,
     BoardMemberListCreateView,
     BoardMemberDetailView,
-    ProjectPermissionsView,
     UserPresenceView,
     CommentReactionToggleView,
     ApprovalListCreateView,
@@ -18,6 +17,7 @@ from .views import (
     TaskStatusListCreateView,
     TaskStatusDetailView,
     TaskStatusReorderView,
+    TaskStatusBulkUpdateView,
     TaskListCreateView,
     TaskDetailView,
     TaskMoveView,
@@ -82,9 +82,9 @@ urlpatterns = [
     # Board members & permissions
     path(f"{_pr}/members/", BoardMemberListCreateView.as_view()),
     path(f"{_pr}/members/<str:member_id>/", BoardMemberDetailView.as_view()),
-    path(f"{_pr}/my-permissions/", ProjectPermissionsView.as_view()),
     # Kanban columns
     path(f"{_pr}/statuses/", TaskStatusListCreateView.as_view()),
+    path(f"{_pr}/statuses/bulk/", TaskStatusBulkUpdateView.as_view()),
     path(f"{_pr}/statuses/reorder/", TaskStatusReorderView.as_view()),
     path(f"{_pr}/statuses/<str:status_id>/", TaskStatusDetailView.as_view()),
     # Tasks

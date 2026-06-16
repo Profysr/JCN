@@ -152,7 +152,7 @@ export default function KanbanPage() {
 
   const { user } = useAuthStore();
   const { toast } = useToast();
-  const { data: project } = useBoard(workspaceId, boardId);
+  const { data: board, isError: boardError, error: boardErrorDetail } = useBoard(workspaceId, boardId);
   const { data: allTasks = [] } = useTasks(workspaceId, boardId);
   const { data: labels = [] } = useLabels(workspaceId, boardId);
   const { data: members = [] } = useMembers(workspaceId);
@@ -212,7 +212,7 @@ export default function KanbanPage() {
       );
       const link = document.createElement("a");
       link.href = url;
-      link.download = `${project?.name || "tasks"}-tasks.csv`;
+      link.download = `${board?.name || "tasks"}-tasks.csv`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -224,7 +224,7 @@ export default function KanbanPage() {
 
   useWorkspaceSocket(workspaceId);
 
-  // v3.9.0 — `c` shortcut creates a task in the current project
+  // v3.9.0 — `c` shortcut creates a task in the current board
   useEffect(() => {
     const handler = () =>
       setCreateModal({ open: true, statusId: null, date: null });
@@ -232,7 +232,7 @@ export default function KanbanPage() {
     return () => window.removeEventListener("jcn:create-task", handler);
   }, []);
 
-  // v3.5.0 — announce presence for this project board
+  // v3.5.0 — announce presence for this board board
   useAnnouncePresence(workspaceId, "board", boardId);
   const { data: boardPresence = [] } = usePresence(
     workspaceId,
@@ -276,41 +276,69 @@ export default function KanbanPage() {
   const filteredTasks = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+
     const weekEnd = new Date(today);
     weekEnd.setDate(today.getDate() + 7);
-    let result = tasks;
-    if (filters.search)
-      result = result.filter((t) =>
-        t.title.toLowerCase().includes(filters.search.toLowerCase()),
-      );
-    if (filters.priorities?.length)
-      result = result.filter((t) => filters.priorities.includes(t.priority));
-    if (filters.assignees?.length)
-      result = result.filter((t) => filters.assignees.includes(t.assignee?.id));
-    if (filters.labels?.length)
-      result = result.filter((t) =>
-        t.labels?.some((l) => filters.labels.includes(l.id)),
-      );
-    if (filters.types?.length)
-      result = result.filter((t) => filters.types.includes(t.task_type));
-    if (filters.due?.length) {
-      result = result.filter((t) => {
-        if (!t.due_date && filters.due.includes("no_date")) return true;
-        if (!t.due_date) return false;
-        const d = new Date(t.due_date + "T00:00:00");
-        if (filters.due.includes("overdue") && d < today) return true;
-        if (filters.due.includes("today") && d.getTime() === today.getTime())
-          return true;
-        if (filters.due.includes("this_week") && d >= today && d <= weekEnd)
-          return true;
+
+    const searchLower = filters.search?.toLowerCase();
+
+    return tasks.filter((task) => {
+      // 1. Search Filter
+      if (searchLower && !task.title.toLowerCase().includes(searchLower)) {
         return false;
-      });
-    }
-    // v3.6.0 — pending my approval: show tasks that have a pending approval
-    if (filters.pendingMyApproval) {
-      result = result.filter((t) => t.pending_approval_count > 0);
-    }
-    return result;
+      }
+
+      // 2. Array-based Filters (Priorities, Assignees, Types)
+      if (
+        filters.priorities?.length &&
+        !filters.priorities.includes(task.priority)
+      ) {
+        return false;
+      }
+      if (
+        filters.assignees?.length &&
+        !filters.assignees.includes(task.assignee?.id)
+      ) {
+        return false;
+      }
+      if (filters.types?.length && !filters.types.includes(task.task_type)) {
+        return false;
+      }
+
+      // 3. Nested Array Filter (Labels)
+      if (
+        filters.labels?.length &&
+        !task.labels?.some((l) => filters.labels.includes(l.id))
+      ) {
+        return false;
+      }
+
+      // 4. Due Date Filter
+      if (filters.due?.length) {
+        if (!task.due_date) {
+          return filters.due.includes("no_date");
+        }
+
+        const dueDate = new Date(task.due_date + "T00:00:00");
+        const dueTime = dueDate.getTime();
+
+        const matchesOverdue =
+          filters.due.includes("overdue") && dueDate < today;
+        const matchesToday =
+          filters.due.includes("today") && dueTime === today.getTime();
+        const matchesWeek =
+          filters.due.includes("this_week") &&
+          dueDate >= today &&
+          dueDate <= weekEnd;
+
+        if (!matchesOverdue && !matchesToday && !matchesWeek) {
+          return false;
+        }
+      }
+
+      // If it passes all active filters, keep the task
+      return true;
+    });
   }, [tasks, filters]);
 
   const handleDragEnd = (result) => {
@@ -347,6 +375,36 @@ export default function KanbanPage() {
     updateTask.mutate({ taskId: task.id, sprint_id: activeSprint.id });
   };
 
+  if (boardError) {
+    const is403 = boardErrorDetail?.response?.status === 403;
+    const is404 = boardErrorDetail?.response?.status === 404;
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="text-center space-y-3 max-w-sm px-4">
+          <div className="flex justify-center">
+            <div className="p-4 rounded-full bg-muted">
+              <Lock className="w-7 h-7 text-muted-foreground" />
+            </div>
+          </div>
+          <h2 className="text-base font-semibold">
+            {is404 ? "Board not found" : "Access denied"}
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            {is403 || is404
+              ? "This board is private. Ask a board admin to add you as a member."
+              : "You don't have permission to view this board."}
+          </p>
+          <button
+            onClick={() => navigate(`/w/${workspaceId}/boards`)}
+            className="text-sm text-primary hover:underline"
+          >
+            Back to boards
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full overflow-hidden">
       <div className="flex flex-col flex-1 min-w-0">
@@ -362,10 +420,10 @@ export default function KanbanPage() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="font-bold text-base leading-tight">
-                  {project?.name}
+                  {board?.name}
                 </h1>
-                {project?.is_private && (
-                  <Tooltip content="Private project">
+                {board?.is_private && (
+                  <Tooltip content="Private board">
                     <Lock className="w-3.5 h-3.5 text-amber-500" />
                   </Tooltip>
                 )}
@@ -385,78 +443,66 @@ export default function KanbanPage() {
                   </Tooltip>
                 )}
               </div>
-              {project?.description && (
+              {board?.description && (
                 <p className="text-xs text-muted-foreground leading-tight mt-0.5">
-                  {project.description}
+                  {board.description}
                 </p>
               )}
             </div>
           </div>
           <div className="flex items-center gap-1.5">
-            {/* Project sub-feature nav — Wiki, Forms, Automations */}
+            {/* Sub-feature nav — Wiki, Forms, Automations */}
             <div className="flex items-center gap-0.5 bg-muted/60 rounded-lg p-0.5 mr-1">
-              <Tooltip content="Wiki">
-                <button
-                  onClick={() =>
-                    navigate(`/w/${workspaceId}/boards/${boardId}/wiki`)
-                  }
-                  className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-background transition-colors active:scale-[0.97]"
-                >
-                  <BookOpen className="w-4 h-4" />
-                </button>
-              </Tooltip>
-              <Tooltip content="Forms">
-                <button
-                  onClick={() =>
-                    navigate(`/w/${workspaceId}/boards/${boardId}/forms`)
-                  }
-                  className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-background transition-colors active:scale-[0.97]"
-                >
-                  <FormInput className="w-4 h-4" />
-                </button>
-              </Tooltip>
-              <Tooltip content="Automations">
-                <button
-                  onClick={() =>
-                    navigate(
-                      `/w/${workspaceId}/boards/${boardId}/automations`,
-                    )
-                  }
-                  className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-background transition-colors active:scale-[0.97]"
-                >
-                  <Zap className="w-4 h-4" />
-                </button>
-              </Tooltip>
+              {[
+                { label: "Wiki", Icon: BookOpen, path: "wiki" },
+                { label: "Forms", Icon: FormInput, path: "forms" },
+                { label: "Automations", Icon: Zap, path: "automations" },
+              ].map(({ label, Icon, path }) => (
+                <Tooltip key={path} content={label}>
+                  <button
+                    onClick={() =>
+                      navigate(`/w/${workspaceId}/boards/${boardId}/${path}`)
+                    }
+                    className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-background transition-colors active:scale-[0.97]"
+                  >
+                    <Icon className="w-4 h-4" />
+                  </button>
+                </Tooltip>
+              ))}
             </div>
 
-            <Tooltip content="Project members & access">
-              <button
-                onClick={() => setMembersModal(true)}
-                className="p-2 rounded-lg bg-accent/60 text-foreground/70 hover:text-foreground hover:bg-accent transition-colors active:scale-[0.97]"
-              >
-                <Users className="w-4 h-4" />
-              </button>
-            </Tooltip>
-
-            {perms.canAdmin && (
-              <Tooltip content="Board settings">
-                <button
-                  onClick={() => setBoardSettings(true)}
-                  className="p-2 rounded-lg bg-accent/60 text-foreground/70 hover:text-foreground hover:bg-accent transition-colors active:scale-[0.97]"
-                >
-                  <Settings2 className="w-4 h-4" />
-                </button>
-              </Tooltip>
-            )}
-
-            <Tooltip content="Export CSV">
-              <button
-                onClick={handleExport}
-                className="p-2 rounded-lg bg-accent/60 text-foreground/70 hover:text-foreground hover:bg-accent transition-colors active:scale-[0.97]"
-              >
-                <Download className="w-4 h-4" />
-              </button>
-            </Tooltip>
+            {/* Action buttons */}
+            {[
+              {
+                label: "Board members & access",
+                Icon: Users,
+                onClick: () => setMembersModal(true),
+                show: true,
+              },
+              {
+                label: "Board settings",
+                Icon: Settings2,
+                onClick: () => setBoardSettings(true),
+                show: perms.canAdmin,
+              },
+              {
+                label: "Export CSV",
+                Icon: Download,
+                onClick: handleExport,
+                show: true,
+              },
+            ]
+              .filter(({ show }) => show)
+              .map(({ label, Icon, onClick }) => (
+                <Tooltip key={label} content={label}>
+                  <button
+                    onClick={onClick}
+                    className="p-2 rounded-lg bg-accent/60 text-foreground/70 hover:text-foreground hover:bg-accent transition-colors active:scale-[0.97]"
+                  >
+                    <Icon className="w-4 h-4" />
+                  </button>
+                </Tooltip>
+              ))}
 
             {perms.canEdit && (
               <Button
@@ -464,7 +510,7 @@ export default function KanbanPage() {
                 onClick={() =>
                   setCreateModal({
                     open: true,
-                    statusId: project?.statuses?.[0]?.id,
+                    statusId: board?.statuses?.[0]?.id,
                   })
                 }
               >
@@ -516,7 +562,7 @@ export default function KanbanPage() {
           <div className="flex-1 overflow-x-auto p-6">
             <DragDropContext onDragEnd={handleDragEnd}>
               <div className="flex gap-5 h-full items-start">
-                {project?.statuses?.map((col) => (
+                {board?.statuses?.map((col) => (
                   <KanbanColumn
                     key={col.id}
                     column={col}
@@ -553,7 +599,7 @@ export default function KanbanPage() {
         {view === "list" && (
           <ListView
             tasks={filteredTasks}
-            statuses={project?.statuses || []}
+            statuses={board?.statuses || []}
             members={members}
             onTaskClick={(id) => openTask(id)}
             selectedTaskId={selectedTaskId}
@@ -568,7 +614,7 @@ export default function KanbanPage() {
             <div className="flex-1 overflow-x-auto p-6">
               <DragDropContext onDragEnd={handleDragEnd}>
                 <div className="flex gap-5 h-full">
-                  {project?.statuses?.map((col) => (
+                  {board?.statuses?.map((col) => (
                     <KanbanColumn
                       key={col.id}
                       column={col}
@@ -628,7 +674,7 @@ export default function KanbanPage() {
           <Suspense fallback={<Loader className="flex-1" />}>
             <CalendarView
               tasks={filteredTasks}
-              statuses={project?.statuses || []}
+              statuses={board?.statuses || []}
               onTaskClick={openTask}
               onCreateTask={(date) =>
                 setCreateModal({ open: true, statusId: null, date })
@@ -645,7 +691,7 @@ export default function KanbanPage() {
           <Suspense fallback={<Loader className="flex-1" />}>
             <GanttView
               tasks={filteredTasks}
-              statuses={project?.statuses || []}
+              statuses={board?.statuses || []}
               members={members}
               sprints={sprints}
               onTaskClick={openTask}
@@ -670,7 +716,7 @@ export default function KanbanPage() {
       {/* Bulk action bar */}
       <BulkActionBar
         count={selectedIds.size}
-        statuses={project?.statuses || []}
+        statuses={board?.statuses || []}
         members={members}
         onUpdate={(updates) =>
           bulkUpdate.mutate({
@@ -703,7 +749,7 @@ export default function KanbanPage() {
         >
           <TaskDetailPanel
             taskId={selectedTaskId}
-            projectStatuses={project?.statuses || []}
+            projectStatuses={board?.statuses || []}
             projectLabels={labels}
             projectFields={fields}
             onCreateLabel={(data, opts) => createLabel.mutate(data, opts)}
@@ -722,7 +768,7 @@ export default function KanbanPage() {
         boardId={boardId}
         defaultStatusId={createModal.statusId}
         defaultDate={createModal.date}
-        statuses={project?.statuses || []}
+        statuses={board?.statuses || []}
         members={members}
       />
 
@@ -731,7 +777,7 @@ export default function KanbanPage() {
         onClose={() => setBoardSettings(false)}
         workspaceId={workspaceId}
         boardId={boardId}
-        statuses={project?.statuses || []}
+        statuses={board?.statuses || []}
       />
 
       <ProjectMembersModal
@@ -739,7 +785,7 @@ export default function KanbanPage() {
         onClose={() => setMembersModal(false)}
         workspaceId={workspaceId}
         boardId={boardId}
-        project={project}
+        board={board}
         canAdmin={perms.canAdmin}
       />
     </div>

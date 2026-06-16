@@ -55,3 +55,12 @@ export function useReorderStatuses(workspaceId, boardId) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["board", workspaceId, boardId] }),
   });
 }
+
+export function useBatchSaveStatuses(workspaceId, boardId) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (statuses) =>
+      api.put(`${BASE(workspaceId, boardId)}bulk/`, statuses).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["board", workspaceId, boardId] }),
+  });
+}

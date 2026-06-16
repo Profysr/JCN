@@ -25,6 +25,29 @@ class TaskStatusSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "color", "order", "is_done"]
 
 
+class BulkStatusItemSerializer(serializers.Serializer):
+    # id is optional — omitted for new statuses, present for existing ones
+    id    = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    name  = serializers.CharField(max_length=100)
+    color = serializers.CharField(max_length=20, default="#6366f1")
+    is_done = serializers.BooleanField(default=False)
+
+
+class BulkStatusUpdateSerializer(serializers.Serializer):
+    statuses = BulkStatusItemSerializer(many=True)
+
+    def validate_statuses(self, items):
+        if not items:
+            raise serializers.ValidationError("At least one status is required.")
+
+        # Enforce single-done: keep only the last item marked is_done
+        done_indices = [i for i, item in enumerate(items) if item.get("is_done")]
+        for i in done_indices[:-1]:
+            items[i]["is_done"] = False
+
+        return items
+
+
 class LabelSerializer(serializers.ModelSerializer):
     class Meta:
         model = Label

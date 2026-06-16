@@ -1,14 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import Modal from "@/components/ui/Modal";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { Plus, Trash2, Check, GripVertical, Settings2 } from "lucide-react";
-import {
-  useCreateStatus,
-  useUpdateStatus,
-  useDeleteStatus,
-  useReorderStatuses,
-} from "@/hooks/useStatusManagement";
+import { useBatchSaveStatuses } from "@/hooks/useStatusManagement";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +12,9 @@ const PRESET_COLORS = [
   "#14b8a6", "#3b82f6", "#ef4444", "#f97316", "#64748b", "#0ea5e9",
 ];
 
+let _tempId = 0;
+const tempId = () => `_new_${++_tempId}`;
+
 export default function BoardSettingsModal({
   open,
   onClose,
@@ -24,47 +22,74 @@ export default function BoardSettingsModal({
   boardId,
   statuses = [],
 }) {
-  const createStatus    = useCreateStatus(workspaceId, boardId);
-  const updateStatus    = useUpdateStatus(workspaceId, boardId);
-  const deleteStatus    = useDeleteStatus(workspaceId, boardId);
-  const reorderStatuses = useReorderStatuses(workspaceId, boardId);
+  const batchSave = useBatchSaveStatuses(workspaceId, boardId);
 
+  // Full local copy — all edits live here until Save
+  const [local, setLocal] = useState([]);
+  const [adding, setAdding] = useState(false);
   const [newName, setNewName]   = useState("");
   const [newColor, setNewColor] = useState("#6366f1");
-  const [adding, setAdding]     = useState(false);
 
-  // Optimistic local order — null means "use server order"
-  const [localOrder, setLocalOrder] = useState(null);
-  const orderedStatuses = localOrder ?? statuses;
+  // Reset local state every time the modal opens
+  useEffect(() => {
+    if (open) {
+      setLocal(statuses.map((s) => ({ ...s })));
+      setAdding(false);
+      setNewName("");
+      setNewColor("#6366f1");
+    }
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const update = useCallback((id, patch) => {
+    setLocal((prev) => {
+      let next = prev.map((s) => (s.id === id ? { ...s, ...patch } : s));
+
+      // Enforce single-done: unmark others when one is toggled on
+      if (patch.is_done) {
+        next = next.map((s) => (s.id !== id ? { ...s, is_done: false } : s));
+      }
+
+      return next;
+    });
+  }, []);
+
+  const remove = useCallback((id) => {
+    setLocal((prev) => prev.filter((s) => s.id !== id));
+  }, []);
 
   const handleDragEnd = ({ source, destination }) => {
     if (!destination || destination.index === source.index) return;
-
-    const next = [...orderedStatuses];
-    const [moved] = next.splice(source.index, 1);
-    next.splice(destination.index, 0, moved);
-    setLocalOrder(next);
-
-    reorderStatuses.mutate(next.map((s) => s.id), {
-      onSuccess: () => setLocalOrder(null),
-      onError:   () => setLocalOrder(null),
+    setLocal((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(source.index, 1);
+      next.splice(destination.index, 0, moved);
+      return next;
     });
   };
 
-  const handleAdd = (e) => {
+  const handleAddSubmit = (e) => {
     e.preventDefault();
     if (!newName.trim()) return;
-    createStatus.mutate(
-      { name: newName.trim(), color: newColor, is_done: false },
-      {
-        onSuccess: () => {
-          setNewName("");
-          setNewColor("#6366f1");
-          setAdding(false);
-        },
-      },
-    );
+    setLocal((prev) => [
+      ...prev,
+      { id: tempId(), name: newName.trim(), color: newColor, is_done: false, _isNew: true },
+    ]);
+    setNewName("");
+    setNewColor("#6366f1");
+    setAdding(false);
   };
+
+  const handleSave = () => {
+    // Strip _isNew flag; new items send no 'id' so backend creates them
+    const payload = local.map(({ _isNew, id, ...rest }) =>
+      _isNew ? rest : { id, ...rest },
+    );
+    batchSave.mutate(payload, { onSuccess: onClose });
+  };
+
+  const isDirty =
+    JSON.stringify(local.map(({ _isNew, ...s }) => s)) !==
+    JSON.stringify(statuses.map((s) => ({ ...s })));
 
   return (
     <Modal
@@ -77,7 +102,7 @@ export default function BoardSettingsModal({
     >
       <div className="p-5 max-h-[60vh] overflow-y-auto">
         <p className="text-xs text-muted-foreground mb-3">
-          Drag rows to reorder. Mark a column as{" "}
+          Drag to reorder. Mark a column as{" "}
           <span className="font-semibold text-emerald-600">Done</span> to count
           its tasks toward the project completion %.
         </p>
@@ -90,7 +115,7 @@ export default function BoardSettingsModal({
                 {...provided.droppableProps}
                 className="space-y-1.5"
               >
-                {orderedStatuses.map((s, i) => (
+                {local.map((s, i) => (
                   <Draggable key={s.id} draggableId={String(s.id)} index={i}>
                     {(drag, snapshot) => (
                       <div
@@ -113,30 +138,17 @@ export default function BoardSettingsModal({
 
                         <ColorPicker
                           value={s.color}
-                          onChange={(color) =>
-                            updateStatus.mutate({ statusId: s.id, color })
-                          }
+                          onChange={(color) => update(s.id, { color })}
                         />
 
                         <StatusName
-                          status={s}
-                          onRename={(name) =>
-                            updateStatus.mutate({ statusId: s.id, name })
-                          }
+                          name={s.name}
+                          onRename={(name) => update(s.id, { name })}
                         />
 
                         <button
-                          onClick={() =>
-                            updateStatus.mutate({
-                              statusId: s.id,
-                              is_done: !s.is_done,
-                            })
-                          }
-                          title={
-                            s.is_done
-                              ? "Marked as Done — click to unmark"
-                              : "Mark as Done column"
-                          }
+                          onClick={() => update(s.id, { is_done: !s.is_done })}
+                          title={s.is_done ? "Marked as Done — click to unmark" : "Mark as Done column"}
                           className={cn(
                             "flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded border transition-all shrink-0",
                             s.is_done
@@ -150,8 +162,8 @@ export default function BoardSettingsModal({
 
                         <DeleteButton
                           statusName={s.name}
-                          onDelete={() => deleteStatus.mutate(s.id)}
-                          isDeleting={deleteStatus.isPending}
+                          hasTasksWarning={!s._isNew}
+                          onDelete={() => remove(s.id)}
                         />
                       </div>
                     )}
@@ -165,7 +177,7 @@ export default function BoardSettingsModal({
 
         {adding ? (
           <form
-            onSubmit={handleAdd}
+            onSubmit={handleAddSubmit}
             className="flex items-center gap-2 pt-2 border-t mt-3"
           >
             <ColorPicker value={newColor} onChange={setNewColor} />
@@ -177,15 +189,8 @@ export default function BoardSettingsModal({
               onChange={(e) => setNewName(e.target.value)}
               required
             />
-            <Button type="submit" size="sm" disabled={createStatus.isPending}>
-              {createStatus.isPending ? "Adding…" : "Add"}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              onClick={() => setAdding(false)}
-            >
+            <Button type="submit" size="sm">Add</Button>
+            <Button type="button" size="sm" variant="ghost" onClick={() => setAdding(false)}>
               Cancel
             </Button>
           </form>
@@ -198,18 +203,35 @@ export default function BoardSettingsModal({
           </button>
         )}
       </div>
+
+      {/* Footer */}
+      <div className="flex items-center justify-end gap-2 px-5 py-2.5 border-t">
+        <Button variant="outline" onClick={onClose} disabled={batchSave.isPending}>
+          Cancel
+        </Button>
+        <Button
+          onClick={handleSave}
+          disabled={!isDirty || batchSave.isPending}
+        >
+          {batchSave.isPending ? "Saving…" : "Save"}
+        </Button>
+      </div>
     </Modal>
   );
 }
 
-function StatusName({ status, onRename }) {
-  const [name, setName]       = useState(status.name);
+function StatusName({ name, onRename }) {
   const [editing, setEditing] = useState(false);
+  const [value, setValue]     = useState(name);
+
+  // Keep value in sync when the parent name changes (e.g. modal reset)
+  useEffect(() => setValue(name), [name]);
 
   const save = () => {
     setEditing(false);
-    if (name.trim() && name.trim() !== status.name) onRename(name.trim());
-    else setName(status.name);
+    const trimmed = value.trim();
+    if (trimmed && trimmed !== name) onRename(trimmed);
+    else setValue(name);
   };
 
   if (editing) {
@@ -217,12 +239,12 @@ function StatusName({ status, onRename }) {
       <input
         autoFocus
         className="flex-1 text-sm bg-transparent outline-none border-b border-primary"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
         onBlur={save}
         onKeyDown={(e) => {
           if (e.key === "Enter") save();
-          if (e.key === "Escape") { setName(status.name); setEditing(false); }
+          if (e.key === "Escape") { setValue(name); setEditing(false); }
         }}
       />
     );
@@ -234,29 +256,32 @@ function StatusName({ status, onRename }) {
       onClick={() => setEditing(true)}
       title="Click to rename"
     >
-      {status.name}
+      {name}
     </span>
   );
 }
 
-function DeleteButton({ statusName, onDelete, isDeleting }) {
+function DeleteButton({ statusName, hasTasksWarning, onDelete }) {
   const [confirming, setConfirming] = useState(false);
 
   return (
     <>
       <button
         onClick={() => setConfirming(true)}
-        disabled={isDeleting}
         className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive p-1 rounded hover:bg-destructive/10 transition-all flex-shrink-0"
-        title="Delete column"
+        title="Remove column"
       >
         <Trash2 className="w-3.5 h-3.5" />
       </button>
 
       {confirming && (
         <ConfirmModal
-          title="Delete status?"
-          message={`Move tasks out of "${statusName}" first.`}
+          title="Remove column?"
+          message={
+            hasTasksWarning
+              ? `"${statusName}" will be deleted on Save. Make sure to move its tasks out first.`
+              : `"${statusName}" will be removed.`
+          }
           onConfirm={() => { onDelete(); setConfirming(false); }}
           onCancel={() => setConfirming(false)}
         />

@@ -1,30 +1,15 @@
-﻿from rest_framework import permissions, status
+from rest_framework import permissions, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.shortcuts import get_object_or_404
-from django.db import models as django_models
 from django.http import HttpResponse
-from django.db.models import Count, Sum, Avg, Min, Max, F, Q, Prefetch
+from django.db.models import Q
 from django.utils import timezone
-from asgiref.sync import async_to_sync
-from channels.layers import get_channel_layer
-from workspaces.models import Workspace, WorkspaceMember, Notification
-from core.fields import parse_id, format_id
 import datetime
 import csv
 import re
-
-
-def _parse_pk(value):
-    """Accepts a prefixed ID (e.g. 'brd_018e...') or a plain UUID string."""
-    try:
-        return parse_id(value)
-    except (ValueError, AttributeError, TypeError):
-        return value
-
-
-from .models import (
+from ..models import (
     Board,
     TaskStatus,
     Task,
@@ -39,33 +24,19 @@ from .models import (
     TaskAttachment,
     TaskDependency,
     TaskTemplate,
-    WikiPage,
-    WikiRevision,
-    Document,
-    Form,
-    FormField,
-    FormSubmission,
-    AutomationRule,
-    AutomationLog,
-    BoardMember,
-    UserPresence,
     CommentReaction,
     Approval,
     ApprovalReviewer,
-    Objective,
-    KeyResult,
 )
-from .serializers import (
-    BoardSerializer, BoardMiniSerializer, PortfolioBoardSerializer,
+from ..serializers import (
     TaskStatusSerializer,
+    BulkStatusUpdateSerializer,
     TaskSerializer,
     TaskDetailSerializer,
     SubTaskSerializer,
     TaskCommentSerializer,
     TaskActivitySerializer,
     LabelSerializer,
-    TaskSearchSerializer,
-    BoardSearchSerializer,
     BoardFieldSerializer,
     TaskFieldValueSerializer,
     SavedViewSerializer,
@@ -74,307 +45,26 @@ from .serializers import (
     MinimalTaskSerializer,
     TaskDependencySerializer,
     TaskTemplateSerializer,
-    WikiPageSerializer,
-    WikiRevisionSerializer,
-    DocumentSerializer,
-    FormSerializer,
-    FormFieldSerializer,
-    FormSubmissionSerializer,
-    PublicFormSerializer,
-    AutomationRuleSerializer,
-    AutomationLogSerializer,
-    BoardMemberSerializer,
-    MyWorkTaskSerializer,
-    UserPresenceSerializer,
     CommentReactionSerializer,
     ApprovalSerializer,
     ApprovalReviewerSerializer,
-    ObjectiveSerializer,
-    KeyResultSerializer,
-    KeyResultLinkedTaskSerializer,
 )
-from .permissions import has_project_permission, get_effective_role, log_audit
+from workspaces.models import Notification
+from .helpers import (
+    _parse_pk,
+    get_workspace_for_user,
+    _get_board,
+    _get_task,
+    _get_subtask,
+    _task_list_qs,
+    _task_detail_qs,
+    _log_task_patch_changes,
+    _require_board_perm,
+    broadcast,
+    log_activity,
+    notify,
+)
 
-def get_workspace_for_user(workspace_id, user):
-    return get_object_or_404(Workspace, id=_parse_pk(workspace_id), members__user=user)
-
-
-def _is_workspace_admin(workspace, user):
-    return WorkspaceMember.objects.filter(
-        workspace=workspace, user=user, role=WorkspaceMember.Role.ADMIN
-    ).exists()
-
-
-# ── Shared object-lookup helpers ──────────────────────────────────────────────
-
-def _get_board(workspace_id, board_id, user):
-    """Return a Board that belongs to a workspace the user is a member of."""
-    workspace = get_workspace_for_user(workspace_id, user)
-    return get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
-
-
-def _get_task(workspace_id, board_id, task_id, user, *, qs=None):
-    """Return a Task within the given board. Pass qs= to attach eager-loading."""
-    board = _get_board(workspace_id, board_id, user)
-    base  = qs if qs is not None else Task.objects
-    return get_object_or_404(base, id=_parse_pk(task_id), board=board)
-
-
-def _get_subtask(workspace_id, board_id, task_id, subtask_id, user):
-    task = _get_task(workspace_id, board_id, task_id, user)
-    return get_object_or_404(SubTask, id=subtask_id, task=task)
-
-
-def _task_list_qs():
-    """Queryset for task list endpoints — no activity/comment detail (too heavy)."""
-    return Task.objects.select_related(
-        "status", "assignee", "created_by", "sprint"
-    ).prefetch_related("subtasks", "comments", "labels", "blocked_by_deps")
-
-
-def _task_detail_qs():
-    """Queryset for single-task endpoints — includes full history and field values."""
-    return Task.objects.select_related(
-        "status", "assignee", "created_by", "sprint"
-    ).prefetch_related(
-        "subtasks",
-        "comments__author",
-        "activities__actor",
-        "labels",
-        "field_values__field",
-    )
-
-
-def _log_task_patch_changes(task, user, request_data, old_status, old_priority, old_assignee):
-    """Log the most significant change after a PATCH and fire assignment notifications."""
-    if "status_id" in request_data and task.status != old_status:
-        log_activity(task, user, TaskActivity.Verb.STATUS, {
-            "from": old_status.name if old_status else None,
-            "to":   task.status.name if task.status else None,
-        })
-    elif "priority" in request_data and task.priority != old_priority:
-        log_activity(task, user, TaskActivity.Verb.PRIORITY, {
-            "from": old_priority,
-            "to":   task.priority,
-        })
-    elif "assignee_id" in request_data and task.assignee != old_assignee:
-        log_activity(task, user, TaskActivity.Verb.ASSIGNED, {
-            "to": task.assignee.full_name if task.assignee else None,
-        })
-        if task.assignee and task.assignee != user:
-            notify(task.assignee, user, Notification.Verb.TASK_ASSIGNED, task.board.workspace, task)
-    else:
-        log_activity(task, user, TaskActivity.Verb.UPDATED)
-
-
-def broadcast(workspace_id, event_type, data):
-    """Push a real-time event to all WebSocket clients in this workspace."""
-    channel_layer = get_channel_layer()
-    async_to_sync(channel_layer.group_send)(
-        f"workspace_{workspace_id}",
-        {"type": "workspace.event", "data": {"type": event_type, "payload": data}},
-    )
-    # v4.5.0 — also fan out to registered webhooks
-    _fire_webhooks(workspace_id, event_type, data)
-
-
-def _fire_webhooks(workspace_id, event_type, data):
-    """Queue webhook deliveries for all active webhooks subscribed to this event."""
-    try:
-        from workspaces.models import Webhook
-        from workspaces.tasks import deliver_webhook
-
-        # Map internal event names to public webhook event names
-        _EVENT_MAP = {
-            "task.created": "task.created",
-            "task.updated": "task.updated",
-            "task.moved": "task.updated",
-            "task.deleted": "task.deleted",
-            "task.commented": "task.commented",
-            "tasks.bulk_updated": "task.updated",
-            "tasks.bulk_deleted": "task.deleted",
-            "sprint.started": "sprint.started",
-            "sprint.completed": "sprint.completed",
-        }
-        webhook_event = _EVENT_MAP.get(event_type)
-        if not webhook_event:
-            return
-
-        hooks = Webhook.objects.filter(
-            workspace__id=_parse_pk(workspace_id),
-            is_active=True,
-        )
-        payload = {"event": webhook_event, "workspace": workspace_id, "data": data}
-        for hook in hooks:
-            if not hook.events or webhook_event in hook.events:
-                deliver_webhook.delay(str(hook.id), webhook_event, payload)
-    except Exception:
-        pass  # never break the main request path
-
-
-def log_activity(task, actor, verb, meta=None):
-    TaskActivity.objects.create(task=task, actor=actor, verb=verb, meta=meta or {})
-
-
-def broadcast_to_user(user_id, event_type, data):
-    channel_layer = get_channel_layer()
-    async_to_sync(channel_layer.group_send)(
-        f"user_{user_id}",
-        {"type": "user.notification", "data": {"type": event_type, "payload": data}},
-    )
-
-
-_VERB_TO_EVENT_TYPE = {
-    Notification.Verb.TASK_ASSIGNED: "assigned",
-    Notification.Verb.TASK_COMMENTED: "commented",
-    Notification.Verb.TASK_MENTIONED: "mentioned",
-    Notification.Verb.APPROVAL_REQUESTED: "approved",
-}
-
-
-def notify(recipient, actor, verb, workspace, task):
-    """Create a Notification + InboxItem and push to the recipient's WS group. No-op if actor == recipient."""
-    if recipient == actor:
-        return
-    meta = {
-        "task_id": str(task.id),
-        "task_title": task.title,
-        "board_id": str(task.board_id),
-        "workspace_id": format_id(workspace.PREFIX, workspace.id),
-    }
-    notif = Notification.objects.create(
-        recipient=recipient, actor=actor, verb=verb, workspace=workspace, meta=meta
-    )
-
-    # v3.7.0 — create persistent InboxItem
-    from workspaces.models import InboxItem
-
-    InboxItem.objects.create(
-        user=recipient,
-        workspace=workspace,
-        notification=notif,
-        actor_id=str(actor.id),
-        actor_name=actor.full_name or actor.email,
-        verb=verb,
-        event_type=_VERB_TO_EVENT_TYPE.get(verb, "assigned"),
-        resource_name=task.title,
-        project_id=str(task.board_id),
-        project_name=task.board.name if task.board_id else "",
-        meta=meta,
-    )
-
-    broadcast_to_user(
-        str(recipient.id),
-        "notification.created",
-        {
-            "id": str(notif.id),
-            "actor": {
-                "id": str(actor.id),
-                "full_name": actor.full_name,
-                "email": actor.email,
-            },
-            "verb": notif.verb,
-            "meta": notif.meta,
-            "read": False,
-            "created_at": notif.created_at.isoformat(),
-        },
-    )
-
-    # v4.3.0 — fan out to Slack / Teams / Google Chat
-    try:
-        from integrations.services import fanout_notification
-
-        fanout_notification(workspace, verb, task, actor)
-    except Exception:
-        pass  # never break the main request path
-
-
-# ── Boards ✅─────────────────────────────────────────────────────────────────
-class BoardListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request, workspace_id):
-        workspace = get_workspace_for_user(workspace_id, request.user)
-        boards = Board.objects.for_user(workspace, request.user).filter(status=Board.Status.ACTIVE)
-        return Response(BoardMiniSerializer(boards, many=True).data)
-
-    def post(self, request, workspace_id):
-        workspace = get_workspace_for_user(workspace_id, request.user)
-        serializer = BoardSerializer(
-            data=request.data, context={"request": request, "workspace": workspace}
-        )
-        serializer.is_valid(raise_exception=True)
-        created = serializer.save()
-        board = Board.objects.for_user(workspace, request.user).get(id=created.id)
-        return Response(
-            BoardSerializer(board, context={"request": request}).data,
-            status=status.HTTP_201_CREATED,
-        )
-
-class BoardDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_board(self, workspace_id, project_id, user):
-        workspace = get_workspace_for_user(workspace_id, user)
-        return get_object_or_404(
-            Board.objects.for_user(workspace, user), id=_parse_pk(project_id)
-        )
-
-    def get(self, request, workspace_id, project_id):
-        board = self.get_board(workspace_id, project_id, request.user)
-        return Response(BoardSerializer(board, context={"request": request}).data)
-
-    def patch(self, request, workspace_id, project_id):
-        board = self.get_board(workspace_id, project_id, request.user)
-        serializer = BoardSerializer(
-            board,
-            data=request.data,
-            partial=True,
-            context={"request": request, "workspace": board.workspace},
-        )
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data)
-
-    def delete(self, request, workspace_id, project_id):
-        board = self.get_board(workspace_id, project_id, request.user)
-        if not _is_workspace_admin(board.workspace, request.user):
-            return Response(
-                {"detail": "Only workspace admins can archive boards."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        board.status = Board.Status.ARCHIVED
-        board.save(update_fields=["status"])
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
-# ── v3.4.0 — Portfolio ✅───────────────────────────────────────────────────────
-class PortfolioView(APIView):
-    """GET /portfolio/ — cross-project health stats for a workspace."""
-
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request, workspace_id):
-        workspace = get_workspace_for_user(workspace_id, request.user)
-        today = timezone.now().date()
-        boards = (
-            Board.objects.for_user(workspace, request.user)
-            .filter(status=Board.Status.ACTIVE)
-            .annotate(
-                overdue_tasks=Count(
-                    'tasks',
-                    filter=Q(tasks__due_date__lt=today, tasks__status__is_done=False),
-                    distinct=True,
-                ),
-            )
-            .prefetch_related(
-                Prefetch(
-                    'sprints',
-                    queryset=Sprint.objects.filter(status='active'),
-                    to_attr='active_sprints',
-                )
-            )
-        )
-        return Response(PortfolioBoardSerializer(boards, many=True).data)
 
 # ── Task Statuses (Kanban columns) ✅───────────────────────────────────────────
 class TaskStatusListCreateView(APIView):
@@ -398,7 +88,6 @@ class TaskStatusListCreateView(APIView):
         ) + 1
         serializer.save(board=board, order=next_order)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
-
 
 class TaskStatusDetailView(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -449,6 +138,58 @@ class TaskStatusReorderView(APIView):
         TaskStatus.objects.bulk_update(updates, ["order"])
         return Response({"reordered": True})
 
+
+class TaskStatusBulkUpdateView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def put(self, request, workspace_id, project_id):
+        from django.db import transaction
+
+        board = _get_board(workspace_id, project_id, request.user)
+
+        # Wrap the raw list in the key the serializer expects
+        serializer = BulkStatusUpdateSerializer(data={"statuses": request.data})
+        serializer.is_valid(raise_exception=True)
+        items = serializer.validated_data["statuses"]
+
+        with transaction.atomic():
+            existing = {str(s.id): s for s in board.statuses.prefetch_related("tasks")}
+            incoming_ids = {str(item["id"]) for item in items if item.get("id")}
+
+            # Guard: cannot delete a column that still has tasks
+            for sid, s in existing.items():
+                if sid not in incoming_ids and s.tasks.exists():
+                    return Response(
+                        {"error": f'Cannot delete "{s.name}" — move its tasks out first.'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            # Delete statuses removed from the list
+            board.statuses.exclude(id__in=incoming_ids).delete()
+
+            # Update existing / create new, using list position as the saved order
+            to_bulk_update = []
+            for i, item in enumerate(items):
+                sid = str(item.get("id", ""))
+                if sid in existing:
+                    s = existing[sid]
+                    s.name    = item["name"]
+                    s.color   = item["color"]
+                    s.is_done = item["is_done"]
+                    s.order   = i
+                    to_bulk_update.append(s)
+                else:
+                    TaskStatus.objects.create(
+                        board=board,
+                        name=item["name"],
+                        color=item["color"],
+                        is_done=item["is_done"],
+                        order=i,
+                    )
+
+            TaskStatus.objects.bulk_update(to_bulk_update, ["name", "color", "is_done", "order"])
+
+        return Response(TaskStatusSerializer(board.statuses.all(), many=True).data)
 
 # ── Tasks ─────────────────────────────────────────────────────────────────────
 class TaskListCreateView(APIView):
@@ -735,9 +476,7 @@ class TaskCommentDetailView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-# ── Labels ────────────────────────────────────────────────────────────────────
-
-
+# ── Labels ✅───────────────────────────────────────────────────────────────────
 class LabelListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -771,76 +510,6 @@ class LabelDetailView(APIView):
         label = self.get_label(workspace_id, project_id, label_id, request.user)
         label.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
-
-# ── Global Search ─────────────────────────────────────────────────────────────
-class GlobalSearchView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request):
-        # ── Query params ──────────────────────────────────────────────────────
-        q = request.query_params.get("q", "").strip()
-        task_type = request.query_params.get("task_type", "").strip()
-        assignee = request.query_params.get("assignee", "").strip()
-        priority = request.query_params.get("priority", "").strip()
-        overdue = request.query_params.get("overdue", "").lower() == "true"
-        today_only = request.query_params.get("today", "").lower() == "true"
-
-        has_any = (
-            len(q) >= 2 or task_type or assignee or priority or overdue or today_only
-        )
-        if not has_any:
-            return Response({"tasks": [], "boards": []})
-
-        workspace_ids = WorkspaceMember.objects.filter(user=request.user).values_list(
-            "workspace_id", flat=True
-        )
-
-        tasks = Task.objects.filter(
-            board__workspace_id__in=workspace_ids,
-        ).select_related("board__workspace", "status", "assignee")
-
-        # Text search — title + description
-        if len(q) >= 2:
-            tasks = tasks.filter(
-                django_models.Q(title__icontains=q)
-                | django_models.Q(description__icontains=q)
-            )
-
-        # Dedicated filters
-        if task_type:
-            tasks = tasks.filter(task_type__icontains=task_type)
-        if assignee:
-            tasks = tasks.filter(
-                django_models.Q(assignee__full_name__icontains=assignee)
-                | django_models.Q(assignee__email__icontains=assignee)
-            )
-        if priority:
-            tasks = tasks.filter(priority__icontains=priority)
-        if overdue:
-            today = timezone.now().date()
-            tasks = tasks.filter(due_date__lt=today, status__is_done=False)
-        if today_only:
-            today = timezone.now().date()
-            tasks = tasks.filter(due_date=today)
-
-        tasks = tasks[:15]
-
-        projects = (
-            (
-                Board.objects.filter(
-                    workspace_id__in=workspace_ids, name__icontains=q
-                ).select_related("workspace")[:5]
-            )
-            if len(q) >= 2
-            else []
-        )
-
-        return Response(
-            {
-                "tasks": TaskSearchSerializer(tasks, many=True).data,
-                "boards": BoardSearchSerializer(projects, many=True).data,
-            }
-        )
 
 
 # ── Custom Fields (v0.8.0) ────────────────────────────────────────────────────
@@ -895,8 +564,6 @@ class TaskFieldValueView(APIView):
 
 
 # ── Saved Views (v0.8.0) ──────────────────────────────────────────────────────
-
-
 class SavedViewListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -927,8 +594,6 @@ class SavedViewDetailView(APIView):
 
 
 # ── Sprints (v0.9.0) ─────────────────────────────────────────────────────────
-
-
 class SprintListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -1033,8 +698,6 @@ class SprintBurndownView(APIView):
 
 
 # ── Bulk Actions (v1.1.0) ─────────────────────────────────────────────────────
-
-
 class TaskBulkUpdateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -1086,8 +749,6 @@ class TaskBulkUpdateView(APIView):
 
 
 # ── File Attachments (v1.2.0) ─────────────────────────────────────────────────
-
-
 class TaskAttachmentListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
@@ -1147,8 +808,6 @@ class TaskAttachmentDeleteView(APIView):
 
 
 # ── Task Dependencies (v1.4.0) ────────────────────────────────────────────────
-
-
 class TaskDependencyListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -1265,119 +924,6 @@ class TaskExportView(APIView):
         return response
 
 
-# ── v2.1.0 — Project Members & Permissions ────────────────────────────────────
-
-
-def _require_board_admin(request, workspace_id, board_id):
-    """Return (workspace, board) or raise 403/404."""
-    workspace = get_workspace_for_user(workspace_id, request.user)
-    board = get_object_or_404(Board, id=board_id, workspace=workspace)
-    if not has_project_permission(request.user, board, "admin"):
-        from rest_framework.exceptions import PermissionDenied
-
-        raise PermissionDenied("Board admin role required.")
-    return workspace, board
-
-
-class BoardMemberListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request, workspace_id, project_id):
-        workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(project_id), workspace=workspace)
-        if not has_project_permission(request.user, board, "view"):
-            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
-        members = board.members.select_related("user")
-        return Response(BoardMemberSerializer(members, many=True).data)
-
-    def post(self, request, workspace_id, project_id):
-        workspace, board = _require_board_admin(request, workspace_id, project_id)
-        serializer = BoardMemberSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        member = serializer.save(board=board, added_by=request.user)
-        log_audit(
-            actor=request.user,
-            workspace=workspace,
-            action="project_member.added",
-            resource_type="project_member",
-            resource_id=member.id,
-            after={"user": str(member.user_id), "role": member.role},
-        )
-        return Response(
-            BoardMemberSerializer(member).data, status=status.HTTP_201_CREATED
-        )
-
-
-class BoardMemberDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def _get_member(self, workspace_id, project_id, member_id, request):
-        workspace, board = _require_board_admin(request, workspace_id, project_id)
-        member = get_object_or_404(BoardMember, id=member_id, board=board)
-        return workspace, board, member
-
-    def patch(self, request, workspace_id, project_id, member_id):
-        workspace, board, member = self._get_member(
-            workspace_id, project_id, member_id, request
-        )
-        before_role = member.role
-        new_role = request.data.get("role")
-        if new_role not in [r.value for r in BoardMember.Role]:
-            return Response(
-                {"role": "Invalid role."}, status=status.HTTP_400_BAD_REQUEST
-            )
-        member.role = new_role
-        member.save(update_fields=["role"])
-        log_audit(
-            actor=request.user,
-            workspace=workspace,
-            action="project_member.role_changed",
-            resource_type="project_member",
-            resource_id=member.id,
-            before={"role": before_role},
-            after={"role": new_role},
-        )
-        return Response(BoardMemberSerializer(member).data)
-
-    def delete(self, request, workspace_id, project_id, member_id):
-        workspace, _board, member = self._get_member(
-            workspace_id, project_id, member_id, request
-        )
-        log_audit(
-            actor=request.user,
-            workspace=workspace,
-            action="project_member.removed",
-            resource_type="project_member",
-            resource_id=member.id,
-            before={"user": str(member.user_id), "role": member.role},
-        )
-        member.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-class ProjectPermissionsView(APIView):
-    """Return the current user's effective role for a project — used by frontend hooks."""
-
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request, workspace_id, project_id):
-        workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(project_id), workspace=workspace)
-        role = get_effective_role(request.user, board)
-        if role is None:
-            return Response(
-                {"detail": "Not a member."}, status=status.HTTP_403_FORBIDDEN
-            )
-        return Response(
-            {
-                "role": role,
-                "can_view": has_project_permission(request.user, board, "view"),
-                "can_edit": has_project_permission(request.user, board, "edit"),
-                "can_delete": has_project_permission(request.user, board, "delete"),
-                "can_admin": has_project_permission(request.user, board, "admin"),
-            }
-        )
-
 # ── v2.4.0 — Advanced Task System ────────────────────────────────────────────
 class TaskCloneView(APIView):
     """POST /tasks/:id/clone/ — deep-clone a task and return the new task."""
@@ -1387,10 +933,7 @@ class TaskCloneView(APIView):
     def post(self, request, workspace_id, project_id, task_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
         board = get_object_or_404(Board, id=_parse_pk(project_id), workspace=workspace)
-        if not has_project_permission(request.user, board, "edit"):
-            from rest_framework.exceptions import PermissionDenied
-
-            raise PermissionDenied("Editor role required.")
+        _require_board_perm(request.user, board, "edit")
         task = get_object_or_404(Task, id=_parse_pk(task_id), board=board)
         new_task = task.clone(created_by=request.user)
         log_activity(
@@ -1428,10 +971,7 @@ class TaskChildrenView(APIView):
         """Create a child task under this parent."""
         workspace = get_workspace_for_user(workspace_id, request.user)
         board = get_object_or_404(Board, id=_parse_pk(project_id), workspace=workspace)
-        if not has_project_permission(request.user, board, "edit"):
-            from rest_framework.exceptions import PermissionDenied
-
-            raise PermissionDenied("Editor role required.")
+        _require_board_perm(request.user, board, "edit")
         parent = get_object_or_404(Task, id=_parse_pk(task_id), board=board)
         data = request.data.copy()
         data["parent_id"] = str(parent.id)
@@ -1455,10 +995,7 @@ class TaskTemplateListCreateView(APIView):
     def post(self, request, workspace_id, project_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
         board = get_object_or_404(Board, id=_parse_pk(project_id), workspace=workspace)
-        if not has_project_permission(request.user, board, "edit"):
-            from rest_framework.exceptions import PermissionDenied
-
-            raise PermissionDenied("Editor role required.")
+        _require_board_perm(request.user, board, "edit")
         serializer = TaskTemplateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save(board=board, created_by=request.user)
@@ -1481,10 +1018,7 @@ class TaskTemplateDetailView(APIView):
         workspace = get_workspace_for_user(workspace_id, request.user)
         board = get_object_or_404(Board, id=_parse_pk(project_id), workspace=workspace)
         template = get_object_or_404(TaskTemplate, id=template_id, board=board)
-        if not has_project_permission(request.user, board, "edit"):
-            from rest_framework.exceptions import PermissionDenied
-
-            raise PermissionDenied("Editor role required.")
+        _require_board_perm(request.user, board, "edit")
         template.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -1505,496 +1039,6 @@ class TaskApplyTemplateView(APIView):
                 task=task, title=sub.get("title", ""), defaults={"order": i}
             )
         return Response(TaskDetailSerializer(task, context={"request": request}).data)
-
-
-# ── v2.5.0 — Wiki & Documents ─────────────────────────────────────────────────
-
-
-class WikiPageListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request, workspace_id, project_id):
-        workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(project_id), workspace=workspace)
-        pages = board.wiki_pages.filter(parent=None).prefetch_related("children")
-        return Response(WikiPageSerializer(pages, many=True).data)
-
-    def post(self, request, workspace_id, project_id):
-        workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(project_id), workspace=workspace)
-        if not has_project_permission(request.user, board, "edit"):
-            from rest_framework.exceptions import PermissionDenied
-
-            raise PermissionDenied("Editor role required.")
-        serializer = WikiPageSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        page = serializer.save(board=board, created_by=request.user)
-        return Response(WikiPageSerializer(page).data, status=status.HTTP_201_CREATED)
-
-
-class WikiPageDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def _get_page(self, workspace_id, project_id, page_id, user):
-        workspace = get_workspace_for_user(workspace_id, user)
-        board = get_object_or_404(Board, id=_parse_pk(project_id), workspace=workspace)
-        return get_object_or_404(WikiPage, id=page_id, board=board), board
-
-    def get(self, request, workspace_id, project_id, page_id):
-        page, _ = self._get_page(workspace_id, project_id, page_id, request.user)
-        return Response(WikiPageSerializer(page).data)
-
-    def patch(self, request, workspace_id, project_id, page_id):
-        page, board = self._get_page(workspace_id, project_id, page_id, request.user)
-        if not has_project_permission(request.user, board, "edit"):
-            from rest_framework.exceptions import PermissionDenied
-
-            raise PermissionDenied("Editor role required.")
-        # Save a revision before updating
-        WikiRevision.objects.create(
-            page=page, content=page.content, title=page.title, author=request.user
-        )
-        serializer = WikiPageSerializer(page, data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data)
-
-    def delete(self, request, workspace_id, project_id, page_id):
-        page, board = self._get_page(workspace_id, project_id, page_id, request.user)
-        if not has_project_permission(request.user, board, "admin"):
-            from rest_framework.exceptions import PermissionDenied
-
-            raise PermissionDenied("Admin role required.")
-        page.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-class WikiPageRevisionsView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request, workspace_id, project_id, page_id):
-        workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(project_id), workspace=workspace)
-        page = get_object_or_404(WikiPage, id=page_id, board=board)
-        revisions = page.revisions.select_related("author")[:20]
-        return Response(WikiRevisionSerializer(revisions, many=True).data)
-
-
-class DocumentListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request, workspace_id):
-        workspace = get_workspace_for_user(workspace_id, request.user)
-        docs = workspace.documents.select_related("created_by")
-        return Response(DocumentSerializer(docs, many=True).data)
-
-    def post(self, request, workspace_id):
-        workspace = get_workspace_for_user(workspace_id, request.user)
-        serializer = DocumentSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        serializer.save(workspace=workspace, created_by=request.user)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-
-
-class DocumentDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def _get_doc(self, workspace_id, doc_id, user):
-        workspace = get_workspace_for_user(workspace_id, user)
-        return get_object_or_404(Document, id=doc_id, workspace=workspace)
-
-    def get(self, request, workspace_id, doc_id):
-        doc = self._get_doc(workspace_id, doc_id, request.user)
-        return Response(DocumentSerializer(doc).data)
-
-    def patch(self, request, workspace_id, doc_id):
-        doc = self._get_doc(workspace_id, doc_id, request.user)
-        serializer = DocumentSerializer(doc, data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data)
-
-    def delete(self, request, workspace_id, doc_id):
-        doc = self._get_doc(workspace_id, doc_id, request.user)
-        doc.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-# ── v2.6.0 — Forms & Intake ───────────────────────────────────────────────────
-
-
-class FormListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request, workspace_id, project_id):
-        workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(project_id), workspace=workspace)
-        forms = board.forms.prefetch_related("fields")
-        return Response(FormSerializer(forms, many=True).data)
-
-    def post(self, request, workspace_id, project_id):
-        workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(project_id), workspace=workspace)
-        if not has_project_permission(request.user, board, "edit"):
-            from rest_framework.exceptions import PermissionDenied
-
-            raise PermissionDenied("Editor role required.")
-        serializer = FormSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        form = serializer.save(board=board, created_by=request.user)
-        return Response(FormSerializer(form).data, status=status.HTTP_201_CREATED)
-
-
-class FormDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def _get_form(self, workspace_id, project_id, form_id, user):
-        workspace = get_workspace_for_user(workspace_id, user)
-        board = get_object_or_404(Board, id=_parse_pk(project_id), workspace=workspace)
-        return get_object_or_404(Form, id=form_id, board=board), board
-
-    def get(self, request, workspace_id, project_id, form_id):
-        form, _ = self._get_form(workspace_id, project_id, form_id, request.user)
-        return Response(FormSerializer(form).data)
-
-    def patch(self, request, workspace_id, project_id, form_id):
-        form, board = self._get_form(workspace_id, project_id, form_id, request.user)
-        if not has_project_permission(request.user, board, "edit"):
-            from rest_framework.exceptions import PermissionDenied
-
-            raise PermissionDenied("Editor role required.")
-        serializer = FormSerializer(form, data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data)
-
-    def delete(self, request, workspace_id, project_id, form_id):
-        form, board = self._get_form(workspace_id, project_id, form_id, request.user)
-        if not has_project_permission(request.user, board, "admin"):
-            from rest_framework.exceptions import PermissionDenied
-
-            raise PermissionDenied("Admin role required.")
-        form.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-class FormFieldsBulkUpdateView(APIView):
-    """PUT /forms/:id/fields/ — replace all fields in one shot (drag-drop reorder support)."""
-
-    permission_classes = [permissions.IsAuthenticated]
-
-    def put(self, request, workspace_id, project_id, form_id):
-        workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(project_id), workspace=workspace)
-        if not has_project_permission(request.user, board, "edit"):
-            from rest_framework.exceptions import PermissionDenied
-
-            raise PermissionDenied("Editor role required.")
-        form = get_object_or_404(Form, id=form_id, board=board)
-        form.fields.all().delete()
-        new_fields = []
-        for i, f in enumerate(request.data):
-            new_fields.append(
-                FormField(
-                    form=form,
-                    label=f.get("label", ""),
-                    field_type=f.get("field_type", "short_text"),
-                    placeholder=f.get("placeholder", ""),
-                    is_required=f.get("is_required", False),
-                    options=f.get("options", []),
-                    order=i,
-                )
-            )
-        FormField.objects.bulk_create(new_fields)
-        return Response(FormSerializer(form).data)
-
-
-class PublicFormView(APIView):
-    """GET /forms/:token/ — unauthenticated, returns public form definition."""
-
-    permission_classes = [permissions.AllowAny]
-
-    def get(self, request, form_token):
-        form = get_object_or_404(Form, token=form_token, is_active=True)
-        return Response(PublicFormSerializer(form).data)
-
-
-class PublicFormSubmitView(APIView):
-    """POST /forms/:token/submit/ — unauthenticated public submission."""
-
-    permission_classes = [permissions.AllowAny]
-
-    def post(self, request, form_token):
-        form = get_object_or_404(Form, token=form_token, is_active=True)
-        answers = request.data.get("answers", {})
-        submitter_email = request.data.get("email", "")
-
-        submission = FormSubmission.objects.create(
-            form=form,
-            answers=answers,
-            submitter_email=submitter_email,
-        )
-
-        # Auto-create task if configured
-        cfg = form.config or {}
-        if cfg.get("create_task", True):
-            title_field_id = cfg.get("title_field_id")
-            title = (
-                answers.get(title_field_id, "")
-                if title_field_id
-                else f"Submission from {submitter_email or 'form'}"
-            )
-            if not title:
-                title = f"Form submission — {form.name}"
-            status_id = cfg.get("default_status_id")
-            task_status = None
-            if status_id:
-                try:
-                    task_status = TaskStatus.objects.get(id=status_id, board=form.board)
-                except TaskStatus.DoesNotExist:
-                    task_status = form.board.statuses.first()
-            else:
-                task_status = form.board.statuses.first()
-
-            task = Task.objects.create(
-                board=form.board,
-                title=title[:500],
-                description=f"**Via form:** {form.name}\n\n**Submitter:** {submitter_email}",
-                status=task_status,
-                created_by=None,
-            )
-            submission.task = task
-            submission.save(update_fields=["task"])
-
-        return Response(
-            {"success": True, "submission_id": str(submission.id)},
-            status=status.HTTP_201_CREATED,
-        )
-
-
-class FormSubmissionListView(APIView):
-    """GET /forms/:id/submissions/ — authenticated, returns all submissions."""
-
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request, workspace_id, project_id, form_id):
-        workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(project_id), workspace=workspace)
-        form = get_object_or_404(Form, id=form_id, board=board)
-        subs = form.submissions.select_related("task").order_by("-submitted_at")
-        return Response(FormSubmissionSerializer(subs, many=True).data)
-
-    def patch(self, request, workspace_id, project_id, form_id):
-        """Update a submission status."""
-        workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(project_id), workspace=workspace)
-        form = get_object_or_404(Form, id=form_id, board=board)
-        sub_id = request.data.get("id")
-        sub = get_object_or_404(FormSubmission, id=sub_id, form=form)
-        new_status = request.data.get("status")
-        if new_status in [s[0] for s in FormSubmission.Status.choices]:
-            sub.status = new_status
-            sub.save(update_fields=["status"])
-        return Response(FormSubmissionSerializer(sub).data)
-
-
-# ── v2.7.0 — Automation Engine ────────────────────────────────────────────────
-
-
-class AutomationRuleListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request, workspace_id, project_id):
-        workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(project_id), workspace=workspace)
-        rules = board.automation_rules.all()
-        return Response(AutomationRuleSerializer(rules, many=True).data)
-
-    def post(self, request, workspace_id, project_id):
-        workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(project_id), workspace=workspace)
-        if not has_project_permission(request.user, board, "edit"):
-            from rest_framework.exceptions import PermissionDenied
-
-            raise PermissionDenied("Editor role required.")
-        serializer = AutomationRuleSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        rule = serializer.save(board=board, created_by=request.user)
-        return Response(
-            AutomationRuleSerializer(rule).data, status=status.HTTP_201_CREATED
-        )
-
-
-class AutomationRuleDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def _get_rule(self, workspace_id, project_id, rule_id, user):
-        workspace = get_workspace_for_user(workspace_id, user)
-        board = get_object_or_404(Board, id=_parse_pk(project_id), workspace=workspace)
-        return get_object_or_404(AutomationRule, id=rule_id, board=board), board
-
-    def patch(self, request, workspace_id, project_id, rule_id):
-        rule, board = self._get_rule(workspace_id, project_id, rule_id, request.user)
-        if not has_project_permission(request.user, board, "edit"):
-            from rest_framework.exceptions import PermissionDenied
-
-            raise PermissionDenied("Editor role required.")
-        serializer = AutomationRuleSerializer(rule, data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data)
-
-    def delete(self, request, workspace_id, project_id, rule_id):
-        rule, board = self._get_rule(workspace_id, project_id, rule_id, request.user)
-        if not has_project_permission(request.user, board, "admin"):
-            from rest_framework.exceptions import PermissionDenied
-
-            raise PermissionDenied("Admin role required.")
-        rule.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-class AutomationLogListView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request, workspace_id, project_id, rule_id):
-        workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(project_id), workspace=workspace)
-        rule = get_object_or_404(AutomationRule, id=rule_id, board=board)
-        logs = rule.logs.order_by("-created_at")[:50]
-        return Response(AutomationLogSerializer(logs, many=True).data)
-
-
-# ── v3.4.0 — My Work ─────────────────────────────────────────────────────────
-class MyWorkView(APIView):
-    """GET /my-work/ — all tasks assigned to the current user, across all workspaces, sorted by urgency."""
-
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request):
-        workspace_ids = WorkspaceMember.objects.filter(user=request.user).values_list(
-            "workspace_id", flat=True
-        )
-        tasks = (
-            Task.objects.filter(
-                board__workspace_id__in=workspace_ids, assignee=request.user
-            )
-            .exclude(status__is_done=True)
-            .select_related("status", "assignee", "sprint", "board__workspace")
-            .prefetch_related("labels", "blocked_by_deps")
-        )
-
-        today = timezone.now().date()
-        week_end = today + datetime.timedelta(days=7)
-
-        def urgency(t):
-            score = 0
-            if t.due_date:
-                d = t.due_date
-                if d < today:
-                    score += 100
-                elif d == today:
-                    score += 30
-                elif d <= week_end:
-                    score += 10
-            if t.priority == "urgent":
-                score += 50
-            elif t.priority == "high":
-                score += 20
-            return score
-
-        sorted_tasks = sorted(tasks, key=lambda t: -urgency(t))
-        return Response(
-            MyWorkTaskSerializer(
-                sorted_tasks, many=True, context={"request": request}
-            ).data
-        )
-
-# ── v3.5.0 — Real-Time Collaboration v2 ──────────────────────────────────────
-class UserPresenceView(APIView):
-    """
-    POST   /workspaces/:slug/presence/  — join/heartbeat a resource
-    DELETE /workspaces/:slug/presence/  — leave
-    GET    /workspaces/:slug/presence/?resource_type=X&resource_id=Y — active viewers
-    """
-
-    permission_classes = [permissions.IsAuthenticated]
-
-    def _get_workspace(self, slug, user):
-        return get_workspace_for_user(slug, user)
-
-    def get(self, request, workspace_id):
-        workspace = self._get_workspace(workspace_id, request.user)
-        resource_type = request.query_params.get("resource_type")
-        resource_id = request.query_params.get("resource_id")
-        cutoff = timezone.now() - datetime.timedelta(seconds=90)
-        qs = workspace.presences.filter(last_seen__gte=cutoff).select_related("user")
-        if resource_type:
-            qs = qs.filter(resource_type=resource_type)
-        if resource_id:
-            qs = qs.filter(resource_id=resource_id)
-        return Response(UserPresenceSerializer(qs, many=True).data)
-
-    def post(self, request, workspace_id):
-        workspace = self._get_workspace(workspace_id, request.user)
-        resource_type = request.data.get(
-            "resource_type", UserPresence.ResourceType.BOARD
-        )
-        resource_id = str(request.data.get("resource_id", ""))
-        if not resource_id:
-            return Response(
-                {"detail": "resource_id required."}, status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # last_seen is auto_now, so update_or_create already stamps it on save.
-        # Avoid a separate update + refresh_from_db, which races with a concurrent
-        # DELETE (leave) and raises UserPresence.DoesNotExist.
-        presence, _ = UserPresence.objects.update_or_create(
-            user=request.user,
-            workspace=workspace,
-            resource_type=resource_type,
-            resource_id=resource_id,
-            defaults={},
-        )
-
-        data = UserPresenceSerializer(presence).data
-        broadcast(
-            workspace_id,
-            "presence.updated",
-            {
-                "resource_type": resource_type,
-                "resource_id": resource_id,
-                "user": data["user"],
-                "last_seen": data["last_seen"],
-                "action": "join",
-            },
-        )
-        return Response(data)
-
-    def delete(self, request, workspace_id):
-        workspace = self._get_workspace(workspace_id, request.user)
-        resource_type = request.data.get("resource_type")
-        resource_id = str(request.data.get("resource_id", ""))
-
-        qs = UserPresence.objects.filter(user=request.user, workspace=workspace)
-        if resource_type and resource_id:
-            qs = qs.filter(resource_type=resource_type, resource_id=resource_id)
-        qs.delete()
-
-        if resource_type and resource_id:
-            from accounts.serializers import UserSerializer as AccUserSerializer
-
-            broadcast(
-                workspace_id,
-                "presence.updated",
-                {
-                    "resource_type": resource_type,
-                    "resource_id": resource_id,
-                    "user": AccUserSerializer(request.user).data,
-                    "action": "leave",
-                },
-            )
-        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class CommentReactionToggleView(APIView):
@@ -2180,7 +1224,7 @@ class ApprovalReviewView(APIView):
 
         # Fire automation triggers when overall status changes
         if approval.status != old_overall:
-            from .automation import fire_automation
+            from ..automation import fire_automation
 
             trigger = None
             if approval.status == Approval.Status.APPROVED:
@@ -2254,180 +1298,3 @@ class ApprovalResubmitView(APIView):
         )
 
         return Response(ApprovalSerializer(approval).data)
-
-
-# ── v3.8.0 — OKR & Goal Tracking ─────────────────────────────────────────────
-
-
-class ObjectiveListCreateView(APIView):
-    """GET/POST /workspaces/:slug/objectives/"""
-
-    permission_classes = [permissions.IsAuthenticated]
-
-    def _get_workspace(self, slug, user):
-        return get_workspace_for_user(slug, user)
-
-    def get(self, request, workspace_id):
-        workspace = self._get_workspace(workspace_id, request.user)
-        time_period = request.query_params.get("time_period")
-        qs = Objective.objects.filter(workspace=workspace).prefetch_related(
-            "key_results__tasks", "owner"
-        )
-        if time_period and time_period != "all":
-            qs = qs.filter(time_period=time_period)
-        return Response(
-            ObjectiveSerializer(qs, many=True, context={"request": request}).data
-        )
-
-    def post(self, request, workspace_id):
-        workspace = self._get_workspace(workspace_id, request.user)
-        serializer = ObjectiveSerializer(
-            data=request.data, context={"request": request}
-        )
-        serializer.is_valid(raise_exception=True)
-        obj = serializer.save(workspace=workspace, owner=request.user)
-        return Response(
-            ObjectiveSerializer(obj, context={"request": request}).data,
-            status=status.HTTP_201_CREATED,
-        )
-
-
-class ObjectiveDetailView(APIView):
-    """GET/PATCH/DELETE /workspaces/:slug/objectives/:obj_id/"""
-
-    permission_classes = [permissions.IsAuthenticated]
-
-    def _get_obj(self, workspace_id, obj_id, user):
-        workspace = get_workspace_for_user(workspace_id, user)
-        return get_object_or_404(
-            Objective.objects.prefetch_related("key_results__tasks").select_related(
-                "owner"
-            ),
-            id=obj_id,
-            workspace=workspace,
-        )
-
-    def get(self, request, workspace_id, obj_id):
-        obj = self._get_obj(workspace_id, obj_id, request.user)
-        return Response(ObjectiveSerializer(obj, context={"request": request}).data)
-
-    def patch(self, request, workspace_id, obj_id):
-        obj = self._get_obj(workspace_id, obj_id, request.user)
-        serializer = ObjectiveSerializer(
-            obj, data=request.data, partial=True, context={"request": request}
-        )
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data)
-
-    def delete(self, request, workspace_id, obj_id):
-        obj = self._get_obj(workspace_id, obj_id, request.user)
-        obj.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-class KeyResultListCreateView(APIView):
-    """GET/POST /workspaces/:slug/objectives/:obj_id/key-results/"""
-
-    permission_classes = [permissions.IsAuthenticated]
-
-    def _get_objective(self, workspace_id, obj_id, user):
-        workspace = get_workspace_for_user(workspace_id, user)
-        return get_object_or_404(Objective, id=obj_id, workspace=workspace)
-
-    def get(self, request, workspace_id, obj_id):
-        obj = self._get_objective(workspace_id, obj_id, request.user)
-        return Response(
-            KeyResultSerializer(
-                obj.key_results.prefetch_related("tasks"), many=True
-            ).data
-        )
-
-    def post(self, request, workspace_id, obj_id):
-        obj = self._get_objective(workspace_id, obj_id, request.user)
-        serializer = KeyResultSerializer(
-            data=request.data, context={"request": request}
-        )
-        serializer.is_valid(raise_exception=True)
-        kr = serializer.save(objective=obj)
-        return Response(KeyResultSerializer(kr).data, status=status.HTTP_201_CREATED)
-
-
-class KeyResultDetailView(APIView):
-    """GET/PATCH/DELETE /workspaces/:slug/objectives/:obj_id/key-results/:kr_id/"""
-
-    permission_classes = [permissions.IsAuthenticated]
-
-    def _get_kr(self, workspace_id, obj_id, kr_id, user):
-        workspace = get_workspace_for_user(workspace_id, user)
-        obj = get_object_or_404(Objective, id=obj_id, workspace=workspace)
-        return get_object_or_404(
-            KeyResult.objects.prefetch_related("tasks"), id=kr_id, objective=obj
-        )
-
-    def get(self, request, workspace_id, obj_id, kr_id):
-        kr = self._get_kr(workspace_id, obj_id, kr_id, request.user)
-        return Response(KeyResultSerializer(kr).data)
-
-    def patch(self, request, workspace_id, obj_id, kr_id):
-        kr = self._get_kr(workspace_id, obj_id, kr_id, request.user)
-        new_value = request.data.get("current_value")
-        if new_value is not None and str(new_value) != str(kr.current_value):
-            kr.record_checkin(new_value)
-            kr.refresh_from_db()
-            other_data = {k: v for k, v in request.data.items() if k != "current_value"}
-            if other_data:
-                serializer = KeyResultSerializer(kr, data=other_data, partial=True)
-                serializer.is_valid(raise_exception=True)
-                kr = serializer.save()
-        else:
-            serializer = KeyResultSerializer(kr, data=request.data, partial=True)
-            serializer.is_valid(raise_exception=True)
-            kr = serializer.save()
-        return Response(KeyResultSerializer(kr).data)
-
-    def delete(self, request, workspace_id, obj_id, kr_id):
-        kr = self._get_kr(workspace_id, obj_id, kr_id, request.user)
-        kr.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-class KeyResultLinkedTasksView(APIView):
-    """Manage tasks linked to a Key Result.
-    GET    — list linked tasks
-    PUT    — replace full task set { task_ids: [...] }
-    POST   — link one task { task_id: "..." }
-    DELETE — unlink one task { task_id: "..." }
-    """
-
-    permission_classes = [permissions.IsAuthenticated]
-
-    def _get_kr(self, workspace_id, obj_id, kr_id, user):
-        workspace = get_workspace_for_user(workspace_id, user)
-        obj = get_object_or_404(Objective, id=obj_id, workspace=workspace)
-        return get_object_or_404(
-            KeyResult.objects.prefetch_related("tasks__status"), id=kr_id, objective=obj
-        )
-
-    def get(self, request, workspace_id, obj_id, kr_id):
-        kr = self._get_kr(workspace_id, obj_id, kr_id, request.user)
-        return Response(KeyResultLinkedTaskSerializer(kr.tasks.all(), many=True).data)
-
-    def put(self, request, workspace_id, obj_id, kr_id):
-        kr = self._get_kr(workspace_id, obj_id, kr_id, request.user)
-        kr.tasks.set(request.data.get("task_ids", []))
-        return Response(KeyResultSerializer(kr).data)
-
-    def post(self, request, workspace_id, obj_id, kr_id):
-        kr = self._get_kr(workspace_id, obj_id, kr_id, request.user)
-        task_id = request.data.get("task_id")
-        if task_id:
-            kr.tasks.add(task_id)
-        return Response(KeyResultSerializer(kr).data)
-
-    def delete(self, request, workspace_id, obj_id, kr_id):
-        kr = self._get_kr(workspace_id, obj_id, kr_id, request.user)
-        task_id = request.data.get("task_id")
-        if task_id:
-            kr.tasks.remove(task_id)
-        return Response(KeyResultSerializer(kr).data)
