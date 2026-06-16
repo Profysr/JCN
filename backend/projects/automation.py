@@ -51,7 +51,7 @@ def _eval_condition(task, cond):
 # !! Simplify these functions into smaller function and then use them in main. I need one more thing, add a comment, how it works? Does it operated through celery?
 def _run_action(task, action, actor):
     from .models import TaskStatus, Label, TaskComment
-    from workspaces.models import Notification
+    from workspaces.models import InboxItem
 
     action_type = action.get("type")
     payload = action.get("payload", {})
@@ -126,25 +126,14 @@ def _run_action(task, action, actor):
                     "task_title": task.title,
                     "message": payload.get("message", ""),
                 }
-                notif = Notification.objects.create(
-                    workspace=workspace,
-                    recipient=recipient,
-                    actor=actor,
-                    verb=Notification.Verb.TASK_ASSIGNED,
-                    meta=meta,
-                )
-                # v3.7.0 — also create InboxItem for automation-triggered notifications
-                from workspaces.models import InboxItem
-
                 InboxItem.objects.create(
                     user=recipient,
                     workspace=workspace,
-                    notification=notif,
                     actor_id=str(actor.id) if actor else "",
                     actor_name=(
                         (actor.full_name or actor.email) if actor else "Automation"
                     ),
-                    verb=Notification.Verb.TASK_ASSIGNED,
+                    verb=InboxItem.Verb.TASK_ASSIGNED,
                     event_type="automated",
                     resource_name=task.title,
                     project_id=str(task.board_id),

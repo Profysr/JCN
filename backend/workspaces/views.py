@@ -13,7 +13,6 @@ from .importers.registry import SUPPORTED_SOURCES, get_parser
 from .models import (
     ImportJob,
     InboxItem,
-    Notification,
     OnboardingState,
     Webhook,
     WebhookDelivery,
@@ -27,7 +26,6 @@ from .serializers import (
     ImportJobDetailSerializer,
     ImportJobSerializer,
     InboxItemSerializer,
-    NotificationSerializer,
     WebhookCreateSerializer,
     WebhookDeliverySerializer,
     WebhookSerializer,
@@ -273,32 +271,6 @@ class AcceptInviteView(APIView):
 # ==============================================================================
 
 
-class NotificationListView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request):
-        notifs = Notification.objects.filter(recipient=request.user).select_related(
-            "actor"
-        )[:50]
-        return Response(NotificationSerializer(notifs, many=True).data)
-
-
-class NotificationMarkReadView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def post(self, request):
-        notif_id = request.data.get("id")
-        if notif_id:
-            Notification.objects.filter(
-                id=_parse_pk(notif_id), recipient=request.user
-            ).update(read=True)
-        else:
-            Notification.objects.filter(recipient=request.user, read=False).update(
-                read=True
-            )
-        return Response({"status": "ok"})
-
-
 class InboxListView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -354,13 +326,6 @@ class InboxItemUpdateView(APIView):
         serializer = InboxItemSerializer(item, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
-
-        if (
-            item.status in [InboxItem.Status.READ, InboxItem.Status.ARCHIVED]
-            and item.notification_id
-        ):
-            Notification.objects.filter(id=item.notification_id).update(read=True)
-
         return Response(serializer.data)
 
 
@@ -384,7 +349,6 @@ class InboxBulkUpdateView(APIView):
 
         if action == "read":
             qs.update(status=InboxItem.Status.READ)
-            Notification.objects.filter(inbox_item__in=qs, read=False).update(read=True)
         elif action == "archive":
             qs.update(status=InboxItem.Status.ARCHIVED)
         elif action == "snooze":

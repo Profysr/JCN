@@ -9,8 +9,6 @@ from .views import (
     WorkspaceInviteCancelView,
     InviteDetailView,
     AcceptInviteView,
-    NotificationListView,
-    NotificationMarkReadView,
     OnboardingStateView,
     InboxListView,
     InboxItemUpdateView,
@@ -55,9 +53,7 @@ urlpatterns = [
     # Onboarding (v2.3.0)
     path(f"{_ws}/onboarding/", OnboardingStateView.as_view()),
 
-    # Notifications + Inbox (v3.7.0)
-    path("notifications/", NotificationListView.as_view()),
-    path("notifications/mark-read/", NotificationMarkReadView.as_view()),
+    # Inbox (v3.7.0)
     path("inbox/", InboxListView.as_view()),
     path("inbox/bulk/", InboxBulkUpdateView.as_view()),
     path("inbox/unread-count/", InboxUnreadCountView.as_view()),

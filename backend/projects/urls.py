@@ -14,9 +14,6 @@ from .views import (
     KeyResultListCreateView,
     KeyResultDetailView,
     KeyResultLinkedTasksView,
-    TaskStatusListCreateView,
-    TaskStatusDetailView,
-    TaskStatusReorderView,
     TaskStatusBulkUpdateView,
     TaskListCreateView,
     TaskDetailView,
@@ -83,10 +80,7 @@ urlpatterns = [
     path(f"{_pr}/members/", BoardMemberListCreateView.as_view()),
     path(f"{_pr}/members/<str:member_id>/", BoardMemberDetailView.as_view()),
     # Kanban columns
-    path(f"{_pr}/statuses/", TaskStatusListCreateView.as_view()),
     path(f"{_pr}/statuses/bulk/", TaskStatusBulkUpdateView.as_view()),
-    path(f"{_pr}/statuses/reorder/", TaskStatusReorderView.as_view()),
-    path(f"{_pr}/statuses/<str:status_id>/", TaskStatusDetailView.as_view()),
     # Tasks
     path(f"{_pr}/tasks/", TaskListCreateView.as_view()),
     path(f"{_pr}/tasks/bulk/", TaskBulkUpdateView.as_view()),

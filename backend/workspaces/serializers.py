@@ -4,7 +4,6 @@ from .models import (
     Workspace,
     WorkspaceMember,
     WorkspaceInvite,
-    Notification,
     InboxItem,
     WorkspaceAPIKey,
     Webhook,
@@ -89,16 +88,6 @@ class WorkspaceInviteSerializer(serializers.ModelSerializer):
         validated_data["workspace"] = self.context["workspace"]
         validated_data["invited_by"] = self.context["request"].user
         return super().create(validated_data)
-
-
-class NotificationSerializer(serializers.ModelSerializer):
-    id = PrefixedUUIDField(read_only=True)
-    actor = MiniUserSerializer(read_only=True)
-
-    class Meta:
-        model = Notification
-        fields = ["id", "actor", "verb", "meta", "read", "created_at"]
-        read_only_fields = ["actor", "verb", "meta", "created_at"]
 
 
 # ── v3.7.0 ────────────────────────────────────────────────────────────────────

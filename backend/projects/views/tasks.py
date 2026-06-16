@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.shortcuts import get_object_or_404
 from django.http import HttpResponse
+from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 import datetime
@@ -49,7 +50,7 @@ from ..serializers import (
     ApprovalSerializer,
     ApprovalReviewerSerializer,
 )
-from workspaces.models import Notification
+from workspaces.models import InboxItem
 from .helpers import (
     _parse_pk,
     get_workspace_for_user,
@@ -89,65 +90,44 @@ class TaskStatusListCreateView(APIView):
         serializer.save(board=board, order=next_order)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-class TaskStatusDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def _get_status(self, workspace_id, project_id, status_id, user):
-        board = _get_board(workspace_id, project_id, user)
-        return get_object_or_404(TaskStatus, id=status_id, board=board)
-
-    def patch(self, request, workspace_id, project_id, status_id):
-        task_status = self._get_status(workspace_id, project_id, status_id, request.user)
-        serializer = TaskStatusSerializer(task_status, data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        # Enforce single-done: clear any other done column on this board first
-        if serializer.validated_data.get("is_done"):
-            task_status.board.statuses.exclude(id=task_status.id).filter(is_done=True).update(is_done=False)
-        serializer.save()
-        broadcast(workspace_id, "status.updated", serializer.data)
-        return Response(serializer.data)
-
-    def delete(self, request, workspace_id, project_id, status_id):
-        task_status = self._get_status(workspace_id, project_id, status_id, request.user)
-        if task_status.tasks.exists():
-            return Response(
-                {"error": "Cannot delete a column that still has tasks. Move tasks first."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        task_status.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+def _guard_deletions(existing, incoming_ids):
+    """Return an error string if any status being removed still has tasks, else None."""
+    for sid, s in existing.items():
+        if sid not in incoming_ids and s.tasks.exists():
+            return f'Cannot delete "{s.name}" — move its tasks out first.'
+    return None
 
 
-class TaskStatusReorderView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def post(self, request, workspace_id, project_id):
-        board = _get_board(workspace_id, project_id, request.user)
-        ordered_ids = request.data.get("ids", [])
-        if not isinstance(ordered_ids, list):
-            return Response({"error": "ids must be a list"}, status=status.HTTP_400_BAD_REQUEST)
-
-        statuses = {str(s.id): s for s in board.statuses.all()}
-        updates = []
-        for i, sid in enumerate(ordered_ids):
-            s = statuses.get(str(sid))
-            if s:
-                s.order = i
-                updates.append(s)
-
-        TaskStatus.objects.bulk_update(updates, ["order"])
-        return Response({"reordered": True})
+def _apply_status_items(board, existing, items):
+    """Mutate existing statuses and collect new ones; returns objects ready for bulk_update."""
+    to_update, to_create = [], []
+    for i, item in enumerate(items):
+        sid = str(item.get("id", ""))
+        if sid in existing:
+            s = existing[sid]
+            s.name    = item["name"]
+            s.color   = item["color"]
+            s.is_done = item["is_done"]
+            s.order   = i
+            to_update.append(s)
+        else:
+            to_create.append(TaskStatus(
+                board=board,
+                name=item["name"],
+                color=item["color"],
+                is_done=item["is_done"],
+                order=i,
+            ))
+    if to_create:
+        TaskStatus.objects.bulk_create(to_create)
+    return to_update
 
 
 class TaskStatusBulkUpdateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def put(self, request, workspace_id, project_id):
-        from django.db import transaction
-
         board = _get_board(workspace_id, project_id, request.user)
-
-        # Wrap the raw list in the key the serializer expects
         serializer = BulkStatusUpdateSerializer(data={"statuses": request.data})
         serializer.is_valid(raise_exception=True)
         items = serializer.validated_data["statuses"]
@@ -156,38 +136,13 @@ class TaskStatusBulkUpdateView(APIView):
             existing = {str(s.id): s for s in board.statuses.prefetch_related("tasks")}
             incoming_ids = {str(item["id"]) for item in items if item.get("id")}
 
-            # Guard: cannot delete a column that still has tasks
-            for sid, s in existing.items():
-                if sid not in incoming_ids and s.tasks.exists():
-                    return Response(
-                        {"error": f'Cannot delete "{s.name}" — move its tasks out first.'},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
+            error = _guard_deletions(existing, incoming_ids)
+            if error:
+                return Response({"error": error}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Delete statuses removed from the list
             board.statuses.exclude(id__in=incoming_ids).delete()
-
-            # Update existing / create new, using list position as the saved order
-            to_bulk_update = []
-            for i, item in enumerate(items):
-                sid = str(item.get("id", ""))
-                if sid in existing:
-                    s = existing[sid]
-                    s.name    = item["name"]
-                    s.color   = item["color"]
-                    s.is_done = item["is_done"]
-                    s.order   = i
-                    to_bulk_update.append(s)
-                else:
-                    TaskStatus.objects.create(
-                        board=board,
-                        name=item["name"],
-                        color=item["color"],
-                        is_done=item["is_done"],
-                        order=i,
-                    )
-
-            TaskStatus.objects.bulk_update(to_bulk_update, ["name", "color", "is_done", "order"])
+            to_update = _apply_status_items(board, existing, items)
+            TaskStatus.objects.bulk_update(to_update, ["name", "color", "is_done", "order"])
 
         return Response(TaskStatusSerializer(board.statuses.all(), many=True).data)
 
@@ -222,7 +177,7 @@ class TaskListCreateView(APIView):
         task = serializer.save(board=board)
         log_activity(task, request.user, TaskActivity.Verb.CREATED)
         if task.assignee and task.assignee != request.user:
-            notify(task.assignee, request.user, Notification.Verb.TASK_ASSIGNED, board.workspace, task)
+            notify(task.assignee, request.user, InboxItem.Verb.TASK_ASSIGNED, board.workspace, task)
         data = TaskSerializer(task, context={"request": request}).data
         broadcast(workspace_id, "task.created", data)
         return Response(data, status=status.HTTP_201_CREATED)
@@ -391,7 +346,7 @@ class TaskCommentListCreateView(APIView):
             notify(
                 recipient,
                 request.user,
-                Notification.Verb.TASK_COMMENTED,
+                InboxItem.Verb.TASK_COMMENTED,
                 workspace,
                 task,
             )
@@ -412,7 +367,7 @@ class TaskCommentListCreateView(APIView):
                             notify(
                                 user,
                                 request.user,
-                                Notification.Verb.TASK_MENTIONED,
+                                InboxItem.Verb.TASK_MENTIONED,
                                 workspace,
                                 task,
                             )
@@ -1138,7 +1093,7 @@ class ApprovalListCreateView(APIView):
             notify(
                 recipient=reviewer.user,
                 actor=request.user,
-                verb=Notification.Verb.APPROVAL_REQUESTED,
+                verb=InboxItem.Verb.APPROVAL_REQUESTED,
                 workspace=workspace,
                 task=task,
             )
@@ -1282,7 +1237,7 @@ class ApprovalResubmitView(APIView):
             notify(
                 recipient=reviewer.user,
                 actor=request.user,
-                verb=Notification.Verb.APPROVAL_REQUESTED,
+                verb=InboxItem.Verb.APPROVAL_REQUESTED,
                 workspace=workspace,
                 task=task,
             )

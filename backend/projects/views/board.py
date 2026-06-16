@@ -90,7 +90,7 @@ class BoardDetailView(APIView):
 
 # ── v3.4.0 — Portfolio ✅──────────────────────────────────────────────────────
 class PortfolioView(APIView):
-    """GET /portfolio/ — cross-project health stats for a workspace."""
+    """GET /portfolio/ — cross-project health stats for a workspace. Similar to Get Method in Board Create List view"""
 
     permission_classes = [permissions.IsAuthenticated]
 
@@ -118,15 +118,17 @@ class PortfolioView(APIView):
         return Response(PortfolioBoardSerializer(boards, many=True).data)
 
 
-# ── v2.1.0 — Project Members & Permissions ────────────────────────────────────
+# ── v2.1.0 — Project Members & Permissions ✅───────────────────────────────────
 class BoardMemberListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_id, project_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
         board = get_object_or_404(Board, id=_parse_pk(project_id), workspace=workspace)
+
         if not has_project_permission(request.user, board, "view"):
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+
         members = board.board_members.select_related("user")
         return Response(BoardMemberSerializer(members, many=True).data)
 
@@ -256,6 +258,7 @@ class UserPresenceView(APIView):
 
     def get(self, request, workspace_id):
         workspace = self._get_workspace(workspace_id, request.user)
+        # at the moment, we've only 2 types, one is board, second is task
         resource_type = request.query_params.get("resource_type")
         resource_id = request.query_params.get("resource_id")
         cutoff = timezone.now() - datetime.timedelta(seconds=90)
@@ -311,6 +314,7 @@ class UserPresenceView(APIView):
         if resource_type and resource_id:
             qs = qs.filter(resource_type=resource_type, resource_id=resource_id)
             qs.delete()
+            # send an webhook event to client about updated presence
             broadcast(
                 workspace_id,
                 "presence.updated",

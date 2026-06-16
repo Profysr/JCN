@@ -98,51 +98,17 @@ class WorkspaceInvite(models.Model):
         return f"Invite: {self.email} to {self.workspace.name}"
 
 
-class Notification(models.Model):
-    PREFIX = "ntf"
+# ── v3.7.0 — Notifications Hub v2 ────────────────────────────────────────────
+class InboxItem(models.Model):
+    """Persistent notification inbox — one row per user event, survives bell dismissals."""
+
+    PREFIX = "ibx"
 
     class Verb(models.TextChoices):
         TASK_ASSIGNED = "task_assigned", "assigned you a task"
         TASK_COMMENTED = "task_commented", "commented on your task"
         TASK_MENTIONED = "task_mentioned", "mentioned you in a comment"
         APPROVAL_REQUESTED = "approval_requested", "requested your approval"
-
-    id = UUIDv7Field()
-    recipient = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notifications"
-    )
-    actor = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name="sent_notifications",
-    )
-    verb = models.CharField(max_length=30, choices=Verb.choices)
-    workspace = models.ForeignKey(
-        Workspace, on_delete=models.CASCADE, related_name="notifications"
-    )
-    meta = models.JSONField(
-        default=dict
-    )  # task_id, task_title, project_id, workspace_id
-    read = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["-id"]
-        indexes = [
-            models.Index(fields=["recipient", "read"], name="notif_recipient_read_idx"),
-            models.Index(fields=["recipient", "created_at"], name="notif_recipient_created_idx"),
-        ]
-
-    def __str__(self):
-        return f"{self.actor} → {self.recipient}: {self.verb}"
-
-
-# ── v3.7.0 — Notifications Hub v2 ────────────────────────────────────────────
-class InboxItem(models.Model):
-    """Persistent notification inbox — one row per user event, survives bell dismissals."""
-
-    PREFIX = "ibx"
 
     class Status(models.TextChoices):
         UNREAD = "unread", "Unread"
@@ -164,17 +130,10 @@ class InboxItem(models.Model):
     workspace = models.ForeignKey(
         Workspace, on_delete=models.CASCADE, related_name="inbox_items"
     )
-    notification = models.OneToOneField(
-        Notification,
-        on_delete=models.CASCADE,
-        related_name="inbox_item",
-        null=True,
-        blank=True,
-    )
     # Denormalized so the inbox renders without extra queries — avoids joins on every list load.
     actor_id = models.CharField(max_length=100, blank=True)
     actor_name = models.CharField(max_length=255, blank=True)
-    verb = models.CharField(max_length=50)
+    verb = models.CharField(max_length=50, choices=Verb.choices)
     event_type = models.CharField(
         max_length=20, choices=EventType.choices, default=EventType.ASSIGNED
     )

@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { notificationsKey } from "@/hooks/useNotifications";
 import { presenceKey } from "@/hooks/usePresence";
 import { BACKEND_WS_URL } from "@/lib/env";
 
@@ -80,18 +79,10 @@ export function useWorkspaceSocket(workspaceId) {
         });
       }
 
-      // ── Notification events (user-scoped, piggybacked on workspace WS) ──
-      if (type === "notification.created") {
-        qc.setQueryData(notificationsKey, (old) => {
-          if (!old) return [payload];
-          const exists = old.some((n) => n.id === payload.id);
-          return exists ? old : [payload, ...old];
-        });
-      }
-
       // ── Inbox: invalidate on new notification ──────────────────
       if (type === "notification.created") {
         qc.invalidateQueries({ queryKey: ["inbox", workspaceId] });
+        qc.invalidateQueries({ queryKey: ["inbox-unread-count", workspaceId] });
       }
 
       // ── Approval events ────────────────────────────────────────
