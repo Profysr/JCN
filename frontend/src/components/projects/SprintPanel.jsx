@@ -12,6 +12,7 @@ import {
   Rows3,
 } from "lucide-react";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { CreateSprintModal } from "@/components/projects/CreateSprintModal";
 import {
   useSprints,
   useCreateSprint,
@@ -132,10 +133,10 @@ export default function SprintHeader({
       {/* Burndown chart panel */}
       <BurndownSection showBurndown={showBurndown} burndown={burndown} />
 
-      {/* Inline create form */}
-      <CreateSprintForm
-        creating={creating}
-        setCreating={setCreating}
+      {/* Create sprint modal */}
+      <CreateSprintModal
+        open={creating}
+        onClose={() => setCreating(false)}
         createSprint={createSprint}
         onSelectSprint={onSelectSprint}
       />
@@ -468,98 +469,3 @@ function BurndownSection({ showBurndown, burndown }) {
   );
 }
 
-// ── SUB-COMPONENT: CREATE SPRINT INLINE FORM ──
-function CreateSprintForm({
-  creating,
-  setCreating,
-  createSprint,
-  onSelectSprint,
-}) {
-  const [form, setForm] = useState({
-    name: "",
-    goal: "",
-    start_date: "",
-    end_date: "",
-  });
-
-  if (!creating) return null;
-
-  const handleCreate = (e) => {
-    e.preventDefault();
-    createSprint.mutate(form, {
-      onSuccess: (sprint) => {
-        setCreating(false);
-        setForm({ name: "", goal: "", start_date: "", end_date: "" });
-        onSelectSprint(sprint);
-      },
-    });
-  };
-
-  return (
-    <form
-      onSubmit={handleCreate}
-      className="border-t px-6 py-4 bg-muted/20 flex items-end gap-3 flex-wrap"
-    >
-      <div className="flex-1 min-w-[180px]">
-        <label className="text-xs text-muted-foreground mb-1 block">
-          Sprint name *
-        </label>
-        <input
-          autoFocus
-          required
-          className="w-full text-sm border rounded-lg px-3 py-2 bg-background outline-none focus:ring-2 focus:ring-ring"
-          placeholder="e.g. Sprint 3"
-          value={form.name}
-          onChange={(e) => setForm({ ...form, name: e.target.value })}
-        />
-      </div>
-      <div className="flex-1 min-w-[220px]">
-        <label className="text-xs text-muted-foreground mb-1 block">
-          Goal (optional)
-        </label>
-        <input
-          className="w-full text-sm border rounded-lg px-3 py-2 bg-background outline-none focus:ring-2 focus:ring-ring"
-          placeholder="What will this sprint accomplish?"
-          value={form.goal}
-          onChange={(e) => setForm({ ...form, goal: e.target.value })}
-        />
-      </div>
-      <div>
-        <label className="text-xs text-muted-foreground mb-1 block">
-          Start
-        </label>
-        <input
-          type="date"
-          className="text-sm border rounded-lg px-3 py-2 bg-background outline-none focus:ring-2 focus:ring-ring"
-          value={form.start_date}
-          onChange={(e) => setForm({ ...form, start_date: e.target.value })}
-        />
-      </div>
-      <div>
-        <label className="text-xs text-muted-foreground mb-1 block">End</label>
-        <input
-          type="date"
-          className="text-sm border rounded-lg px-3 py-2 bg-background outline-none focus:ring-2 focus:ring-ring"
-          value={form.end_date}
-          onChange={(e) => setForm({ ...form, end_date: e.target.value })}
-        />
-      </div>
-      <div className="flex gap-2">
-        <Button type="submit" size="sm" disabled={createSprint.isPending}>
-          {createSprint.isPending ? "Creating…" : "Create"}
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => {
-            setCreating(false);
-            setForm({ name: "", goal: "", start_date: "", end_date: "" });
-          }}
-        >
-          Cancel
-        </Button>
-      </div>
-    </form>
-  );
-}

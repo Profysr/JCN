@@ -43,6 +43,7 @@ from ..serializers import (
     TaskFieldValueSerializer,
     SavedViewSerializer,
     SprintSerializer,
+    SprintListSerializer,
     TaskAttachmentSerializer,
     MinimalTaskSerializer,
     TaskDependencySerializer,
@@ -109,11 +110,19 @@ def _apply_status_items(board, existing, items):
         sid = str(item.get("id", ""))
         if sid in existing:
             s = existing[sid]
-            s.name = item["name"]
-            s.color = item["color"]
-            s.is_done = item["is_done"]
-            s.order = i
-            to_update.append(s)
+            # Only queue for bulk_update if at least one field actually changed — avoids unnecessary writes for statuses the user didn't touch.
+            changed = (
+                s.name != item["name"]
+                or s.color != item["color"]
+                or s.is_done != item["is_done"]
+                or s.order != i
+            )
+            if changed:
+                s.name = item["name"]
+                s.color = item["color"]
+                s.is_done = item["is_done"]
+                s.order = i
+                to_update.append(s)
         else:
             to_create.append(
                 TaskStatus(
@@ -251,6 +260,7 @@ class TaskDetailView(APIView):
 
     def delete(self, request, workspace_id, project_id, task_id):
         task = _get_task(workspace_id, project_id, task_id, request.user)
+        _require_board_perm(request.user, task.board, "delete")
         task_id_str = str(task.id)
         task.delete()
         broadcast(
@@ -341,8 +351,10 @@ def _bulk_update(tasks, updates, workspace_id, project_id):
         # None is a valid value here (unassign), so we can't skip on falsy.
         update_kwargs["assignee_id"] = updates["assignee_id"]
 
+    # Exclude rows that already carry the exact same values — avoids unnecessary writes (e.g. unassigning 5 tasks when only 1 was assigned).
     if update_kwargs:
-        tasks.update(**update_kwargs)
+        exclude_filter = Q(**update_kwargs)
+        tasks.exclude(exclude_filter).update(**update_kwargs)
 
     # Re-fetch with full card annotations so the broadcast payload matches
     # what individual task endpoints send — subtask counts, approval counts, labels, etc.
@@ -369,6 +381,7 @@ class TaskBulkUpdateView(APIView):
         tasks = Task.objects.filter(id__in=data["task_ids"], board=board)
 
         if data["action"] == "delete":
+            _require_board_perm(request.user, board, "delete")
             return _bulk_delete(tasks, workspace_id, project_id)
 
         if data["action"] == "update":
@@ -743,14 +756,14 @@ class SprintListCreateView(APIView):
 
     def get(self, request, workspace_id, project_id):
         board = _get_board(workspace_id, project_id, request.user)
-        return Response(SprintSerializer(_sprint_qs(board), many=True).data)
+        return Response(SprintListSerializer(_sprint_qs(board), many=True).data)
 
     def post(self, request, workspace_id, project_id):
         board = _get_board(workspace_id, project_id, request.user)
         serializer = SprintSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         sprint = serializer.save(board=board)
-        return Response(SprintSerializer(_sprint_qs().get(pk=sprint.pk)).data, status=status.HTTP_201_CREATED)
+        return Response(SprintSerializer(_sprint_qs(board).get(pk=sprint.pk)).data, status=status.HTTP_201_CREATED)
 
 
 class SprintDetailView(APIView):
@@ -766,7 +779,8 @@ class SprintDetailView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         # Re-fetch with annotations so response counts reflect the saved state.
-        return Response(SprintSerializer(_sprint_qs().get(pk=sprint.pk)).data)
+        board = _get_board(workspace_id, project_id, request.user)
+        return Response(SprintSerializer(_sprint_qs(board).get(pk=sprint.pk)).data)
 
     def delete(self, request, workspace_id, project_id, sprint_id):
         sprint = _get_sprint(workspace_id, project_id, sprint_id, request.user)

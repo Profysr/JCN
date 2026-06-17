@@ -240,3 +240,48 @@ export const FOCUS_DURATIONS = [
   { key: "4h", label: "4 hours", hours: 4 },
   { key: "8h", label: "8 hours", hours: 8 },
 ];
+
+// ── Project roles & permissions ───────────────────────────────────────────────
+// Single source of truth for role weights and action thresholds.
+// Mirrors backend projects/permissions.py — keep both in sync when changing.
+//
+// To add a role: add to PROJECT_ROLE_WEIGHT + PROJECT_ROLES.
+// To change who can do what: adjust ACTION_MIN thresholds below.
+
+export const PROJECT_ROLE_WEIGHT = { admin: 4, editor: 3, viewer: 2, guest: 1 };
+
+// Minimum weight to perform each action (mirrors backend _ACTION_MIN).
+export const ACTION_MIN = { view: 2, edit: 3, delete: 4, admin: 4 };
+
+// Ordered role list consumed by dropdowns, badges, and the permissions matrix.
+export const PROJECT_ROLES = [
+  { value: "admin",  label: "Admin",  desc: "Full access, manage members",  badge: "default"   },
+  { value: "editor", label: "Editor", desc: "Create and edit tasks",        badge: "secondary" },
+  { value: "viewer", label: "Viewer", desc: "View only, no edits",          badge: "muted"     },
+  { value: "guest",  label: "Guest",  desc: "Read-only via share link",     badge: "outline"   },
+];
+
+// Badge variant per role — derived from PROJECT_ROLES, never edit directly.
+export const ROLE_BADGE_VARIANT = Object.fromEntries(
+  PROJECT_ROLES.map((r) => [r.value, r.badge])
+);
+
+// Columns shown in the permissions matrix tab.
+// actionKey maps to ACTION_MIN — change the threshold there to affect both the
+// hook (canEdit / canDelete / etc.) and the matrix display automatically.
+export const PERMISSION_MATRIX_ACTIONS = [
+  { label: "Create", actionKey: "edit"   },
+  { label: "Edit",   actionKey: "edit"   },
+  { label: "Delete", actionKey: "delete" },
+  { label: "Admin",  actionKey: "admin"  },
+];
+
+// Derived permissions matrix — never hand-edit this; change ACTION_MIN above.
+export const ROLE_PERMS = Object.fromEntries(
+  PROJECT_ROLES.map((r) => [
+    r.value,
+    PERMISSION_MATRIX_ACTIONS.map(
+      (a) => PROJECT_ROLE_WEIGHT[r.value] >= ACTION_MIN[a.actionKey]
+    ),
+  ])
+);

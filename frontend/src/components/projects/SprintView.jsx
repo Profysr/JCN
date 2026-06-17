@@ -4,6 +4,7 @@ import KanbanColumn from "@/components/tasks/KanbanColumn";
 import SprintHeader from "@/components/projects/SprintPanel";
 import SprintPlanningView from "@/components/projects/SprintPlanningView";
 import SprintSwimLanes from "@/components/projects/SprintSwimLanes";
+import { useSprintDetail } from "@/hooks/useSprints";
 
 export default function SprintView({
   workspaceId,
@@ -20,8 +21,11 @@ export default function SprintView({
   canEdit,
   onDragEnd,
 }) {
-  const [activeSprint, setActiveSprint] = useState(null);
+  const [activeSprintId, setActiveSprintId] = useState(null);
   const [sprintView, setSprintView] = useState("columns");
+
+  // Always reflects the latest server state — never a stale snapshot.
+  const { data: activeSprint = null } = useSprintDetail(workspaceId, boardId, activeSprintId);
 
   const tasks = useMemo(() => {
     if (!activeSprint) return allTasks;
@@ -44,7 +48,7 @@ export default function SprintView({
         workspaceId={workspaceId}
         boardId={boardId}
         activeSprint={activeSprint}
-        onSelectSprint={setActiveSprint}
+        onSelectSprint={(s) => setActiveSprintId(s?.id ?? null)}
         sprintView={sprintView}
         onSprintViewChange={setSprintView}
       />

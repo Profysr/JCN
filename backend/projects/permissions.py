@@ -21,9 +21,19 @@ Resolution rule
 """
 from workspaces.models import WorkspaceMember
 
+# Maps each role name to a numeric weight used for comparison.
+# Higher = more privilege. Add a new role here when introducing one;
+# keep weights contiguous so ACTION_MIN thresholds stay intuitive.
 _PROJ_WEIGHT  = {"admin": 4, "editor": 3, "viewer": 2, "guest": 1}
+
+# Reverse of _PROJ_WEIGHT — used to turn a computed weight back into a role string. Must stay in sync with _PROJ_WEIGHT: every weight value needs an entry here.
 _WEIGHT_ROLE  = {4: "admin", 3: "editor", 2: "viewer", 1: "guest"}
-_ACTION_MIN   = {"view": 2, "edit": 3, "delete": 3, "admin": 4}
+
+# Minimum weight required to perform each action.
+# Raise a threshold to restrict an action to a higher role (e.g. "edit": 4
+# would make editing admin-only). Lower it to open an action to more roles.
+# Roles below the threshold receive 403 from has_project_permission().
+_ACTION_MIN   = {"view": 2, "edit": 3, "delete": 4, "admin": 4}
 
 
 def get_effective_role(user, board):

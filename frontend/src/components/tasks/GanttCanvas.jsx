@@ -42,20 +42,22 @@ function roundRect(ctx, x, y, w, h, r = 4) {
 function getTheme() {
   const dark = document.documentElement.classList.contains("dark");
   return {
-    bg:        dark ? "#09090b" : "#ffffff",
-    rowAlt:    dark ? "rgba(255,255,255,0.012)" : "rgba(0,0,0,0.012)",
-    groupBg:   dark ? "rgba(255,255,255,0.03)"  : "rgba(0,0,0,0.02)",
-    ongoingBg: dark ? "rgba(139,92,246,0.08)"   : "rgba(139,92,246,0.06)",
-    gridLine:  dark ? "rgba(255,255,255,0.07)"  : "rgba(0,0,0,0.07)",
-    gridMaj:   dark ? "rgba(255,255,255,0.14)"  : "rgba(0,0,0,0.14)",
-    shading:   "rgba(99,102,241,0.05)",
-    todayLine: "rgba(248,113,113,0.8)",
-    todayFill: "rgb(248,113,113)",
-    text:      dark ? "#e2e8f0" : "#1e293b",
-    textMuted: dark ? "#475569" : "#94a3b8",
-    textOnBar: "#ffffff",
-    arrowLine: dark ? "#475569" : "#94a3b8",
-    arrowFill: dark ? "#475569" : "#94a3b8",
+    bg:            dark ? "#09090b" : "#ffffff",
+    rowAlt:        dark ? "rgba(255,255,255,0.015)" : "rgba(0,0,0,0.015)",
+    groupBg:       dark ? "rgba(255,255,255,0.04)"  : "rgba(0,0,0,0.025)",
+    statusBg:      dark ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.015)",
+    gridLine:      dark ? "rgba(255,255,255,0.18)"  : "rgba(0,0,0,0.15)",
+    gridMaj:       dark ? "rgba(255,255,255,0.35)"  : "rgba(0,0,0,0.28)",
+    shading:       dark ? "rgba(99,102,241,0.09)"   : "rgba(99,102,241,0.07)",
+    currentBorder: dark ? "rgba(99,102,241,0.40)"   : "rgba(99,102,241,0.35)",
+    todayLine:     "rgba(248,113,113,0.8)",
+    todayFill:     "rgb(248,113,113)",
+    text:          dark ? "#e2e8f0" : "#1e293b",
+    textMuted:     dark ? "#475569" : "#94a3b8",
+    textOnBar:     "#ffffff",
+    arrowLine:     dark ? "#475569" : "#94a3b8",
+    arrowFill:     dark ? "#475569" : "#94a3b8",
+    outOfRangeFill: dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)",
   };
 }
 
@@ -113,14 +115,26 @@ const GanttCanvas = forwardRef(function GanttCanvas(
     ctx.fillStyle = C.bg;
     ctx.fillRect(0, 0, W, H);
 
-    // 2 ── Current-period shading ─────────────────────────────────────────────
+    // 2 ── Current-period shading + accent borders ────────────────────────────
     if (headerSegments?.bottom) {
-      ctx.fillStyle = C.shading;
       for (const seg of headerSegments.bottom) {
         if (!seg.current) continue;
         const sx = seg.x - sL;
         if (sx + seg.w < 0 || sx > W) continue;
+        ctx.fillStyle = C.shading;
         ctx.fillRect(sx, 0, seg.w, H);
+        // Left + right accent border for the current timeframe
+        ctx.strokeStyle = C.currentBorder;
+        ctx.lineWidth   = 1;
+        ctx.setLineDash([]);
+        for (const bx of [sx + 0.5, sx + seg.w - 0.5]) {
+          if (bx >= -1 && bx <= W + 1) {
+            ctx.beginPath();
+            ctx.moveTo(bx, 0);
+            ctx.lineTo(bx, H);
+            ctx.stroke();
+          }
+        }
       }
     }
 
@@ -156,11 +170,11 @@ const GanttCanvas = forwardRef(function GanttCanvas(
       const ry  = row.y - sT;
       if (ry > H) break;
 
-      if (row.type === "ongoing") {
-        ctx.fillStyle = C.ongoingBg;
-        ctx.fillRect(0, ry, W, row.h);
-      } else if (row.type === "sprint") {
+      if (row.type === "sprint") {
         ctx.fillStyle = C.groupBg;
+        ctx.fillRect(0, ry, W, row.h);
+      } else if (row.type === "status") {
+        ctx.fillStyle = C.statusBg;
         ctx.fillRect(0, ry, W, row.h);
       } else if (i % 2 === 1) {
         ctx.fillStyle = C.rowAlt;
@@ -263,18 +277,8 @@ const GanttCanvas = forwardRef(function GanttCanvas(
         continue;
       }
 
-      // ── Ongoing group — dashed separator, tasks below have their own bars ──
-      if (row.type === "ongoing") {
-        ctx.strokeStyle = "#8b5cf6" + "44";
-        ctx.lineWidth   = 1;
-        ctx.setLineDash([6, 4]);
-        ctx.beginPath();
-        ctx.moveTo(0, ry + row.h / 2);
-        ctx.lineTo(W, ry + row.h / 2);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        continue;
-      }
+      // ── Status group — no bar, just the background drawn in section 5 ──────
+      if (row.type === "status") continue;
 
       // ── Task bar ───────────────────────────────────────────────────────────
       if (row.type === "task") {
@@ -301,6 +305,30 @@ const GanttCanvas = forwardRef(function GanttCanvas(
           criticalSet?.has(task.id)
             ? "#f59e0b"
             : (statuses.find(s => s.id === task.status_id)?.color || "#6366f1");
+
+        // Out-of-sprint-range: task dates fall entirely before sprint start
+        // or entirely after sprint end — render muted with dashed border
+        const taskEnd   = task.due_date   || task.start_date;
+        const taskStart = task.start_date || task.due_date;
+        const isOutOfRange = row.sprintStart && (
+          (taskEnd   && taskEnd   < row.sprintStart) ||
+          (taskStart && row.sprintEnd && taskStart > row.sprintEnd)
+        );
+
+        if (isOutOfRange) {
+          ctx.globalAlpha = 0.45;
+          ctx.fillStyle   = C.outOfRangeFill;
+          roundRect(ctx, bxScr, barY, bwAbs, BAR_H, 3);
+          ctx.fill();
+          ctx.strokeStyle = color;
+          ctx.lineWidth   = 1.5;
+          ctx.setLineDash([4, 3]);
+          roundRect(ctx, bxScr, barY, bwAbs, BAR_H, 3);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.globalAlpha = 1;
+          continue;
+        }
 
         if (isPrev) ctx.globalAlpha = 0.75;
         ctx.fillStyle = color;

@@ -12,9 +12,6 @@ export function useBoardMembers(workspaceId, boardId, { enabled = true } = {}) {
   });
 }
 
-// Keep legacy alias
-export const useProjectMembers = useBoardMembers;
-
 export function useAddBoardMember(workspaceId, boardId) {
   const qc = useQueryClient();
   return useMutation({
@@ -23,9 +20,6 @@ export function useAddBoardMember(workspaceId, boardId) {
       qc.invalidateQueries({ queryKey: ["project-members", workspaceId, boardId] }),
   });
 }
-
-// Keep legacy alias
-export const useAddProjectMember = useAddBoardMember;
 
 export function useUpdateBoardMember(workspaceId, boardId) {
   const qc = useQueryClient();
@@ -37,9 +31,6 @@ export function useUpdateBoardMember(workspaceId, boardId) {
   });
 }
 
-// Keep legacy alias
-export const useUpdateProjectMember = useUpdateBoardMember;
-
 export function useRemoveBoardMember(workspaceId, boardId) {
   const qc = useQueryClient();
   return useMutation({
@@ -50,5 +41,3 @@ export function useRemoveBoardMember(workspaceId, boardId) {
   });
 }
 
-// Keep legacy alias
-export const useRemoveProjectMember = useRemoveBoardMember;

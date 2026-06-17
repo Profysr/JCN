@@ -245,8 +245,27 @@ class SavedViewSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at"]
 
 
+class SprintListSerializer(serializers.ModelSerializer):
+    """Minimal projection used by the list endpoint — just enough for the header/dropdown."""
+    task_count = serializers.IntegerField(read_only=True, default=0)
+    completed_count = serializers.IntegerField(read_only=True, default=0)
+
+    class Meta:
+        model = Sprint
+        fields = [
+            "id",
+            "name",
+            "status",
+            "start_date",
+            "end_date",
+            "task_count",
+            "completed_count",
+        ]
+        read_only_fields = ["id"]
+
+
 class SprintSerializer(serializers.ModelSerializer):
-    # Populated by _sprint_qs() annotations in the view — no extra queries fired.
+    """Full detail serializer — used by the detail endpoint and write operations."""
     task_count = serializers.IntegerField(read_only=True, default=0)
     completed_count = serializers.IntegerField(read_only=True, default=0)
 

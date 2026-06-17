@@ -78,14 +78,14 @@ export function computeCriticalPath(tasks) {
 // Returns a flat ordered array of rows with cumulative y positions.
 // Structure:
 //   Sprint rows (collapsed by default) → task rows when expanded
-//   Ongoing row (tasks with no sprint_id) → task rows when expanded
+//   Status group rows (one per status that has unsprinted tasks) → task rows when expanded
 //   undated: tasks with neither date (shown in bottom shelf)
-export function useGanttModel(tasks, sprints, collapsedSet) {
+export function useGanttModel(tasks, sprints, collapsedSet, statuses = []) {
   return useMemo(() => {
     const rows = [];
     let y = 0;
 
-    // Sprints sorted by start_date ascending
+    // ── Sprint groups ─────────────────────────────────────────────────────────
     const sortedSprints = [...sprints].sort((a, b) =>
       (a.start_date || "9999").localeCompare(b.start_date || "9999")
     );
@@ -104,30 +104,55 @@ export function useGanttModel(tasks, sprints, collapsedSet) {
 
       if (expanded) {
         for (const task of sprintTasks) {
-          rows.push({ type: "task", id: task.id, task, parentId: sprint.id, y, h: ROW_H });
+          rows.push({
+            type: "task", id: task.id, task, parentId: sprint.id,
+            // Pass sprint bounds so the canvas can flag out-of-range bars
+            sprintStart: sprint.start_date, sprintEnd: sprint.end_date,
+            y, h: ROW_H,
+          });
           y += ROW_H;
         }
       }
     }
 
-    // Ongoing: tasks with no sprint_id that have at least one date
-    const ongoing = tasks
-      .filter(t => !t.sprint_id && (t.start_date || t.due_date))
-      .sort((a, b) =>
-        (a.start_date || a.due_date || "").localeCompare(b.start_date || b.due_date || "")
+    // ── Status groups (non-sprint tasks, grouped by status) ───────────────────
+    const nonSprintDated = tasks.filter(t => !t.sprint_id && (t.start_date || t.due_date));
+
+    if (nonSprintDated.length > 0) {
+      const statusOrder = new Map(statuses.map((s, i) => [s.id, i]));
+
+      // Group by status_id
+      const byStatus = new Map();
+      for (const task of nonSprintDated) {
+        const sid = task.status_id ?? "__none__";
+        if (!byStatus.has(sid)) byStatus.set(sid, []);
+        byStatus.get(sid).push(task);
+      }
+
+      // Sort groups by status position in the board
+      const sortedStatusIds = [...byStatus.keys()].sort(
+        (a, b) => (statusOrder.get(a) ?? 999) - (statusOrder.get(b) ?? 999)
       );
 
-    if (ongoing.length > 0) {
-      const expanded = !collapsedSet.has("__ongoing__");
-      rows.push({
-        type: "ongoing", id: "__ongoing__", label: "Ongoing",
-        expanded, taskCount: ongoing.length, y, h: GROUP_H,
-      });
-      y += GROUP_H;
-      if (expanded) {
-        for (const task of ongoing) {
-          rows.push({ type: "task", id: task.id, task, parentId: "__ongoing__", y, h: ROW_H });
-          y += ROW_H;
+      for (const statusId of sortedStatusIds) {
+        const statusTasks = byStatus.get(statusId).sort(
+          (a, b) => (a.start_date || a.due_date || "").localeCompare(b.start_date || b.due_date || "")
+        );
+        const status  = statuses.find(s => s.id === statusId) ?? null;
+        const groupId = `__status__${statusId}`;
+        const expanded = !collapsedSet.has(groupId);
+
+        rows.push({
+          type: "status", id: groupId, status,
+          expanded, taskCount: statusTasks.length, y, h: GROUP_H,
+        });
+        y += GROUP_H;
+
+        if (expanded) {
+          for (const task of statusTasks) {
+            rows.push({ type: "task", id: task.id, task, parentId: groupId, y, h: ROW_H });
+            y += ROW_H;
+          }
         }
       }
     }
@@ -136,7 +161,7 @@ export function useGanttModel(tasks, sprints, collapsedSet) {
     const undated = tasks.filter(t => !t.start_date && !t.due_date);
 
     return { rows, undated, totalH: Math.max(y, 400) };
-  }, [tasks, sprints, collapsedSet]);
+  }, [tasks, sprints, collapsedSet, statuses]);
 }
 
 // ── Binary search: first row index whose bottom edge is > scrollTop ───────────

@@ -24,29 +24,12 @@ import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { formatDistanceToNow } from "date-fns";
-
-const PROJECT_ROLES = [
-  { value: "admin", label: "Admin", desc: "Full access, manage members" },
-  { value: "editor", label: "Editor", desc: "Create, edit, delete tasks" },
-  { value: "viewer", label: "Viewer", desc: "View only, no edits" },
-  { value: "guest", label: "Guest", desc: "Read-only via share link" },
-];
-
-const ROLE_BADGE_VARIANT = {
-  admin: "default",
-  editor: "secondary",
-  viewer: "muted",
-  guest: "outline",
-};
-
-const ACTIONS = ["Create", "Edit", "Delete", "Admin"];
-const ROLE_PERMS = {
-  admin: [true, true, true, true],
-  editor: [true, true, true, false],
-  viewer: [false, false, false, false],
-  guest: [false, false, false, false],
-};
+import {
+  PROJECT_ROLES,
+  ROLE_BADGE_VARIANT,
+  ROLE_PERMS,
+  PERMISSION_MATRIX_ACTIONS,
+} from "@/lib/constants";
 
 const TABS = ["members", "permissions"];
 
@@ -292,12 +275,12 @@ export default function ProjectMembersModal({
                         <th className="text-left py-2 pr-4 font-medium text-muted-foreground text-xs uppercase tracking-wide w-28">
                           Role
                         </th>
-                        {ACTIONS.map((a) => (
+                        {PERMISSION_MATRIX_ACTIONS.map((a) => (
                           <th
-                            key={a}
+                            key={a.label}
                             className="text-center py-2 px-3 font-medium text-muted-foreground text-xs uppercase tracking-wide"
                           >
-                            {a}
+                            {a.label}
                           </th>
                         ))}
                       </tr>

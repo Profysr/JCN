@@ -384,8 +384,9 @@ export default function CalendarView({
   const renderMonth = () => {
     const grid = buildMonthGrid(year, month);
     return (
-      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-        <div className="grid grid-cols-7 border-b border-border flex-shrink-0 bg-muted/30">
+      <div className="flex-1 min-h-0 overflow-auto">
+        {/* Sticky day-label row — lives inside the scroller so it shares the same width */}
+        <div className="grid grid-cols-7 border-b border-border sticky top-0 z-10 bg-muted/30">
           {DAY_LABELS.map((d) => (
             <div
               key={d}
@@ -395,34 +396,32 @@ export default function CalendarView({
             </div>
           ))}
         </div>
-        <div className="flex-1 min-h-0 overflow-auto">
-          <div
-            className="grid grid-cols-7 h-full"
-            style={{ gridTemplateRows: "repeat(6, minmax(90px, 1fr))" }}
-          >
-            {grid.map((date, i) => {
-              const key = dateKey(date);
-              const ghost = !isCurrentMonth(date, month, year);
-              return (
-                <DateCell
-                  key={i}
-                  date={date}
-                  tasks={tasksByDate[key] || []}
-                  statuses={statuses}
-                  isGhost={ghost}
-                  isToday={isToday(date)}
-                  onTaskClick={onTaskClick}
-                  onDragStart={handleDragStart}
-                  onDragEnd={handleDragEnd}
-                  onDrop={(e) => handleDrop(e, date)}
-                  onDragOver={(e) => handleDragOver(e, date)}
-                  onCellClick={handleCellClick}
-                  canEdit={canEdit}
-                  dropTarget={dragOverDate === key}
-                />
-              );
-            })}
-          </div>
+        <div
+          className="grid grid-cols-7 min-h-full"
+          style={{ gridTemplateRows: "repeat(6, minmax(90px, 1fr))" }}
+        >
+          {grid.map((date, i) => {
+            const key = dateKey(date);
+            const ghost = !isCurrentMonth(date, month, year);
+            return (
+              <DateCell
+                key={i}
+                date={date}
+                tasks={tasksByDate[key] || []}
+                statuses={statuses}
+                isGhost={ghost}
+                isToday={isToday(date)}
+                onTaskClick={onTaskClick}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+                onDrop={(e) => handleDrop(e, date)}
+                onDragOver={(e) => handleDragOver(e, date)}
+                onCellClick={handleCellClick}
+                canEdit={canEdit}
+                dropTarget={dragOverDate === key}
+              />
+            );
+          })}
         </div>
       </div>
     );
@@ -432,8 +431,9 @@ export default function CalendarView({
   const renderWeek = () => {
     const days = buildWeekGrid(currentDate);
     return (
-      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-        <div className="grid grid-cols-7 border-b border-border flex-shrink-0">
+      <div className="flex-1 min-h-0 overflow-auto">
+        {/* Sticky day-header row — inside the scroller to share the same width */}
+        <div className="grid grid-cols-7 border-b border-border sticky top-0 z-10 bg-card">
           {days.map((date, i) => (
             <div
               key={i}
@@ -458,44 +458,42 @@ export default function CalendarView({
             </div>
           ))}
         </div>
-        <div className="flex-1 min-h-0 overflow-auto">
-          <div
-            className="grid grid-cols-7 h-full"
-            style={{ gridTemplateRows: "1fr" }}
-          >
-            {days.map((date, i) => {
-              const key = dateKey(date);
-              return (
-                <div
-                  key={i}
-                  className={cn(
-                    "border-r border-border last:border-r-0 p-2 flex flex-col gap-1 cursor-pointer min-h-[200px]",
-                    isToday(date)
-                      ? "bg-primary/5"
-                      : "bg-card hover:bg-accent/20",
-                    dragOverDate === key &&
-                      canEdit &&
-                      "ring-2 ring-primary ring-inset bg-primary/5",
-                  )}
-                  onDragOver={(e) => handleDragOver(e, date)}
-                  onDrop={(e) => handleDrop(e, date)}
-                  onClick={() => handleCellClick(date)}
-                >
-                  {(tasksByDate[key] || []).map((t) => (
-                    <TaskChip
-                      key={t.id}
-                      task={t}
-                      statuses={statuses}
-                      onTaskClick={onTaskClick}
-                      onDragStart={handleDragStart}
-                      onDragEnd={handleDragEnd}
-                      canEdit={canEdit}
-                    />
-                  ))}
-                </div>
-              );
-            })}
-          </div>
+        <div
+          className="grid grid-cols-7 min-h-full"
+          style={{ gridTemplateRows: "1fr" }}
+        >
+          {days.map((date, i) => {
+            const key = dateKey(date);
+            return (
+              <div
+                key={i}
+                className={cn(
+                  "border-r border-border last:border-r-0 p-2 flex flex-col gap-1 cursor-pointer min-h-[200px]",
+                  isToday(date)
+                    ? "bg-primary/5"
+                    : "bg-card hover:bg-accent/20",
+                  dragOverDate === key &&
+                    canEdit &&
+                    "ring-2 ring-primary ring-inset bg-primary/5",
+                )}
+                onDragOver={(e) => handleDragOver(e, date)}
+                onDrop={(e) => handleDrop(e, date)}
+                onClick={() => handleCellClick(date)}
+              >
+                {(tasksByDate[key] || []).map((t) => (
+                  <TaskChip
+                    key={t.id}
+                    task={t}
+                    statuses={statuses}
+                    onTaskClick={onTaskClick}
+                    onDragStart={handleDragStart}
+                    onDragEnd={handleDragEnd}
+                    canEdit={canEdit}
+                  />
+                ))}
+              </div>
+            );
+          })}
         </div>
       </div>
     );

@@ -44,6 +44,8 @@ function buildHeader(rangeStart, rangeEnd, zoom, pxPerDay) {
   const now   = new Date();
   const nowM  = now.getMonth();
   const nowY  = now.getFullYear();
+  // Normalize today to midnight for reliable date comparisons
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const top = [], bottom = [];
 
   if (zoom === "day") {
@@ -56,7 +58,7 @@ function buildHeader(rangeStart, rangeEnd, zoom, pxPerDay) {
       }
       bottom.push({ label: String(d.getDate()), x: i * pxPerDay, w: pxPerDay,
         muted: d.getDay() === 0 || d.getDay() === 6,
-        current: d.getMonth() === nowM && d.getFullYear() === nowY,
+        current: d.getTime() === today.getTime(),
         monthBoundary: d.getDate() === 1 });
     }
     top.push({ label: `${MONTHS[curM]} ${curY}`, x: monthStart * pxPerDay, w: (total + 1 - monthStart) * pxPerDay });
@@ -77,7 +79,8 @@ function buildHeader(rangeStart, rangeEnd, zoom, pxPerDay) {
       const x   = Math.max(0, daysBetween(rangeStart, ws)) * pxPerDay;
       const ref = ws < rangeStart ? rangeStart : ws;
       const we  = addDays(ws, 6);
-      const cur = (ref.getMonth() === nowM && ref.getFullYear() === nowY) || (we.getMonth() === nowM && we.getFullYear() === nowY);
+      // current = only the single week that contains today
+      const cur = today >= ws && today <= we;
       bottom.push({ label: `${MONTHS[ref.getMonth()]} ${ref.getDate()}`, x, w: 7 * pxPerDay, current: cur, monthBoundary: ref.getDate() === 1 || ws.getDate() === 1 });
       ws = addDays(ws, 7);
     }
@@ -124,19 +127,26 @@ function buildHeader(rangeStart, rangeEnd, zoom, pxPerDay) {
 
 // ── Left panel row components ─────────────────────────────────────────────────
 function GroupRow({ row, onToggle }) {
-  const isOngoing = row.type === "ongoing";
-  const label     = isOngoing ? row.label : row.sprint?.name;
-  const dotColor  = isOngoing ? "#8b5cf6"
-    : row.sprint?.status === "completed" ? "#10b981"
-    : row.sprint?.status === "active"    ? "#6366f1"
-    :                                      "#94a3b8";
+  let label, dotColor, bg;
+
+  if (row.type === "sprint") {
+    label    = row.sprint?.name;
+    dotColor = row.sprint?.status === "completed" ? "#10b981"
+      : row.sprint?.status === "active"           ? "#6366f1"
+      :                                             "#94a3b8";
+    bg = "bg-muted/30";
+  } else {
+    // status group
+    label    = row.status?.name ?? "No Status";
+    dotColor = row.status?.color ?? "#94a3b8";
+    bg = "bg-muted/20";
+  }
 
   return (
     <div
       className={cn(
         "flex items-center gap-2 px-3 border-b border-border cursor-pointer select-none",
-        "hover:bg-accent/40 transition-colors",
-        isOngoing ? "bg-violet-500/5" : "bg-muted/30",
+        "hover:bg-accent/40 transition-colors", bg,
       )}
       style={{ height: GROUP_H }}
       onClick={() => onToggle(row.id)}
@@ -194,7 +204,7 @@ export default function GanttView({
   const pxPerDay   = PX[zoom];
 
   // ── Data ───────────────────────────────────────────────────────────────────
-  const { rows, undated, totalH } = useGanttModel(tasks, sprints, collapsed);
+  const { rows, undated, totalH } = useGanttModel(tasks, sprints, collapsed, statuses);
   const criticalSet = useMemo(() => computeCriticalPath(tasks), [tasks]);
 
   const { start: rangeStart, end: rangeEnd } = useMemo(
@@ -437,7 +447,7 @@ export default function GanttView({
             <div style={{ position: "absolute", inset: 0, overflowY: "hidden" }}>
               <div style={{ height: topPad }} />
               {rows.slice(startIdx, endIdx).map(row => {
-                if (row.type === "sprint" || row.type === "ongoing") {
+                if (row.type === "sprint" || row.type === "status") {
                   return <GroupRow key={row.id} row={row} onToggle={toggleCollapsed} />;
                 }
                 return <TaskRow key={row.id} row={row} onTaskClick={onTaskClick} criticalSet={criticalSet} />;
@@ -461,7 +471,7 @@ export default function GanttView({
             >
               {header.top.map((seg, i) => (
                 <div key={i}
-                  className="absolute top-0 flex items-center px-2 border-r border-border/40 text-[11px] font-semibold text-muted-foreground overflow-hidden"
+                  className="absolute top-0 flex items-center px-2 border-r border-border text-[11px] font-semibold text-muted-foreground overflow-hidden"
                   style={{ left: seg.x, width: seg.w, height: HDR_H / 2 }}>
                   {seg.label}
                 </div>
@@ -469,10 +479,12 @@ export default function GanttView({
               {header.bottom.map((seg, i) => (
                 <div key={i}
                   className={cn(
-                    "absolute bottom-0 flex items-center justify-center border-r border-border/40 text-[11px] select-none",
-                    seg.current ? "text-primary font-semibold"
-                    : seg.muted  ? "text-muted-foreground/35"
-                    :              "text-muted-foreground font-medium",
+                    "absolute bottom-0 flex items-center justify-center text-[11px] select-none border-r border-border",
+                    seg.current
+                      ? "bg-primary/10 border-primary/40 text-primary font-semibold"
+                      : seg.muted
+                        ? "text-muted-foreground/35 font-medium"
+                        : "text-muted-foreground font-medium",
                   )}
                   style={{ left: seg.x, width: seg.w, height: HDR_H / 2 }}>
                   {seg.label}
