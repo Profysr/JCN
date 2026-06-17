@@ -32,7 +32,7 @@ const ALL_COLUMNS = [
 ];
 
 // ── Sort helpers ───────────────────────────────────────────────────────────────
-function getSortValue(task, col, statuses) {
+function getSortValue(task, col, statuses, sprintsById) {
   if (col === "title") return (task.title || "").toLowerCase();
   if (col === "status") return statuses.find((s) => s.id === task.status_id)?.name?.toLowerCase() || "";
   if (col === "priority") return PRIORITY_ORDER[task.priority] ?? 4;
@@ -43,16 +43,16 @@ function getSortValue(task, col, statuses) {
       ""
     ).toLowerCase();
   if (col === "due_date") return task.due_date || "9999";
-  if (col === "sprint") return task.sprint_detail?.name?.toLowerCase() || "";
+  if (col === "sprint") return sprintsById[task.sprint_id]?.name?.toLowerCase() || "";
   return "";
 }
 
-function applySort(tasks, sorts, statuses) {
+function applySort(tasks, sorts, statuses, sprintsById) {
   if (!sorts.length) return tasks;
   return [...tasks].sort((a, b) => {
     for (const { col, dir } of sorts) {
-      const av = getSortValue(a, col, statuses);
-      const bv = getSortValue(b, col, statuses);
+      const av = getSortValue(a, col, statuses, sprintsById);
+      const bv = getSortValue(b, col, statuses, sprintsById);
       if (av < bv) return dir === "asc" ? -1 : 1;
       if (av > bv) return dir === "asc" ? 1 : -1;
     }
@@ -66,7 +66,7 @@ const PRIORITY_COLORS = Object.fromEntries(
   PRIORITIES.map((p) => [p.value, p.hex]),
 );
 
-function getGroupKey(task, groupBy, statuses) {
+function getGroupKey(task, groupBy, statuses, sprintsById) {
   switch (groupBy) {
     case "status": {
       const s = statuses.find(
@@ -97,22 +97,23 @@ function getGroupKey(task, groupBy, statuses) {
     }
     default: {
       // sprint
+      const sprint = sprintsById[task.sprint_id];
       return {
-        id: task.sprint_detail?.id || "none",
-        label: task.sprint_detail?.name || "No Sprint",
+        id: task.sprint_id || "none",
+        label: sprint?.name || "No Sprint",
         color: "#8b5cf6",
       };
     }
   }
 }
 
-function groupTasks(tasks, groupBy, statuses) {
+function groupTasks(tasks, groupBy, statuses, sprintsById) {
   if (!groupBy) return [{ id: "__all__", label: null, tasks }];
 
   const groups = new Map();
 
   for (const task of tasks) {
-    const { id, label, color } = getGroupKey(task, groupBy, statuses);
+    const { id, label, color } = getGroupKey(task, groupBy, statuses, sprintsById);
     if (!groups.has(id)) groups.set(id, { id, label, color, tasks: [] });
     groups.get(id).tasks.push(task);
   }
@@ -235,6 +236,8 @@ export default function ListView({
   tasks = [],
   statuses = [],
   members = [],
+  labelsById = {},
+  sprintsById = {},
   onTaskClick,
   selectedTaskId,
   selectedIds = new Set(),
@@ -269,10 +272,10 @@ export default function ListView({
       return n;
     });
 
-  const sortedTasks = useMemo(() => applySort(tasks, sorts, statuses), [tasks, sorts, statuses]);
+  const sortedTasks = useMemo(() => applySort(tasks, sorts, statuses, sprintsById), [tasks, sorts, statuses, sprintsById]);
   const groups = useMemo(
-    () => groupTasks(sortedTasks, groupBy, statuses),
-    [sortedTasks, groupBy, statuses],
+    () => groupTasks(sortedTasks, groupBy, statuses, sprintsById),
+    [sortedTasks, groupBy, statuses, sprintsById],
   );
 
   const visibleColumns = ALL_COLUMNS.filter((c) => visibleCols.has(c.id));
@@ -379,7 +382,7 @@ export default function ListView({
       return (
         <td key="labels" className="px-3 py-2 pr-4">
           <div className="flex flex-wrap gap-1">
-            {task.labels?.map((l) => (
+            {task.label_ids?.map((id) => labelsById[id]).filter(Boolean).map((l) => (
               <span
                 key={l.id}
                 className="px-1.5 py-0 rounded text-[10px] font-semibold leading-4"
@@ -395,11 +398,12 @@ export default function ListView({
 
 
     if (col === "sprint") {
+      const sprint = sprintsById[task.sprint_id];
       return (
         <td key="sprint" className="px-3 py-2">
-          {task.sprint_detail ? (
+          {sprint ? (
             <span className="text-[11px] text-muted-foreground">
-              {task.sprint_detail.name}
+              {sprint.name}
             </span>
           ) : (
             <span className="text-muted-foreground/50 text-xs">—</span>

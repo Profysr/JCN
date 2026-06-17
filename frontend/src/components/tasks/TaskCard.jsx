@@ -12,6 +12,7 @@ export default function TaskCard({
   isBulkSelected,
   onToggleSelect,
   canEdit = true,
+  labelsById = {},
 }) {
   const _p = getPriority(task.priority);
   const priority = { ..._p, dot: _p.dotCls, cls: _p.textCls }; // shape compat
@@ -94,7 +95,7 @@ export default function TaskCard({
               </span>
             )}
 
-            {task.labels?.map((l) => (
+            {task.label_ids?.map((id) => labelsById[id]).filter(Boolean).map((l) => (
               <span
                 key={l.id}
                 className="px-1.5 py-0 rounded text-[10px] font-semibold leading-4"

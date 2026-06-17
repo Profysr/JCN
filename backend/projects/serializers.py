@@ -449,7 +449,7 @@ class TaskCardSerializer(serializers.ModelSerializer):
     """
 
     assignee = MiniUserSerializer(read_only=True)
-    labels = LabelSerializer(many=True, read_only=True)
+    label_ids = serializers.PrimaryKeyRelatedField(many=True, read_only=True, source="labels")
     subtask_count = serializers.SerializerMethodField()
     done_subtask_count = serializers.SerializerMethodField()
     pending_approval_count = serializers.SerializerMethodField()
@@ -468,7 +468,7 @@ class TaskCardSerializer(serializers.ModelSerializer):
             "status_id",
             "assignee_id",
             "assignee",
-            "labels",
+            "label_ids",
             "sprint_id",
             "parent_id",
             "subtask_count",

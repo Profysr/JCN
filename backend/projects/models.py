@@ -234,7 +234,6 @@ class SubTask(models.Model):
     def __str__(self):
         return self.title
 
-
 class TaskComment(models.Model):
     PREFIX = "cmt"
     id = UUIDv7Field()
@@ -255,7 +254,6 @@ class TaskComment(models.Model):
     def __str__(self):
         return f"Comment by {self.author.email} on {self.task.title}"
 
-
 class Label(models.Model):
     PREFIX = "lbl"
     id = UUIDv7Field()
@@ -271,7 +269,6 @@ class Label(models.Model):
 
     def __str__(self):
         return f"{self.board.name} / {self.name}"
-
 
 class BoardField(models.Model):
     """Custom field definition scoped to a board."""
@@ -303,7 +300,6 @@ class BoardField(models.Model):
     def __str__(self):
         return f"{self.board.name} / {self.name} ({self.type})"
 
-
 class TaskFieldValue(models.Model):
     """Per-task value for a custom board field."""
 
@@ -322,7 +318,6 @@ class TaskFieldValue(models.Model):
 
     def __str__(self):
         return f"{self.task.title} / {self.field.name}: {self.value}"
-
 
 class SavedView(models.Model):
     """Named filter preset per board per user."""
@@ -347,7 +342,6 @@ class SavedView(models.Model):
 
     def __str__(self):
         return f"{self.board.name} / {self.user.email} / {self.name}"
-
 
 class Sprint(models.Model):
     """Time-boxed work cycle per board."""

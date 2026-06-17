@@ -7,7 +7,6 @@ from django.http import HttpResponse
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
-import datetime
 import csv
 import re
 from ..models import (
@@ -478,7 +477,7 @@ class TaskCommentDetailView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-# ── Labels ✅───────────────────────────────────────────────────────────────────
+# ── Labels ✅──────────────────────────────────────────────────────────────────
 class LabelListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -634,70 +633,6 @@ class SprintDetailView(APIView):
         sprint = self.get_sprint(workspace_id, project_id, sprint_id, request.user)
         sprint.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-class SprintBurndownView(APIView):
-    """Returns ideal vs actual task-completion data for a sprint's burndown chart."""
-
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request, workspace_id, project_id, sprint_id):
-        workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(project_id), workspace=workspace)
-        sprint = get_object_or_404(Sprint, id=sprint_id, board=board)
-
-        if not sprint.start_date or not sprint.end_date:
-            return Response(
-                {"error": "Sprint dates not set."}, status=status.HTTP_400_BAD_REQUEST
-            )
-
-        done_status = board.statuses.order_by("-order").first()
-        sprint_tasks = sprint.tasks.all()
-        total = sprint_tasks.count()
-
-        today = datetime.date.today()
-        days, ideal, actual = [], [], []
-        total_days = max((sprint.end_date - sprint.start_date).days, 1)
-        current = sprint.start_date
-        idx = 0
-
-        while current <= sprint.end_date:
-            days.append(current.strftime("%b %d"))
-            ideal.append(round(total * (1 - idx / total_days), 1))
-
-            if current <= today:
-                # Tasks completed (moved to done status) by end of this day
-                done_by_day = (
-                    TaskActivity.objects.filter(
-                        task__sprint=sprint,
-                        verb=TaskActivity.Verb.STATUS,
-                        created_at__date__lte=current,
-                        meta__to=done_status.name if done_status else "Done",
-                    )
-                    .values("task")
-                    .distinct()
-                    .count()
-                )
-                actual.append(max(total - done_by_day, 0))
-            else:
-                actual.append(None)
-
-            current += datetime.timedelta(days=1)
-            idx += 1
-
-        completed = (
-            sprint_tasks.filter(status=done_status).count() if done_status else 0
-        )
-        return Response(
-            {
-                "total": total,
-                "completed": completed,
-                "remaining": total - completed,
-                "days": days,
-                "ideal": ideal,
-                "actual": actual,
-            }
-        )
 
 
 # ── Bulk Actions (v1.1.0) ─────────────────────────────────────────────────────

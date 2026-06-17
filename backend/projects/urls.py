@@ -110,7 +110,6 @@ urlpatterns = [
     # Sprints
     path(f"{_pr}/sprints/", SprintListCreateView.as_view()),
     path(f"{_pr}/sprints/<str:sprint_id>/", SprintDetailView.as_view()),
-    path(f"{_pr}/sprints/<str:sprint_id>/burndown/", SprintBurndownView.as_view()),
     # Attachments
     path(f"{_tk}/attachments/", TaskAttachmentListCreateView.as_view()),
     path(f"{_tk}/attachments/<str:attachment_id>/", TaskAttachmentDeleteView.as_view()),

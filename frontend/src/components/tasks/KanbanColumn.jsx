@@ -16,6 +16,7 @@ export default function KanbanColumn({
   workspaceId,
   boardId,
   canEdit,
+  labelsById = {},
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [expanding, setExpanding] = useState(false);
@@ -121,6 +122,7 @@ export default function KanbanColumn({
                 isBulkSelected={selectedIds.has(task.id)}
                 onToggleSelect={canEdit ? onToggleSelect : undefined}
                 canEdit={canEdit}
+                labelsById={labelsById}
               />
             ))}
             {provided.placeholder}

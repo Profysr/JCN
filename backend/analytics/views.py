@@ -792,6 +792,64 @@ def _metric_estimation_accuracy(workspace, params):
 # ── METRIC REGISTRY & ROUTING VIEW ────────────────────────────────────────────
 # ==============================================================================
 
+def _metric_sprint_burndown(workspace, params):
+    """Ideal vs actual burndown for a single sprint."""
+    sprint_id = params.get("sprint_id")
+    board_id = params.get("board_id")
+
+    if not sprint_id or not board_id:
+        return {"error": "sprint_id and board_id are required."}
+
+    board = get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
+    sprint = get_object_or_404(Sprint, id=sprint_id, board=board)
+
+    if not sprint.start_date or not sprint.end_date:
+        return {"error": "Sprint dates not set."}
+
+    done_status = board.statuses.order_by("-order").first()
+    sprint_tasks = sprint.tasks.all()
+    total = sprint_tasks.count()
+
+    today = datetime.date.today()
+    days_list, ideal, actual = [], [], []
+    total_days = max((sprint.end_date - sprint.start_date).days, 1)
+    current = sprint.start_date
+    idx = 0
+
+    while current <= sprint.end_date:
+        days_list.append(current.strftime("%b %d"))
+        ideal.append(round(total * (1 - idx / total_days), 1))
+
+        if current <= today:
+            done_by_day = (
+                TaskActivity.objects.filter(
+                    task__sprint=sprint,
+                    verb=TaskActivity.Verb.STATUS,
+                    created_at__date__lte=current,
+                    meta__to=done_status.name if done_status else "Done",
+                )
+                .values("task")
+                .distinct()
+                .count()
+            )
+            actual.append(max(total - done_by_day, 0))
+        else:
+            actual.append(None)
+
+        current += datetime.timedelta(days=1)
+        idx += 1
+
+    completed = sprint_tasks.filter(status=done_status).count() if done_status else 0
+    return {
+        "total": total,
+        "completed": completed,
+        "remaining": total - completed,
+        "days": days_list,
+        "ideal": ideal,
+        "actual": actual,
+    }
+
+
 METRICS = {
     "overview": _metric_overview,
     "velocity": _metric_velocity,
@@ -805,6 +863,7 @@ METRICS = {
     "overdue_aging": _metric_overdue_aging,
     "completion_rate": _metric_completion_rate,
     "estimation_accuracy": _metric_estimation_accuracy,
+    "sprint_burndown": _metric_sprint_burndown,
 }
 
 class AnalyticsMetricView(APIView):

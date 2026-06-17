@@ -251,6 +251,15 @@ export default function KanbanPage() {
     setSearchParams({}, { replace: true });
   };
 
+  const labelsById = useMemo(
+    () => Object.fromEntries(labels.map((l) => [l.id, l])),
+    [labels],
+  );
+  const sprintsById = useMemo(
+    () => Object.fromEntries(sprints.map((s) => [s.id, s])),
+    [sprints],
+  );
+
   // Sprint view: further narrow the server-filtered list to the active sprint.
   // All other filters are already applied by the backend via apiFilters.
   const tasks = useMemo(() => {
@@ -517,11 +526,7 @@ export default function KanbanPage() {
                     workspaceId={workspaceId}
                     boardId={boardId}
                     canEdit={perms.canEdit}
-                    // columnViewers={boardPresence.filter(
-                    //   (p) =>
-                    //     p.resource_type === "board" && p.resource_id === col.id,
-                    // )}
-                    // taskViewerMap={taskViewerMap}
+                    labelsById={labelsById}
                   />
                 ))}
                 {/* Add column button */}
@@ -541,6 +546,8 @@ export default function KanbanPage() {
             tasks={tasks}
             statuses={statuses || []}
             members={members}
+            labelsById={labelsById}
+            sprintsById={sprintsById}
             onTaskClick={(id) => openTask(id)}
             selectedTaskId={selectedTaskId}
             selectedIds={selectedIds}
@@ -569,12 +576,7 @@ export default function KanbanPage() {
                       workspaceId={workspaceId}
                       boardId={boardId}
                       canEdit={perms.canEdit}
-                      // columnViewers={boardPresence.filter(
-                      //   (p) =>
-                      //     p.resource_type === "board" &&
-                      //     p.resource_id === col.id,
-                      // )}
-                      // taskViewerMap={taskViewerMap}
+                      labelsById={labelsById}
                     />
                   ))}
                 </div>

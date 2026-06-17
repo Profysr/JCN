@@ -9,6 +9,7 @@ export const useSprints = (workspaceId, boardId) =>
     queryKey: sprintsKey(workspaceId, boardId),
     queryFn: () => api.get(`/api/workspaces/${workspaceId}/boards/${boardId}/sprints/`).then(r => r.data),
     enabled: !!workspaceId && !!boardId,
+    staleTime: Infinity,
   });
 
 export const useCreateSprint = (workspaceId, boardId) => {
@@ -39,7 +40,12 @@ export const useDeleteSprint = (workspaceId, boardId) => {
 export const useSprintBurndown = (workspaceId, boardId, sprintId) =>
   useQuery({
     queryKey: burndownKey(workspaceId, boardId, sprintId),
-    queryFn: () => api.get(`/api/workspaces/${workspaceId}/boards/${boardId}/sprints/${sprintId}/burndown/`).then(r => r.data),
+    queryFn: () =>
+      api
+        .get(`/api/workspaces/${workspaceId}/analytics/sprint_burndown/`, {
+          params: { sprint_id: sprintId, board_id: boardId },
+        })
+        .then(r => r.data),
     enabled: !!sprintId,
     staleTime: 60_000,
   });
