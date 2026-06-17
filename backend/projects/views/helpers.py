@@ -138,7 +138,7 @@ def _task_list_qs():
     from django.db.models import Count, Q as DQ
 
     return (
-        Task.objects.select_related("status", "assignee", "sprint")
+        Task.objects.select_related("assignee", "sprint")
         .prefetch_related("labels", "blocked_by_deps")
         .annotate(
             _subtask_count=Count("subtasks", distinct=True),

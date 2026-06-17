@@ -153,7 +153,7 @@ class TaskStatusBulkUpdateView(APIView):
             )
 
         statuses_data = TaskStatusSerializer(board.statuses.order_by("order").all(), many=True).data
-        broadcast(workspace_id, "status.updated", {"board_id": str(board.id), "statuses": statuses_data})
+        # broadcast(workspace_id, "status.updated", {"board_id": str(board.id), "statuses": statuses_data})
         return Response(statuses_data)
 
 

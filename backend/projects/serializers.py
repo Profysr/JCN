@@ -449,7 +449,6 @@ class TaskCardSerializer(serializers.ModelSerializer):
     """
 
     assignee = MiniUserSerializer(read_only=True)
-    status_detail = TaskStatusSerializer(source="status", read_only=True)
     labels = LabelSerializer(many=True, read_only=True)
     subtask_count = serializers.SerializerMethodField()
     done_subtask_count = serializers.SerializerMethodField()
@@ -467,7 +466,6 @@ class TaskCardSerializer(serializers.ModelSerializer):
             "due_date",
             "start_date",
             "status_id",
-            "status_detail",
             "assignee_id",
             "assignee",
             "labels",

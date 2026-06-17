@@ -101,7 +101,7 @@ export const useMoveTask = (workspaceId, boardId) => {
         (old) =>
           old?.map((t) =>
             t.id === taskId
-              ? { ...t, status_id, order, status_detail: { ...t.status_detail, id: status_id } }
+              ? { ...t, status_id, order }
               : t,
           ),
       );

@@ -38,9 +38,9 @@ const ALL_COLUMNS = [
 ];
 
 // ── Sort helpers ───────────────────────────────────────────────────────────────
-function getSortValue(task, col) {
+function getSortValue(task, col, statuses) {
   if (col === "title") return (task.title || "").toLowerCase();
-  if (col === "status") return task.status_detail?.name?.toLowerCase() || "";
+  if (col === "status") return statuses.find((s) => s.id === task.status_id)?.name?.toLowerCase() || "";
   if (col === "priority") return PRIORITY_ORDER[task.priority] ?? 4;
   if (col === "assignee")
     return (
@@ -54,12 +54,12 @@ function getSortValue(task, col) {
   return "";
 }
 
-function applySort(tasks, sorts) {
+function applySort(tasks, sorts, statuses) {
   if (!sorts.length) return tasks;
   return [...tasks].sort((a, b) => {
     for (const { col, dir } of sorts) {
-      const av = getSortValue(a, col);
-      const bv = getSortValue(b, col);
+      const av = getSortValue(a, col, statuses);
+      const bv = getSortValue(b, col, statuses);
       if (av < bv) return dir === "asc" ? -1 : 1;
       if (av > bv) return dir === "asc" ? 1 : -1;
     }
@@ -77,7 +77,7 @@ function getGroupKey(task, groupBy, statuses) {
   switch (groupBy) {
     case "status": {
       const s = statuses.find(
-        (s) => s.id === (task.status_detail?.id ?? task.status_id),
+        (s) => s.id === task.status_id,
       );
       return {
         id: s?.id || "none",
@@ -276,7 +276,7 @@ export default function ListView({
       return n;
     });
 
-  const sortedTasks = useMemo(() => applySort(tasks, sorts), [tasks, sorts]);
+  const sortedTasks = useMemo(() => applySort(tasks, sorts, statuses), [tasks, sorts, statuses]);
   const groups = useMemo(
     () => groupTasks(sortedTasks, groupBy, statuses),
     [sortedTasks, groupBy, statuses],
@@ -309,7 +309,7 @@ export default function ListView({
 
     if (col === "status") {
       const s = statuses.find(
-        (s) => s.id === (task.status_detail?.id ?? task.status_id),
+        (s) => s.id === task.status_id,
       );
       return (
         <td key="status" className="px-3 py-2">

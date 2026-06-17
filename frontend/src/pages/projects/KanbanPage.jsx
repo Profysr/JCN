@@ -321,7 +321,7 @@ export default function KanbanPage() {
   // Helps us to determine the column of s task
   const tasksByStatus = (statusId) =>
     tasks
-      .filter((t) => t.status_detail?.id === statusId)
+      .filter((t) => t.status_id === statusId)
       .sort((a, b) => a.order - b.order);
 
   const addTaskToSprint = (task) => {

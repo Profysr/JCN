@@ -162,7 +162,7 @@ function buildRows(tasks, groupBy, statuses, collapsed) {
   for (const t of dated) {
     let id, label, color;
     if (groupBy === "status") {
-      const s = statuses.find(s => s.id === (t.status_detail?.id ?? t.status_id));
+      const s = statuses.find(s => s.id === t.status_id);
       id = s?.id || "none"; label = s?.name || "No Status"; color = s?.color || "#94a3b8";
     } else if (groupBy === "assignee") {
       id = t.assignee?.id || "unassigned";
@@ -584,7 +584,7 @@ export default function GanttView({
               const w = barW(t, dd, dType);
               if (x < 0 && !isPreviewing) return null;
 
-              const s     = statuses.find(s => s.id === (t.status_detail?.id ?? t.status_id));
+              const s     = statuses.find(s => s.id === t.status_id);
               const color = critical.has(t.id) ? "#f59e0b" : (s?.color || "#6366f1");
 
               return (

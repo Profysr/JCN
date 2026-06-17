@@ -94,7 +94,7 @@ function TaskChip({
   canEdit,
 }) {
   const status = statuses.find(
-    (s) => s.id === (task.status_detail?.id ?? task.status_id),
+    (s) => s.id === task.status_id,
   );
   const bg = status?.color || "#6366f1";
   return (
@@ -216,7 +216,7 @@ function UnscheduledRow({
   canEdit,
 }) {
   const status = statuses.find(
-    (s) => s.id === (task.status_detail?.id ?? task.status_id),
+    (s) => s.id === task.status_id,
   );
   const dot = PRI_DOT[task.priority] || PRI_DOT.no_priority;
 
