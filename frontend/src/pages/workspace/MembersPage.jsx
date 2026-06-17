@@ -11,6 +11,7 @@ import {
   Send,
   CheckCircle2,
 } from "lucide-react";
+import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -126,10 +127,11 @@ export function ActiveMemberItem({
     <div className="flex items-center justify-between px-4 py-3 hover:bg-accent/40 transition-colors">
       <div className="flex items-center gap-3">
         {/* Avatar */}
-        <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm flex-shrink-0">
-          {member.user?.full_name?.[0]?.toUpperCase() ||
-            member.user?.email?.[0]?.toUpperCase()}
-        </div>
+        <Avatar
+          name={member.user?.full_name || member.user?.email}
+          src={member.user?.avatar}
+          size="md"
+        />
         <div>
           <div className="flex items-center gap-1.5">
             <p className="text-sm font-medium leading-tight">

@@ -308,20 +308,19 @@ export default function CalendarView({
     setCurrentDate(d);
   };
 
-  const tasksByDate = useMemo(() => {
-    const map = {};
+  const { tasksByDate, noDueDateTasks } = useMemo(() => {
+    const tasksByDate = {};
+    const noDueDateTasks = [];
     for (const t of tasks) {
-      if (!t.due_date) continue;
-      if (!map[t.due_date]) map[t.due_date] = [];
-      map[t.due_date].push(t);
+      if (t.due_date) {
+        if (!tasksByDate[t.due_date]) tasksByDate[t.due_date] = [];
+        tasksByDate[t.due_date].push(t);
+      } else {
+        noDueDateTasks.push(t);
+      }
     }
-    return map;
+    return { tasksByDate, noDueDateTasks };
   }, [tasks]);
-
-  const noDueDateTasks = useMemo(
-    () => tasks.filter((t) => !t.due_date),
-    [tasks],
-  );
 
   const filteredUnscheduled = useMemo(() => {
     if (!panelSearch.trim()) return noDueDateTasks;
@@ -337,15 +336,18 @@ export default function CalendarView({
     e.dataTransfer.effectAllowed = "move";
     setDraggingId(id);
   }, []);
+
   const handleDragEnd = useCallback(() => {
     setDraggingId(null);
     setDragOverDate(null);
   }, []);
+
   const handleDragOver = useCallback((e, date) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
     setDragOverDate(dateKey(date));
   }, []);
+
   const handleDrop = useCallback(
     (e, date) => {
       e.preventDefault();
@@ -356,6 +358,7 @@ export default function CalendarView({
     },
     [draggingId, canEdit, updateTask],
   );
+  
   const handleCellClick = useCallback(
     (date) => {
       if (!canEdit) return;

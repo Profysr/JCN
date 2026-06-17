@@ -1183,9 +1183,7 @@ export default function TaskDetailPanel({
                 renderTrigger={(opt) =>
                   opt && (
                     <span className="flex items-center gap-2">
-                      <div className="w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center text-[10px] font-bold flex-shrink-0">
-                        {opt.label[0]?.toUpperCase()}
-                      </div>
+                      <Avatar name={opt.label} size="xs" />
                       <span className="text-sm truncate">{opt.label}</span>
                     </span>
                   )
@@ -1193,9 +1191,7 @@ export default function TaskDetailPanel({
                 renderOption={(opt) => (
                   <span className="flex items-center gap-2">
                     {opt.value ? (
-                      <div className="w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center text-[10px] font-bold flex-shrink-0">
-                        {opt.label[0]?.toUpperCase()}
-                      </div>
+                      <Avatar name={opt.label} size="xs" />
                     ) : (
                       <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
                         <User className="w-3 h-3 text-muted-foreground" />

@@ -11,6 +11,7 @@ import {
   EyeOff,
   AlertCircle,
 } from "lucide-react";
+import { Avatar } from "@/components/ui/avatar";
 import Modal from "@/components/ui/Modal";
 import { useAuthStore } from "@/store/authStore";
 import { useThemeStore } from "@/store/themeStore";
@@ -73,15 +74,15 @@ function MeTab() {
     },
   });
 
-  const initial = (user?.display_name || user?.email || "?")[0].toUpperCase();
-
   return (
     <div className="space-y-6">
       {/* Avatar strip */}
       <div className="flex items-center gap-4 p-4 bg-muted/30 rounded-md">
-        <div className="w-14 h-14 rounded-full bg-primary/10 text-primary flex items-center justify-center text-2xl font-bold flex-shrink-0">
-          {initial}
-        </div>
+        <Avatar
+          name={user?.display_name || user?.email}
+          src={user?.avatar}
+          size="2xl"
+        />
         <div>
           <p className="font-semibold">{user?.display_name}</p>
           <p className="text-xs text-muted-foreground mt-0.5">{user?.email}</p>

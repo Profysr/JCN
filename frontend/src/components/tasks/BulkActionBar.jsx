@@ -1,4 +1,5 @@
 import { X, Trash2, Tag, User, ChevronDown } from "lucide-react";
+import { Avatar } from "@/components/ui/avatar";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { PRIORITIES } from "@/lib/constants";
@@ -132,10 +133,11 @@ export default function BulkActionBar({
                       }}
                       className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent transition-colors text-foreground"
                     >
-                      <div className="w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] font-bold flex items-center justify-center flex-shrink-0">
-                        {(m.user?.full_name ||
-                          m.user?.email)?.[0]?.toUpperCase()}
-                      </div>
+                      <Avatar
+                        name={m.user?.full_name || m.user?.email}
+                        src={m.user?.avatar}
+                        size="xs"
+                      />
                       {m.user?.full_name || m.user?.email}
                     </button>
                   ))}

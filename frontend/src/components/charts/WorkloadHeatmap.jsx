@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { Avatar } from "@/components/ui/avatar";
 import ChartCard from "./ChartCard";
 
 // Intensity → background color (5 levels)
@@ -65,9 +66,7 @@ export default function WorkloadHeatmap({ data, loading }) {
               <tr key={row.user_id}>
                 <td className="py-0.5">
                   <div className="flex items-center gap-1.5">
-                    <div className="w-5 h-5 rounded-full bg-primary/20 text-primary text-[10px] flex items-center justify-center font-bold flex-shrink-0">
-                      {(row.name || "?")[0].toUpperCase()}
-                    </div>
+                    <Avatar name={row.name} size="xs" />
                     <span className="truncate max-w-[80px] text-foreground">{row.name}</span>
                   </div>
                 </td>

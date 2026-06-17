@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from "react";
+import { Avatar } from "@/components/ui/avatar";
 import { ChevronRight, ChevronDown } from "lucide-react";
 import { useUpdateTask } from "@/hooks/useTasks";
 import { cn } from "@/lib/utils";
@@ -489,9 +490,11 @@ export default function GanttView({
                     className="absolute flex items-center gap-2 px-3 border-b border-border/50 hover:bg-accent/30 cursor-pointer"
                     style={{ top: row.y, height: ROW_H, width: LEFT_W - 1 }}
                     onClick={() => onTaskClick(t.id)}>
-                    <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-primary">
-                      {(t.assignee?.full_name || t.assignee?.email || "?")[0].toUpperCase()}
-                    </div>
+                    <Avatar
+                      name={t.assignee?.full_name || t.assignee?.email}
+                      src={t.assignee?.avatar}
+                      size="xs"
+                    />
                     <span className="text-xs text-foreground truncate flex-1">{t.title}</span>
                     {critical.has(t.id) && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" title="Critical path" />}
                   </div>

@@ -7,6 +7,7 @@ import { Mention } from "@tiptap/extension-mention";
 import { Extension } from "@tiptap/core";
 import { computePosition, flip, shift } from "@floating-ui/dom";
 import { cn } from "@/lib/utils";
+import { Avatar } from "@/components/ui/avatar";
 
 function getCommentText(editor) {
   const json = editor.getJSON();
@@ -210,9 +211,10 @@ const CommentEditor = forwardRef(({
                   : "hover:bg-accent text-foreground",
               )}
             >
-              <div className="w-6 h-6 rounded-full bg-primary/10 text-primary text-[10px] font-bold flex items-center justify-center flex-shrink-0">
-                {(item.fullName || item.email)?.[0]?.toUpperCase()}
-              </div>
+              <Avatar
+                name={item.fullName || item.email}
+                size="sm"
+              />
               <div className="min-w-0">
                 <p className="font-medium truncate text-xs">{item.fullName || item.email}</p>
                 {item.fullName && (

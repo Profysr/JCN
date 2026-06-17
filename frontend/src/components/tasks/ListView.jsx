@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useMemo } from "react";
+import { Avatar } from "@/components/ui/avatar";
 import {
   Calendar,
   ChevronDown,
@@ -345,10 +346,11 @@ export default function ListView({
         <td key="assignee" className="px-3 py-2">
           {task.assignee ? (
             <div className="flex items-center gap-2">
-              <div className="w-5 h-5 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold flex-shrink-0">
-                {(task.assignee.full_name ||
-                  task.assignee.email)[0].toUpperCase()}
-              </div>
+              <Avatar
+                name={task.assignee.full_name || task.assignee.email}
+                src={task.assignee.avatar}
+                size="xs"
+              />
               <span className="text-[12px] text-muted-foreground truncate max-w-[100px]">
                 {task.assignee.full_name || task.assignee.email}
               </span>

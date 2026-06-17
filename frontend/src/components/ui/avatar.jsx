@@ -24,11 +24,12 @@ function getAvatarColor(name) {
 }
 
 const sizeMap = {
-  xs: { outer: "w-5 h-5",  text: "text-[9px]" },
-  sm: { outer: "w-6 h-6",  text: "text-[10px]" },
-  md: { outer: "w-8 h-8",  text: "text-xs" },
-  lg: { outer: "w-10 h-10", text: "text-sm" },
-  xl: { outer: "w-12 h-12", text: "text-base" },
+  xs:  { outer: "w-5 h-5",   text: "text-[9px]" },
+  sm:  { outer: "w-6 h-6",   text: "text-[10px]" },
+  md:  { outer: "w-8 h-8",   text: "text-xs" },
+  lg:  { outer: "w-10 h-10", text: "text-sm" },
+  xl:  { outer: "w-12 h-12", text: "text-base" },
+  "2xl": { outer: "w-14 h-14", text: "text-2xl" },
 };
 
 export function Avatar({ name, src, size = "md", className, ring = false }) {
