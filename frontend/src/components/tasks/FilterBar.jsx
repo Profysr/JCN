@@ -65,7 +65,7 @@ function AssigneeFilter({ members, selected, onChange }) {
             <button
               key={m.user?.id}
               onClick={() => toggle(m.user?.id)}
-              title={`Remove ${m.user?.display_name || m.user?.email}`}
+              title={`Remove ${m.user?.full_name || m.user?.email}`}
               className="ring-2 ring-background rounded-full hover:ring-destructive/50 transition-all"
             >
               <Avatar

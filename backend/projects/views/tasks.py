@@ -5,7 +5,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from django.shortcuts import get_object_or_404
 from django.http import HttpResponse
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.utils import timezone
 import csv
 import re
@@ -31,6 +31,7 @@ from ..models import (
 from ..serializers import (
     TaskStatusSerializer,
     BulkStatusUpdateSerializer,
+    TaskBulkActionSerializer,
     TaskSerializer,
     TaskCardSerializer,
     TaskDetailSerializer,
@@ -282,6 +283,7 @@ class TaskMoveView(APIView):
     def patch(self, request, workspace_id, project_id, task_id):
         board = _get_board(workspace_id, project_id, request.user)
         task = get_object_or_404(Task, id=_parse_pk(task_id), board=board)
+        # Snapshot the current status so we can detect a column change below.
         old_status = task.status
 
         status_id = request.data.get("status_id")
@@ -289,6 +291,7 @@ class TaskMoveView(APIView):
 
         if status_id is not None:
             task_status = get_object_or_404(TaskStatus, id=status_id, board=board)
+            # Reject the move if the task has pending approvals and the destination is a done column (_check_move_blocked returns a 400 Response in that case, None otherwise).
             blocked = _check_move_blocked(task, task_status)
             if blocked:
                 return blocked
@@ -297,8 +300,10 @@ class TaskMoveView(APIView):
         if order is not None:
             task.order = order
 
+        # Single UPDATE — only touch the three columns that can change here.
         task.save(update_fields=["status", "order", "updated_at"])
 
+        # Only write an activity row when the column actually changed.
         if task.status != old_status:
             log_activity(
                 task,
@@ -310,6 +315,64 @@ class TaskMoveView(APIView):
         # Both broadcast and response use card shape — move only affects the kanban board.
         card_task = _broadcast_task_card(workspace_id, task.pk, event="task.moved")
         return Response(TaskCardSerializer(card_task).data)
+
+
+# ── Bulk Actions (v1.1.0) ─────────────────────────────────────────────────────
+def _bulk_delete(tasks, workspace_id, project_id):
+    """Delete the task queryset and broadcast the tombstone list to kanban clients."""
+    task_ids = list(tasks.values_list("id", flat=True))
+    count, _ = tasks.delete()
+    broadcast(
+        workspace_id,
+        "tasks.bulk_deleted",
+        {"task_ids": [str(i) for i in task_ids], "project_id": str(project_id)},
+    )
+    return Response({"deleted": count})
+
+
+def _bulk_update(tasks, updates, workspace_id, project_id):
+    """Apply field overrides to the task queryset and broadcast updated cards."""
+    update_kwargs = {}
+    if updates.get("status_id"):
+        update_kwargs["status_id"] = updates["status_id"]
+    if updates.get("priority"):
+        update_kwargs["priority"] = updates["priority"]
+    if "assignee_id" in updates:
+        # None is a valid value here (unassign), so we can't skip on falsy.
+        update_kwargs["assignee_id"] = updates["assignee_id"]
+
+    if update_kwargs:
+        tasks.update(**update_kwargs)
+
+    # Re-fetch with full card annotations so the broadcast payload matches
+    # what individual task endpoints send — subtask counts, approval counts, labels, etc.
+    task_ids = list(tasks.values_list("id", flat=True))
+    updated_tasks = _task_list_qs().filter(id__in=task_ids)
+    updated = TaskCardSerializer(updated_tasks, many=True).data
+    broadcast(
+        workspace_id,
+        "tasks.bulk_updated",
+        {"tasks": updated, "project_id": str(project_id)},
+    )
+    return Response({"updated": len(updated), "tasks": updated})
+
+
+class TaskBulkUpdateView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, workspace_id, project_id):
+        serializer = TaskBulkActionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        board = _get_board(workspace_id, project_id, request.user)
+        tasks = Task.objects.filter(id__in=data["task_ids"], board=board)
+
+        if data["action"] == "delete":
+            return _bulk_delete(tasks, workspace_id, project_id)
+
+        if data["action"] == "update":
+            return _bulk_update(tasks, data["updates"], workspace_id, project_id)
 
 
 # ── Subtasks ──────────────────────────────────────────────────────────────────
@@ -477,6 +540,68 @@ class TaskCommentDetailView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+class CommentReactionToggleView(APIView):
+    """
+    POST /tasks/:id/comments/:comment_id/reactions/
+    Body: { "emoji": "👍" }
+    Toggles the reaction — creates if absent, deletes if present.
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _get_comment(self, workspace_id, project_id, task_id, comment_id, user):
+        workspace = get_workspace_for_user(workspace_id, user)
+        board = get_object_or_404(Board, id=_parse_pk(project_id), workspace=workspace)
+        task = get_object_or_404(Task, id=_parse_pk(task_id), board=board)
+        return get_object_or_404(TaskComment, id=comment_id, task=task)
+
+    def post(self, request, workspace_id, project_id, task_id, comment_id):
+        comment = self._get_comment(
+            workspace_id, project_id, task_id, comment_id, request.user
+        )
+        emoji = request.data.get("emoji", "").strip()
+        if not emoji:
+            return Response(
+                {"detail": "emoji required."}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        existing = CommentReaction.objects.filter(
+            comment=comment, user=request.user, emoji=emoji
+        ).first()
+        if existing:
+            existing.delete()
+            action = "removed"
+        else:
+            CommentReaction.objects.create(
+                comment=comment, user=request.user, emoji=emoji
+            )
+            action = "added"
+
+        grouped = {}
+        for r in comment.reactions.select_related("user").all():
+            grouped.setdefault(r.emoji, []).append(
+                {
+                    "id": str(r.id),
+                    "user_id": str(r.user_id),
+                    "name": r.user.full_name or r.user.email,
+                }
+            )
+
+        broadcast(
+            workspace_id,
+            "reaction.updated",
+            {
+                "comment_id": str(comment.id),
+                "task_id": str(task_id),
+                "project_id": str(project_id),
+                "reactions": grouped,
+                "action": action,
+                "emoji": emoji,
+            },
+        )
+        return Response({"reactions": grouped, "action": action})
+
+
 # ── Labels ✅──────────────────────────────────────────────────────────────────
 class LabelListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -595,96 +720,58 @@ class SavedViewDetailView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-# ── Sprints (v0.9.0) ─────────────────────────────────────────────────────────
+# ── Sprints (v0.9.0) ✅ ─────────────────────────────────────────────────────────
+def _sprint_qs(board=None):
+    """Annotated sprint queryset. Pass board to scope to that board."""
+    qs = Sprint.objects.select_related("board").annotate(
+        task_count=Count("tasks"),
+        completed_count=Count("tasks", filter=Q(tasks__status__is_done=True)),
+    )
+    if board is not None:
+        qs = qs.filter(board=board)
+    return qs
+
+
+def _get_sprint(workspace_id, project_id, sprint_id, user):
+    """Return an annotated Sprint scoped to the board, or 404."""
+    board = _get_board(workspace_id, project_id, user)
+    return get_object_or_404(_sprint_qs(board), id=sprint_id)
+
+
 class SprintListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_id, project_id):
         board = _get_board(workspace_id, project_id, request.user)
-        return Response(SprintSerializer(board.sprints.all(), many=True).data)
+        return Response(SprintSerializer(_sprint_qs(board), many=True).data)
 
     def post(self, request, workspace_id, project_id):
         board = _get_board(workspace_id, project_id, request.user)
         serializer = SprintSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         sprint = serializer.save(board=board)
-        return Response(SprintSerializer(sprint).data, status=status.HTTP_201_CREATED)
+        return Response(SprintSerializer(_sprint_qs().get(pk=sprint.pk)).data, status=status.HTTP_201_CREATED)
 
 
 class SprintDetailView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
-    def get_sprint(self, workspace_id, project_id, sprint_id, user):
-        board = _get_board(workspace_id, project_id, user)
-        return get_object_or_404(Sprint, id=sprint_id, board=board)
-
     def get(self, request, workspace_id, project_id, sprint_id):
-        sprint = self.get_sprint(workspace_id, project_id, sprint_id, request.user)
+        sprint = _get_sprint(workspace_id, project_id, sprint_id, request.user)
         return Response(SprintSerializer(sprint).data)
 
     def patch(self, request, workspace_id, project_id, sprint_id):
-        sprint = self.get_sprint(workspace_id, project_id, sprint_id, request.user)
+        sprint = _get_sprint(workspace_id, project_id, sprint_id, request.user)
         serializer = SprintSerializer(sprint, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        return Response(serializer.data)
+        # Re-fetch with annotations so response counts reflect the saved state.
+        return Response(SprintSerializer(_sprint_qs().get(pk=sprint.pk)).data)
 
     def delete(self, request, workspace_id, project_id, sprint_id):
-        sprint = self.get_sprint(workspace_id, project_id, sprint_id, request.user)
+        sprint = _get_sprint(workspace_id, project_id, sprint_id, request.user)
         sprint.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-# ── Bulk Actions (v1.1.0) ─────────────────────────────────────────────────────
-class TaskBulkUpdateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def post(self, request, workspace_id, project_id):
-        workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(project_id), workspace=workspace)
-        task_ids = request.data.get("task_ids", [])
-        action = request.data.get("action", "update")
-        updates = request.data.get("updates", {})
-
-        if not task_ids:
-            return Response(
-                {"error": "task_ids required"}, status=status.HTTP_400_BAD_REQUEST
-            )
-
-        tasks = Task.objects.filter(id__in=task_ids, board=board)
-
-        if action == "delete":
-            count = tasks.count()
-            tasks.delete()
-            broadcast(
-                workspace_id,
-                "tasks.bulk_deleted",
-                {"task_ids": task_ids, "project_id": str(project_id)},
-            )
-            return Response({"deleted": count})
-
-        if action == "update":
-            update_kwargs = {}
-            if "status_id" in updates and updates["status_id"]:
-                update_kwargs["status_id"] = updates["status_id"]
-            if "priority" in updates and updates["priority"]:
-                update_kwargs["priority"] = updates["priority"]
-            if "assignee_id" in updates:
-                update_kwargs["assignee_id"] = updates["assignee_id"] or None
-            if update_kwargs:
-                tasks.update(**update_kwargs)
-            updated = TaskSerializer(
-                tasks.select_related("status", "assignee"), many=True
-            ).data
-            broadcast(
-                workspace_id,
-                "tasks.bulk_updated",
-                {"tasks": updated, "project_id": str(project_id)},
-            )
-            return Response({"updated": len(updated), "tasks": updated})
-
-        return Response({"error": "Invalid action"}, status=status.HTTP_400_BAD_REQUEST)
-
 
 # ── File Attachments (v1.2.0) ─────────────────────────────────────────────────
 class TaskAttachmentListCreateView(APIView):
@@ -918,7 +1005,7 @@ class TaskChildrenView(APIView):
         broadcast(workspace_id, "task.created", serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-
+# ── Task Templates ────────────────────────────────────────────
 class TaskTemplateListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -977,71 +1064,7 @@ class TaskApplyTemplateView(APIView):
         return Response(TaskDetailSerializer(task, context={"request": request}).data)
 
 
-class CommentReactionToggleView(APIView):
-    """
-    POST /tasks/:id/comments/:comment_id/reactions/
-    Body: { "emoji": "👍" }
-    Toggles the reaction — creates if absent, deletes if present.
-    """
-
-    permission_classes = [permissions.IsAuthenticated]
-
-    def _get_comment(self, workspace_id, project_id, task_id, comment_id, user):
-        workspace = get_workspace_for_user(workspace_id, user)
-        board = get_object_or_404(Board, id=_parse_pk(project_id), workspace=workspace)
-        task = get_object_or_404(Task, id=_parse_pk(task_id), board=board)
-        return get_object_or_404(TaskComment, id=comment_id, task=task)
-
-    def post(self, request, workspace_id, project_id, task_id, comment_id):
-        comment = self._get_comment(
-            workspace_id, project_id, task_id, comment_id, request.user
-        )
-        emoji = request.data.get("emoji", "").strip()
-        if not emoji:
-            return Response(
-                {"detail": "emoji required."}, status=status.HTTP_400_BAD_REQUEST
-            )
-
-        existing = CommentReaction.objects.filter(
-            comment=comment, user=request.user, emoji=emoji
-        ).first()
-        if existing:
-            existing.delete()
-            action = "removed"
-        else:
-            CommentReaction.objects.create(
-                comment=comment, user=request.user, emoji=emoji
-            )
-            action = "added"
-
-        grouped = {}
-        for r in comment.reactions.select_related("user").all():
-            grouped.setdefault(r.emoji, []).append(
-                {
-                    "id": str(r.id),
-                    "user_id": str(r.user_id),
-                    "name": r.user.full_name or r.user.email,
-                }
-            )
-
-        broadcast(
-            workspace_id,
-            "reaction.updated",
-            {
-                "comment_id": str(comment.id),
-                "task_id": str(task_id),
-                "project_id": str(project_id),
-                "reactions": grouped,
-                "action": action,
-                "emoji": emoji,
-            },
-        )
-        return Response({"reactions": grouped, "action": action})
-
-
 # ── v3.6.0 — Approval Workflows ──────────────────────────────────────────────
-
-
 class ApprovalListCreateView(APIView):
     """
     GET  /tasks/:id/approvals/  — list all approvals for a task

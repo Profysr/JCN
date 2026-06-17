@@ -24,9 +24,6 @@ import KanbanColumn from "@/components/tasks/KanbanColumn";
 import CreateTaskModal from "@/components/tasks/CreateTaskModal";
 import FilterBar from "@/components/tasks/FilterBar";
 import ListView from "@/components/tasks/ListView";
-import SprintHeader from "@/components/projects/SprintPanel";
-import SprintPlanningView from "@/components/projects/SprintPlanningView";
-import SprintSwimLanes from "@/components/projects/SprintSwimLanes";
 import BoardSettingsModal from "@/components/projects/BoardSettingsModal";
 import ProjectMembersModal from "@/components/projects/ProjectMembersModal";
 import BulkActionBar from "@/components/tasks/BulkActionBar";
@@ -52,6 +49,7 @@ import {
 // Lazy — only rendered when the user switches to that view
 const CalendarView = lazy(() => import("@/components/tasks/CalendarView"));
 const GanttView = lazy(() => import("@/components/tasks/GanttView"));
+const SprintView = lazy(() => import("@/components/projects/SprintView"));
 const TaskDetailPanel = lazy(
   () => import("@/components/tasks/TaskDetailPanel"),
 );
@@ -199,11 +197,6 @@ export default function KanbanPage() {
     setSelectedTaskId(param);
   }, [searchParams]);
 
-  const [activeSprint, setActiveSprint] = useState(
-    () => sprints.find((s) => s.status === "active") || null,
-  );
-  const [sprintView, setSprintView] = useState("columns");
-
   // Use for bulk updates
   const [selectedIds, setSelectedIds] = useState(new Set());
 
@@ -262,19 +255,7 @@ export default function KanbanPage() {
     [sprints],
   );
 
-  // Sprint view: further narrow the server-filtered list to the active sprint.
-  // All other filters are already applied by the backend via apiFilters.
-  const tasks = useMemo(() => {
-    if (view === "sprint" && activeSprint) {
-      return allTasks.filter((t) => t.sprint_id === activeSprint.id);
-    }
-    return allTasks;
-  }, [allTasks, view, activeSprint]);
-
-  const backlogTasks = useMemo(
-    () => (view === "sprint" ? allTasks.filter((t) => !t.sprint_id) : []),
-    [allTasks, view],
-  );
+  const tasks = allTasks;
 
   const handleDragEnd = (result) => {
     if (!result.destination) return;
@@ -554,78 +535,23 @@ export default function KanbanPage() {
         )}
 
         {view === "sprint" && (
-          <div className="flex-1 flex flex-col overflow-hidden">
-            {/* Sprint header bar — selector, stats, view toggle */}
-            <SprintHeader
+          <Suspense fallback={<Loader className="flex-1" />}>
+            <SprintView
               workspaceId={workspaceId}
               boardId={boardId}
-              activeSprint={activeSprint}
-              onSelectSprint={setActiveSprint}
-              sprintView={sprintView}
-              onSprintViewChange={setSprintView}
+              allTasks={allTasks}
+              statuses={statuses || []}
+              members={members}
+              labelsById={labelsById}
+              onTaskClick={openTask}
+              onAddTask={(statusId) => setCreateModal({ open: true, statusId })}
+              selectedTaskId={selectedTaskId}
+              selectedIds={selectedIds}
+              onToggleSelect={toggleSelect}
+              canEdit={perms.canEdit}
+              onDragEnd={handleDragEnd}
             />
-
-            {/* Planning mode — two-panel backlog + commitment */}
-            {activeSprint?.status === "planning" && (
-              <SprintPlanningView
-                backlogTasks={backlogTasks}
-                stagedTasks={tasks}
-                sprint={activeSprint}
-                members={members}
-                onTaskClick={openTask}
-                labelsById={labelsById}
-                workspaceId={workspaceId}
-                boardId={boardId}
-              />
-            )}
-
-            {/* Execution mode — columns or swim lanes */}
-            {(activeSprint?.status === "active" || activeSprint?.status === "completed") && (
-              <>
-                {sprintView === "columns" && (
-                  <div className="flex-1 overflow-x-auto p-6">
-                    <DragDropContext onDragEnd={handleDragEnd}>
-                      <div className="flex gap-5 h-full items-start">
-                        {statuses?.map((col) => (
-                          <KanbanColumn
-                            key={col.id}
-                            column={col}
-                            tasks={tasksByStatus(col.id)}
-                            onAddTask={(statusId) => setCreateModal({ open: true, statusId })}
-                            onTaskClick={(task) => openTask(task.id)}
-                            selectedTaskId={selectedTaskId}
-                            selectedIds={selectedIds}
-                            onToggleSelect={toggleSelect}
-                            workspaceId={workspaceId}
-                            boardId={boardId}
-                            canEdit={perms.canEdit}
-                            labelsById={labelsById}
-                          />
-                        ))}
-                      </div>
-                    </DragDropContext>
-                  </div>
-                )}
-
-                {sprintView === "swimlanes" && (
-                  <SprintSwimLanes
-                    tasks={tasks}
-                    statuses={statuses || []}
-                    members={members}
-                    onTaskClick={openTask}
-                    labelsById={labelsById}
-                  />
-                )}
-              </>
-            )}
-
-            {/* No sprint selected */}
-            {!activeSprint && (
-              <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
-                Select or create a sprint above to get started.
-              </div>
-            )}
-          </div>
+          </Suspense>
         )}
 
         {/* Calendar View (v2.9.0) */}

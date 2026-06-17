@@ -63,6 +63,7 @@ export function useTaskTemplates(workspaceId, boardId, { enabled = true } = {}) 
     queryKey: ["task-templates", workspaceId, boardId],
     queryFn: () => api.get(templateBase(workspaceId, boardId)).then(r => r.data),
     enabled: enabled && !!boardId,
+    staleTime: Infinity,
   });
 }
 

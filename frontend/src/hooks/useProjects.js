@@ -19,6 +19,7 @@ export const useBoard = (workspaceId, boardId) =>
         .get(`/api/workspaces/${workspaceId}/boards/${boardId}/`)
         .then((r) => r.data),
     enabled: !!workspaceId && !!boardId,
+    staleTime: Infinity,
     retry: false, // don't retry 403/404 — they won't change
   });
 

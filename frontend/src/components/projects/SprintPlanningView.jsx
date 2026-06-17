@@ -59,42 +59,73 @@ function TaskRow({ task, action, onAction, onTaskClick }) {
   );
 }
 
-function CapacityMeter({ stagedCount, memberCount }) {
+// _Capactiy Meter for each person __________________________________
+// 1. Single source of truth for capacity configuration
+const CAPACITY_CONFIG = {
+  good: {
+    label: "Looks good",
+    textClass: "text-emerald-600",
+    bgClass: "bg-emerald-500",
+  },
+  ok: {
+    label: "Getting full",
+    textClass: "text-amber-500",
+    bgClass: "bg-amber-400",
+  },
+  over: {
+    label: "Over-committed",
+    textClass: "text-red-500",
+    bgClass: "bg-red-500",
+  },
+};
+
+// 2. Extracted pure logic function to determine the status key
+const getCapacityStatus = (perPerson) => {
+  if (perPerson <= 5) return "good";
+  if (perPerson <= 9) return "ok";
+  return "over";
+};
+
+export function CapacityMeter({ stagedCount, memberCount }) {
+  // Prevent division by zero, default to stagedCount if no members
   const perPerson = memberCount > 0 ? stagedCount / memberCount : stagedCount;
-  // Rough guide: ≤5 good, 5–9 ok, 9+ over
-  const status = perPerson <= 5 ? "good" : perPerson <= 9 ? "ok" : "over";
+  
+  // Get current status key and its configuration
+  const statusKey = getCapacityStatus(perPerson);
+  const config = CAPACITY_CONFIG[statusKey];
+
+  // Calculate percentage (capped at 100)
   const pct = Math.min(100, (perPerson / 10) * 100);
 
   return (
     <div className="bg-muted/50 rounded-xl p-3.5 space-y-2">
       <div className="flex items-center justify-between">
+        {/* Team Member Count */}
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Users className="w-3.5 h-3.5" />
-          <span>{memberCount} team member{memberCount !== 1 ? "s" : ""}</span>
+          <span>
+            {memberCount} team member{memberCount !== 1 ? "s" : ""}
+          </span>
         </div>
-        <span className={cn(
-          "text-xs font-semibold",
-          status === "good" ? "text-emerald-600" :
-          status === "ok"   ? "text-amber-500"   : "text-red-500"
-        )}>
-          {status === "good" ? "Looks good" : status === "ok" ? "Getting full" : "Over-committed"}
+        
+        {/* Status Label */}
+        <span className={cn("text-xs font-semibold", config.textClass)}>
+          {config.label}
         </span>
       </div>
 
+      {/* Progress Bar */}
       <div className="h-2 bg-muted rounded-full overflow-hidden">
         <div
-          className={cn(
-            "h-full rounded-full transition-all duration-500",
-            status === "good" ? "bg-emerald-500" :
-            status === "ok"   ? "bg-amber-400"   : "bg-red-500"
-          )}
+          className={cn("h-full rounded-full transition-all duration-500", config.bgClass)}
           style={{ width: `${pct}%` }}
         />
       </div>
 
+      {/* Helper Text */}
       <p className="text-[11px] text-muted-foreground leading-relaxed">
         {perPerson > 0 ? `~${perPerson.toFixed(1)} tasks per person` : "No tasks staged yet"}
-        {status === "over" && " — consider removing some tasks before starting"}
+        {statusKey === "over" && " — consider removing some tasks before starting"}
       </p>
     </div>
   );

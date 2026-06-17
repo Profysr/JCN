@@ -66,6 +66,19 @@ class BulkStatusUpdateSerializer(serializers.Serializer):
         return items
 
 
+class BulkTaskUpdatesSerializer(serializers.Serializer):
+    """Permitted field overrides for a bulk update. All fields are optional."""
+    status_id  = serializers.UUIDField(required=False, allow_null=True)
+    priority   = serializers.CharField(required=False, allow_null=True)
+    assignee_id = serializers.UUIDField(required=False, allow_null=True)
+
+
+class TaskBulkActionSerializer(serializers.Serializer):
+    task_ids = serializers.ListField(child=serializers.UUIDField(), min_length=1)
+    action   = serializers.ChoiceField(choices=["update", "delete"])
+    updates  = BulkTaskUpdatesSerializer(required=False, default=dict)
+
+
 class LabelSerializer(serializers.ModelSerializer):
     class Meta:
         model = Label
@@ -233,8 +246,9 @@ class SavedViewSerializer(serializers.ModelSerializer):
 
 
 class SprintSerializer(serializers.ModelSerializer):
-    task_count = serializers.SerializerMethodField()
-    completed_count = serializers.SerializerMethodField()
+    # Populated by _sprint_qs() annotations in the view — no extra queries fired.
+    task_count = serializers.IntegerField(read_only=True, default=0)
+    completed_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = Sprint
@@ -250,13 +264,6 @@ class SprintSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = ["id", "created_at"]
-
-    def get_task_count(self, obj):
-        return obj.tasks.count()
-
-    def get_completed_count(self, obj):
-        done = obj.board.statuses.order_by("-order").first()
-        return obj.tasks.filter(status=done).count() if done else 0
 
 
 class SubTaskSerializer(serializers.ModelSerializer):
