@@ -242,6 +242,9 @@ class TaskComment(models.Model):
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="task_comments"
     )
+    parent = models.ForeignKey(
+        "self", null=True, blank=True, on_delete=models.CASCADE, related_name="replies"
+    )
     body = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -271,6 +274,7 @@ class Label(models.Model):
     def __str__(self):
         return f"{self.board.name} / {self.name}"
 
+# Not being used at the moment ======================================
 class BoardField(models.Model):
     """Custom field definition scoped to a board."""
 
@@ -319,6 +323,7 @@ class TaskFieldValue(models.Model):
 
     def __str__(self):
         return f"{self.task.title} / {self.field.name}: {self.value}"
+# ==============================================
 
 class SavedView(models.Model):
     """Named filter preset per board per user."""
@@ -498,7 +503,7 @@ class BoardMember(models.Model):
     def __str__(self):
         return f"{self.user.email} → {self.board.name} ({self.role})"
 
-
+# Not being used =====================================
 class TaskTemplate(models.Model):
     """Reusable task structure — pre-filled fields + default subtasks."""
 
@@ -530,7 +535,7 @@ class TaskTemplate(models.Model):
 
     def __str__(self):
         return f"{self.board.name} / {self.name}"
-
+# =====================================
 
 class WikiPage(models.Model):
     """Board-scoped wiki page with parent hierarchy and version history."""

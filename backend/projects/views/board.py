@@ -5,7 +5,7 @@ from django.shortcuts import get_object_or_404
 from django.db.models import Count, Q, Prefetch
 from django.utils import timezone
 import datetime
-from ..models import Board, BoardMember, Sprint, UserPresence, Task
+from ..models import Board, BoardMember, Sprint, UserPresence
 from ..serializers import (
     BoardSerializer,
     BoardMiniSerializer,
@@ -13,10 +13,9 @@ from ..serializers import (
     BoardMemberSerializer,
     BoardMemberBulkSerializer,
     UserPresenceSerializer,
-    MyWorkTaskSerializer,
 )
 from ..permissions import has_project_permission, log_audit, bulk_log_audit
-from workspaces.models import WorkspaceMember
+
 from .helpers import (
     _parse_pk,
     get_workspace_for_user,
@@ -233,54 +232,7 @@ class BoardMemberBulkCreateView(APIView):
         )
 
 
-# ── v3.4.0 — My Work ─────────────────────────────────────────────────────────
-class MyWorkView(APIView):
-    """GET /my-work/ — all tasks assigned to the current user, across all workspaces, sorted by urgency."""
-
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request):
-        workspace_ids = WorkspaceMember.objects.filter(user=request.user).values_list(
-            "workspace_id", flat=True
-        )
-
-        tasks = (
-            Task.objects.filter(
-                board__workspace_id__in=workspace_ids, assignee=request.user
-            )
-            .exclude(status__is_done=True)
-            .select_related("status", "assignee", "sprint", "board__workspace")
-            .prefetch_related("labels", "blocked_by_deps")
-        )
-
-        today = timezone.now().date()
-        week_end = today + datetime.timedelta(days=7)
-
-        def urgency(t):
-            score = 0
-            if t.due_date:
-                d = t.due_date
-                if d < today:
-                    score += 100
-                elif d == today:
-                    score += 30
-                elif d <= week_end:
-                    score += 10
-            if t.priority == "urgent":
-                score += 50
-            elif t.priority == "high":
-                score += 20
-            return score
-
-        sorted_tasks = sorted(tasks, key=lambda t: -urgency(t))
-        return Response(
-            MyWorkTaskSerializer(
-                sorted_tasks, many=True, context={"request": request}
-            ).data
-        )
-
-
-# ── v3.5.0 — Real-Time Collaboration v2 ──────────────────────────────────────
+# ── v3.5.0 — Real-Time Collaboration v2 ✅─────────────────────────────────────
 class UserPresenceView(APIView):
     """
     POST   /workspaces/:slug/presence/  — join/heartbeat a resource

@@ -8,7 +8,6 @@ from .board import (
     BoardMemberDetailView,
     BoardMemberBulkCreateView,
     UserPresenceView,
-    MyWorkView,
 )
 
 from .tasks import (
@@ -20,8 +19,6 @@ from .tasks import (
     SubTaskListCreateView,
     SubTaskDetailView,
     TaskActivityListView,
-    TaskCommentListCreateView,
-    TaskCommentDetailView,
     LabelListCreateView,
     LabelDetailView,
     BoardFieldListCreateView,
@@ -42,10 +39,16 @@ from .tasks import (
     TaskTemplateListCreateView,
     TaskTemplateDetailView,
     TaskApplyTemplateView,
-    CommentReactionToggleView,
     ApprovalListCreateView,
     ApprovalReviewView,
     ApprovalResubmitView,
+    MyWorkView,
+)
+
+from .comments import (
+    TaskCommentListCreateView,
+    TaskCommentDetailView,
+    CommentReactionToggleView,
 )
 
 from .search import GlobalSearchView
@@ -67,11 +70,12 @@ from .forms import (
     FormSubmissionListView,
 )
 
-from .automation import (
-    AutomationRuleListCreateView,
-    AutomationRuleDetailView,
-    AutomationLogListView,
-)
+# ‼️ Automation disabled — views exist but routes are commented out in urls.py
+# from .automation import (
+#     AutomationRuleListCreateView,
+#     AutomationRuleDetailView,
+#     AutomationLogListView,
+# )
 
 from .objectives import (
     ObjectiveListCreateView,
@@ -90,7 +94,6 @@ __all__ = [
     "BoardMemberDetailView",
     "BoardMemberBulkCreateView",
     "UserPresenceView",
-    "MyWorkView",
     # tasks
     "TaskStatusListCreateView",
     "TaskStatusBulkUpdateView",
@@ -126,6 +129,7 @@ __all__ = [
     "ApprovalListCreateView",
     "ApprovalReviewView",
     "ApprovalResubmitView",
+    "MyWorkView",
     # search
     "GlobalSearchView",
     # wiki
@@ -141,10 +145,10 @@ __all__ = [
     "PublicFormView",
     "PublicFormSubmitView",
     "FormSubmissionListView",
-    # automation
-    "AutomationRuleListCreateView",
-    "AutomationRuleDetailView",
-    "AutomationLogListView",
+    # ‼️ automation disabled
+    # "AutomationRuleListCreateView",
+    # "AutomationRuleDetailView",
+    # "AutomationLogListView",
     # objectives
     "ObjectiveListCreateView",
     "ObjectiveDetailView",

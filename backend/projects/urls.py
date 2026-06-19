@@ -138,10 +138,10 @@ urlpatterns = [
     # Public form endpoints
     path("forms/<str:form_token>/", PublicFormView.as_view()),
     path("forms/<str:form_token>/submit/", PublicFormSubmitView.as_view()),
-    # v2.7.0 — Automation Engine
-    path(f"{_pr}/automations/", AutomationRuleListCreateView.as_view()),
-    path(f"{_pr}/automations/<str:rule_id>/", AutomationRuleDetailView.as_view()),
-    path(f"{_pr}/automations/<str:rule_id>/logs/", AutomationLogListView.as_view()),
+    # ‼️ v2.7.0 — Automation Engine (disabled until rebuilt)
+    # path(f"{_pr}/automations/", AutomationRuleListCreateView.as_view()),
+    # path(f"{_pr}/automations/<str:rule_id>/", AutomationRuleDetailView.as_view()),
+    # path(f"{_pr}/automations/<str:rule_id>/logs/", AutomationLogListView.as_view()),
     path("search/", GlobalSearchView.as_view()),
     # v3.4.0 — My Work + Portfolio
     path("my-work/", MyWorkView.as_view()),

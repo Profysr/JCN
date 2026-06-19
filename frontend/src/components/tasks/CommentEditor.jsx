@@ -183,6 +183,19 @@ const CommentEditor = forwardRef(({
     clear:   () => { editor?.commands.clearContent(true); onChangeRef.current?.(""); },
     focus:   () => editor?.commands.focus(),
     isEmpty: () => editor?.isEmpty ?? true,
+    // Returns the IDs of users currently mentioned in the document.
+    // Reads the live editor JSON so deleted mentions are not included.
+    getMentionedIds: () => {
+      const ids = new Set();
+      const traverse = (nodes = []) => {
+        for (const node of nodes) {
+          if (node.type === "mention" && node.attrs?.id) ids.add(node.attrs.id);
+          traverse(node.content);
+        }
+      };
+      traverse(editor?.getJSON()?.content);
+      return [...ids];
+    },
   }));
 
   const insertMention = (item) => {

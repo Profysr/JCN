@@ -1,3 +1,6 @@
+# ‼️ AUTOMATION VIEWS — DISABLED (routes commented out in urls.py)
+# ‼️ Re-enable by uncommenting the three paths in urls.py and the import in __init__.py.
+
 from rest_framework import permissions, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -11,7 +14,7 @@ from .helpers import (
 )
 
 
-# ── v2.7.0 — Automation Engine ────────────────────────────────────────────────
+# ‼️ ── v2.7.0 — Automation Engine (disabled) ──────────────────────────────────
 
 
 class AutomationRuleListCreateView(APIView):

@@ -1,20 +1,20 @@
 ﻿from rest_framework import permissions, status
 from rest_framework.views import APIView
+from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
+from core.pagination import StandardResultsSetPagination
 from django.shortcuts import get_object_or_404
 from django.http import HttpResponse
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Case, When, Value, IntegerField
 from django.utils import timezone
 import csv
-import re
 from ..models import (
     Board,
     TaskStatus,
     Task,
     SubTask,
-    TaskComment,
     TaskActivity,
     Label,
     BoardField,
@@ -24,9 +24,7 @@ from ..models import (
     TaskAttachment,
     TaskDependency,
     TaskTemplate,
-    CommentReaction,
     Approval,
-    ApprovalReviewer,
 )
 from ..serializers import (
     TaskStatusSerializer,
@@ -36,7 +34,6 @@ from ..serializers import (
     TaskCardSerializer,
     TaskDetailSerializer,
     SubTaskSerializer,
-    TaskCommentSerializer,
     TaskActivitySerializer,
     LabelSerializer,
     BoardFieldSerializer,
@@ -48,11 +45,13 @@ from ..serializers import (
     MinimalTaskSerializer,
     TaskDependencySerializer,
     TaskTemplateSerializer,
-    CommentReactionSerializer,
     ApprovalSerializer,
     ApprovalReviewerSerializer,
+    ApprovalReviewSerializer,
+    ApprovalResubmitSerializer,
+    MyWorkTaskSerializer,
 )
-from workspaces.models import InboxItem
+from workspaces.models import InboxItem, WorkspaceMember
 from .helpers import (
     _parse_pk,
     get_workspace_for_user,
@@ -398,7 +397,7 @@ class TaskBulkUpdateView(APIView):
             return _bulk_update(tasks, data["updates"], workspace_id, board_id)
 
 
-# ── Subtasks ──────────────────────────────────────────────────────────────────
+# ── Subtasks ✅──────────────────────────────────────────────────────────────────
 class SubTaskListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -437,193 +436,20 @@ class SubTaskDetailView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-# ── Activity ──────────────────────────────────────────────────────────────────
-class TaskActivityListView(APIView):
+# ── Activity ✅──────────────────────────────────────────────────────────────────
+class TaskActivityListView(ListAPIView):
     permission_classes = [permissions.IsAuthenticated]
+    serializer_class = TaskActivitySerializer
+    pagination_class = StandardResultsSetPagination
 
-    def get(self, request, workspace_id, board_id, task_id):
-        task = _get_task(workspace_id, board_id, task_id, request.user)
-        activities = task.activities.select_related("actor").all()
-        return Response(TaskActivitySerializer(activities, many=True).data)
-
-
-# ── Comments ──────────────────────────────────────────────────────────────────
-class TaskCommentListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request, workspace_id, board_id, task_id):
-        task = _get_task(workspace_id, board_id, task_id, request.user)
-        return Response(
-            TaskCommentSerializer(
-                task.comments.select_related("author").all(),
-                many=True,
-                context={"request": request},
-            ).data
+    def get_queryset(self):
+        task = _get_task(
+            self.kwargs["workspace_id"],
+            self.kwargs["board_id"],
+            self.kwargs["task_id"],
+            self.request.user,
         )
-
-    def post(self, request, workspace_id, board_id, task_id):
-        workspace = get_workspace_for_user(workspace_id, request.user)
-        task = _get_task(workspace_id, board_id, task_id, request.user)
-        serializer = TaskCommentSerializer(
-            data=request.data, context={"request": request}
-        )
-        serializer.is_valid(raise_exception=True)
-        comment = serializer.save(task=task)
-        log_activity(task, request.user, TaskActivity.Verb.COMMENTED)
-        # Notify assignee and task creator
-        recipients = {
-            u for u in [task.assignee, task.created_by] if u and u != request.user
-        }
-        for recipient in recipients:
-            notify(
-                recipient,
-                request.user,
-                InboxItem.Verb.TASK_COMMENTED,
-                workspace,
-                task,
-            )
-        # Parse @mentions and notify mentioned users
-        mentions = re.findall(r"@(\w+)", comment.body)
-        if mentions:
-            from accounts.models import User as UserModel
-
-            workspace_users = UserModel.objects.filter(
-                workspace_memberships__workspace=workspace
-            ).exclude(id=request.user.id)
-            for mention in set(mentions):
-                for user in workspace_users:
-                    name_parts = (user.full_name or "").lower().split()
-                    email_prefix = user.email.split("@")[0].lower()
-                    if mention.lower() in name_parts or mention.lower() == email_prefix:
-                        if user not in recipients:
-                            notify(
-                                user,
-                                request.user,
-                                InboxItem.Verb.TASK_MENTIONED,
-                                workspace,
-                                task,
-                            )
-                            recipients.add(user)
-        data = TaskCommentSerializer(comment, context={"request": request}).data
-        broadcast(
-            workspace_id,
-            "comment.created",
-            {
-                "task_id": str(task.id),
-                "board_id": str(task.board_id),
-                "comment": data,
-            },
-        )
-        return Response(data, status=status.HTTP_201_CREATED)
-
-
-class TaskCommentDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_comment(self, workspace_id, board_id, task_id, comment_id, user):
-        task = _get_task(workspace_id, board_id, task_id, user)
-        return get_object_or_404(TaskComment, id=comment_id, task=task)
-
-    def patch(self, request, workspace_id, board_id, task_id, comment_id):
-        comment = self.get_comment(
-            workspace_id, board_id, task_id, comment_id, request.user
-        )
-        if comment.author != request.user:
-            return Response(
-                {"detail": "You can only edit your own comments."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        serializer = TaskCommentSerializer(
-            comment, data=request.data, partial=True, context={"request": request}
-        )
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data)
-
-    def delete(self, request, workspace_id, board_id, task_id, comment_id):
-        comment = self.get_comment(
-            workspace_id, board_id, task_id, comment_id, request.user
-        )
-        if comment.author != request.user:
-            return Response(
-                {"detail": "You can only delete your own comments."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        comment_id_str = str(comment.id)
-        comment.delete()
-        broadcast(
-            workspace_id,
-            "comment.deleted",
-            {
-                "task_id": str(task_id),
-                "board_id": str(board_id),
-                "comment_id": comment_id_str,
-            },
-        )
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-class CommentReactionToggleView(APIView):
-    """
-    POST /tasks/:id/comments/:comment_id/reactions/
-    Body: { "emoji": "👍" }
-    Toggles the reaction — creates if absent, deletes if present.
-    """
-
-    permission_classes = [permissions.IsAuthenticated]
-
-    def _get_comment(self, workspace_id, board_id, task_id, comment_id, user):
-        workspace = get_workspace_for_user(workspace_id, user)
-        board = get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
-        task = get_object_or_404(Task, id=_parse_pk(task_id), board=board)
-        return get_object_or_404(TaskComment, id=comment_id, task=task)
-
-    def post(self, request, workspace_id, board_id, task_id, comment_id):
-        comment = self._get_comment(
-            workspace_id, board_id, task_id, comment_id, request.user
-        )
-        emoji = request.data.get("emoji", "").strip()
-        if not emoji:
-            return Response(
-                {"detail": "emoji required."}, status=status.HTTP_400_BAD_REQUEST
-            )
-
-        existing = CommentReaction.objects.filter(
-            comment=comment, user=request.user, emoji=emoji
-        ).first()
-        if existing:
-            existing.delete()
-            action = "removed"
-        else:
-            CommentReaction.objects.create(
-                comment=comment, user=request.user, emoji=emoji
-            )
-            action = "added"
-
-        grouped = {}
-        for r in comment.reactions.select_related("user").all():
-            grouped.setdefault(r.emoji, []).append(
-                {
-                    "id": str(r.id),
-                    "user_id": str(r.user_id),
-                    "name": r.user.full_name or r.user.email,
-                }
-            )
-
-        broadcast(
-            workspace_id,
-            "reaction.updated",
-            {
-                "comment_id": str(comment.id),
-                "task_id": str(task_id),
-                "board_id": str(board_id),
-                "reactions": grouped,
-                "action": action,
-                "emoji": emoji,
-            },
-        )
-        return Response({"reactions": grouped, "action": action})
-
+        return task.activities.select_related("actor").order_by("id")
 
 # ── Labels ✅──────────────────────────────────────────────────────────────────
 class LabelListCreateView(APIView):
@@ -661,7 +487,7 @@ class LabelDetailView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-# ── Custom Fields (v0.8.0) ────────────────────────────────────────────────────
+# ── Custom Fields (v0.8.0) ‼️────────────────────────────────────────────────────
 class BoardFieldListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -920,8 +746,36 @@ class TaskDependencyDeleteView(APIView):
         dep.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+class TaskChildrenView(APIView):
+    """GET /tasks/:id/children/ — list direct child tasks."""
 
-# ── CSV Export (v1.7.0) ───────────────────────────────────────────────────────
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, workspace_id, board_id, task_id):
+        workspace = get_workspace_for_user(workspace_id, request.user)
+        board = get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
+        task = get_object_or_404(Task, id=_parse_pk(task_id), board=board)
+        children = task.children.select_related("status", "assignee").all()
+        return Response(
+            TaskSerializer(children, many=True, context={"request": request}).data
+        )
+
+    def post(self, request, workspace_id, board_id, task_id):
+        """Create a child task under this parent."""
+        workspace = get_workspace_for_user(workspace_id, request.user)
+        board = get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
+        _require_board_perm(request.user, board, "edit")
+        parent = get_object_or_404(Task, id=_parse_pk(task_id), board=board)
+        data = request.data.copy()
+        data["parent_id"] = str(parent.id)
+        serializer = TaskSerializer(data=data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        task = serializer.save(board=board, created_by=request.user, parent=parent)
+        log_activity(task, request.user, TaskActivity.Verb.CREATED)
+        broadcast(workspace_id, "task.created", serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+# ── CSV Export (v1.7.0) ‼️───────────────────────────────────────────────────────
 class TaskExportView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -970,7 +824,6 @@ class TaskExportView(APIView):
             )
         return response
 
-
 # ── v2.4.0 — Advanced Task System ────────────────────────────────────────────
 class TaskCloneView(APIView):
     """POST /tasks/:id/clone/ — deep-clone a task and return the new task."""
@@ -999,37 +852,7 @@ class TaskCloneView(APIView):
             status=status.HTTP_201_CREATED,
         )
 
-
-class TaskChildrenView(APIView):
-    """GET /tasks/:id/children/ — list direct child tasks."""
-
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request, workspace_id, board_id, task_id):
-        workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
-        task = get_object_or_404(Task, id=_parse_pk(task_id), board=board)
-        children = task.children.select_related("status", "assignee").all()
-        return Response(
-            TaskSerializer(children, many=True, context={"request": request}).data
-        )
-
-    def post(self, request, workspace_id, board_id, task_id):
-        """Create a child task under this parent."""
-        workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
-        _require_board_perm(request.user, board, "edit")
-        parent = get_object_or_404(Task, id=_parse_pk(task_id), board=board)
-        data = request.data.copy()
-        data["parent_id"] = str(parent.id)
-        serializer = TaskSerializer(data=data, context={"request": request})
-        serializer.is_valid(raise_exception=True)
-        task = serializer.save(board=board, created_by=request.user, parent=parent)
-        log_activity(task, request.user, TaskActivity.Verb.CREATED)
-        broadcast(workspace_id, "task.created", serializer.data)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-
-#/ ── Task Templates ────────────────────────────────────────────
+# / ── Task Templates ‼️────────────────────────────────────────────
 class TaskTemplateListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -1089,6 +912,38 @@ class TaskApplyTemplateView(APIView):
 
 
 # ── v3.6.0 — Approval Workflows ──────────────────────────────────────────────
+
+def _get_approval(workspace_id, board_id, task_id, approval_id, user):
+    """Return an Approval scoped to the task, with reviewers prefetched, or 404."""
+    task = _get_task(workspace_id, board_id, task_id, user)
+    return get_object_or_404(
+        Approval.objects.prefetch_related("reviewers__user").select_related("requested_by"),
+        id=approval_id,
+        task=task,
+    )
+
+
+def _notify_reviewers(approval, actor, workspace, task):
+    """Send an APPROVAL_REQUESTED inbox notification to every reviewer."""
+    for reviewer in approval.reviewers.select_related("user"):
+        notify(
+            recipient=reviewer.user,
+            actor=actor,
+            verb=InboxItem.Verb.APPROVAL_REQUESTED,
+            workspace=workspace,
+            task=task,
+        )
+
+
+def _broadcast_approval(workspace_id, board_id, task_id, event, approval):
+    """Broadcast an approval event with the standard task/board context."""
+    broadcast(workspace_id, event, {
+        "task_id": str(task_id),
+        "board_id": str(board_id),
+        "approval": ApprovalSerializer(approval).data,
+    })
+
+
 class ApprovalListCreateView(APIView):
     """
     GET  /tasks/:id/approvals/  — list all approvals for a task
@@ -1097,47 +952,19 @@ class ApprovalListCreateView(APIView):
 
     permission_classes = [permissions.IsAuthenticated]
 
-    def _get_task(self, workspace_id, board_id, task_id, user):
-        workspace = get_workspace_for_user(workspace_id, user)
-        board = get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
-        return get_object_or_404(Task, id=_parse_pk(task_id), board=board)
-
     def get(self, request, workspace_id, board_id, task_id):
-        task = self._get_task(workspace_id, board_id, task_id, request.user)
-        approvals = task.approvals.prefetch_related("reviewers__user").select_related(
-            "requested_by"
-        )
+        task = _get_task(workspace_id, board_id, task_id, request.user)
+        approvals = task.approvals.prefetch_related("reviewers__user").select_related("requested_by")
         return Response(ApprovalSerializer(approvals, many=True).data)
 
     def post(self, request, workspace_id, board_id, task_id):
-        task = self._get_task(workspace_id, board_id, task_id, request.user)
+        task = _get_task(workspace_id, board_id, task_id, request.user)
         serializer = ApprovalSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         approval = serializer.save(task=task, requested_by=request.user)
-
-        # Notify every reviewer
-        workspace = task.board.workspace
-        for reviewer in approval.reviewers.select_related("user"):
-            notify(
-                recipient=reviewer.user,
-                actor=request.user,
-                verb=InboxItem.Verb.APPROVAL_REQUESTED,
-                workspace=workspace,
-                task=task,
-            )
-
-        broadcast(
-            workspace_id,
-            "approval.created",
-            {
-                "task_id": str(task_id),
-                "board_id": str(board_id),
-                "approval": ApprovalSerializer(approval).data,
-            },
-        )
-        return Response(
-            ApprovalSerializer(approval).data, status=status.HTTP_201_CREATED
-        )
+        _notify_reviewers(approval, request.user, task.board.workspace, task)
+        _broadcast_approval(workspace_id, board_id, task_id, "approval.created", approval)
+        return Response(ApprovalSerializer(approval).data, status=status.HTTP_201_CREATED)
 
 
 class ApprovalReviewView(APIView):
@@ -1149,22 +976,8 @@ class ApprovalReviewView(APIView):
 
     permission_classes = [permissions.IsAuthenticated]
 
-    def _get_approval(self, workspace_id, board_id, task_id, approval_id, user):
-        workspace = get_workspace_for_user(workspace_id, user)
-        board = get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
-        task = get_object_or_404(Task, id=_parse_pk(task_id), board=board)
-        return get_object_or_404(
-            Approval.objects.prefetch_related("reviewers__user").select_related(
-                "requested_by"
-            ),
-            id=approval_id,
-            task=task,
-        )
-
     def post(self, request, workspace_id, board_id, task_id, approval_id):
-        approval = self._get_approval(
-            workspace_id, board_id, task_id, approval_id, request.user
-        )
+        approval = _get_approval(workspace_id, board_id, task_id, approval_id, request.user)
 
         reviewer = approval.reviewers.filter(user=request.user).first()
         if not reviewer:
@@ -1173,56 +986,25 @@ class ApprovalReviewView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        new_status = request.data.get("status")
-        valid_statuses = [
-            ApprovalReviewer.Status.APPROVED,
-            ApprovalReviewer.Status.REJECTED,
-            ApprovalReviewer.Status.CHANGES_REQUESTED,
-        ]
-        if new_status not in valid_statuses:
-            return Response(
-                {"detail": f"status must be one of: {', '.join(valid_statuses)}"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        reviewer.status = new_status
-        reviewer.comment = request.data.get("comment", "")
-        reviewer.reviewed_at = timezone.now()
-        reviewer.save(update_fields=["status", "comment", "reviewed_at"])
-
-        # Recompute overall approval status
-        old_overall = approval.status
+        serializer = ApprovalReviewSerializer(reviewer, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        # old_overall = approval.status  # ‼️ only needed for automation triggers
+        serializer.save()
         approval.recompute_status()
 
-        data = ApprovalSerializer(approval).data
-        broadcast(
-            workspace_id,
-            "approval.updated",
-            {
-                "task_id": str(task_id),
-                "board_id": str(board_id),
-                "approval": data,
-            },
-        )
+        _broadcast_approval(workspace_id, board_id, task_id, "approval.updated", approval)
 
-        # Fire automation triggers when overall status changes
-        if approval.status != old_overall:
-            from ..automation import fire_automation
+        # ‼️ Automation disabled — uncomment when fire_automation is rebuilt.
+        # if approval.status != old_overall:
+        #     from ..automation import fire_automation
+        #     trigger = {
+        #         Approval.Status.APPROVED: "approval.approved",
+        #         Approval.Status.REJECTED: "approval.rejected",
+        #     }.get(approval.status)
+        #     if trigger:
+        #         fire_automation(trigger, approval.task, actor=request.user, context={"approval_id": str(approval_id)})
 
-            trigger = None
-            if approval.status == Approval.Status.APPROVED:
-                trigger = "approval.approved"
-            elif approval.status == Approval.Status.REJECTED:
-                trigger = "approval.rejected"
-            if trigger:
-                fire_automation(
-                    trigger,
-                    approval.task,
-                    actor=request.user,
-                    context={"approval_id": str(approval_id)},
-                )
-
-        return Response(data)
+        return Response(ApprovalSerializer(approval).data)
 
 
 class ApprovalResubmitView(APIView):
@@ -1236,48 +1018,54 @@ class ApprovalResubmitView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, workspace_id, board_id, task_id, approval_id):
-        workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
-        task = get_object_or_404(Task, id=_parse_pk(task_id), board=board)
-        approval = get_object_or_404(Approval, id=approval_id, task=task)
-
-        if approval.requested_by != request.user:
-            return Response(
-                {"detail": "Only the original requester can resubmit."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        if approval.status == Approval.Status.APPROVED:
-            return Response(
-                {"detail": "This approval is already approved."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Reset the approval and all individual reviewer verdicts back to pending
-        approval.status = Approval.Status.PENDING
-        approval.save(update_fields=["status", "updated_at"])
-        approval.reviewers.all().update(
-            status=ApprovalReviewer.Status.PENDING, comment=""
-        )
-
-        # Notify each reviewer again
-        for reviewer in approval.reviewers.select_related("user"):
-            notify(
-                recipient=reviewer.user,
-                actor=request.user,
-                verb=InboxItem.Verb.APPROVAL_REQUESTED,
-                workspace=workspace,
-                task=task,
-            )
-
-        broadcast(
-            workspace_id,
-            "approval.updated",
-            {
-                "task_id": str(task_id),
-                "board_id": str(board_id),
-                "approval": ApprovalSerializer(approval).data,
-            },
-        )
-
+        approval = _get_approval(workspace_id, board_id, task_id, approval_id, request.user)
+        serializer = ApprovalResubmitSerializer(approval, data={}, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        _notify_reviewers(approval, request.user, approval.task.board.workspace, approval.task)
+        _broadcast_approval(workspace_id, board_id, task_id, "approval.updated", approval)
         return Response(ApprovalSerializer(approval).data)
+
+
+# ── v3.4.0 — My Work ✅─────────────────────────────────────────────────────────
+class MyWorkView(APIView):
+    """GET /my-work/ — tasks assigned to the current user across all workspaces, sorted by urgency."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from datetime import timedelta
+
+        workspace_ids = WorkspaceMember.objects.filter(user=request.user).values_list(
+            "workspace_id", flat=True
+        )
+
+        today = timezone.now().date()
+        week_end = today + timedelta(days=7)
+
+        tasks = (
+            _task_list_qs()
+            .select_related("status", "board__workspace")
+            .filter(board__workspace_id__in=workspace_ids, assignee=request.user)
+            .exclude(status__is_done=True)
+            .annotate(
+                urgency=Case(
+                    When(due_date__isnull=False, due_date__lt=today, then=Value(100)),
+                    When(due_date=today, then=Value(30)),
+                    When(due_date__isnull=False, due_date__lte=week_end, then=Value(10)),
+                    default=Value(0),
+                    output_field=IntegerField(),
+                )
+                + Case(
+                    When(priority="urgent", then=Value(50)),
+                    When(priority="high", then=Value(20)),
+                    default=Value(0),
+                    output_field=IntegerField(),
+                )
+            )
+            .order_by("-urgency", "due_date")
+        )
+
+        return Response(
+            MyWorkTaskSerializer(tasks, many=True, context={"request": request}).data
+        )

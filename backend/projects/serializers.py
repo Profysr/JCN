@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from rest_framework.exceptions import PermissionDenied
 from django.utils import timezone
 import datetime
 from core.constants import DEFAULT_TASK_STATUSES
@@ -292,26 +293,63 @@ class SubTaskSerializer(serializers.ModelSerializer):
         fields = ["id", "title", "is_done", "order"]
 
 
-class TaskCommentSerializer(serializers.ModelSerializer):
+def _group_reactions(reactions):
+    """Turn a prefetched reactions queryset into {emoji: [{id, user_id, name}]}."""
+    grouped = {}
+    for r in reactions:
+        grouped.setdefault(r.emoji, []).append(
+            {"id": str(r.id), "user_id": str(r.user_id), "name": r.user.full_name or r.user.email}
+        )
+    return grouped
+
+
+def _get_reactions_cached(obj):
+    """
+    Check Redis first; fall back to the prefetch cache and populate Redis.
+    Redis hit = zero DB or Python work. Cold = one prefetch read + Redis write.
+    """
+    from .cache import get_reactions as cache_get, set_reactions as cache_set
+
+    cached = cache_get(obj.id)
+    if cached is not None:
+        return cached
+    grouped = _group_reactions(obj.reactions.all())
+    cache_set(obj.id, grouped)
+    return grouped
+
+
+class TaskCommentReplySerializer(serializers.ModelSerializer):
+    """Flat serializer for replies — no nested replies field to prevent recursion."""
+
     author = MiniUserSerializer(read_only=True)
     reactions = serializers.SerializerMethodField()
 
     class Meta:
         model = TaskComment
-        fields = ["id", "author", "body", "reactions", "created_at", "updated_at"]
+        fields = ["id", "author", "parent_id", "body", "reactions", "created_at", "updated_at"]
         read_only_fields = ["id", "author", "reactions", "created_at", "updated_at"]
 
     def get_reactions(self, obj):
-        grouped = {}
-        for r in obj.reactions.select_related("user").all():
-            grouped.setdefault(r.emoji, []).append(
-                {
-                    "id": str(r.id),
-                    "user_id": str(r.user_id),
-                    "name": r.user.full_name or r.user.email,
-                }
-            )
-        return grouped
+        return _get_reactions_cached(obj)
+
+    def create(self, validated_data):
+        validated_data["author"] = self.context["request"].user
+        return super().create(validated_data)
+
+
+class TaskCommentSerializer(serializers.ModelSerializer):
+    author = MiniUserSerializer(read_only=True)
+    reactions = serializers.SerializerMethodField()
+    replies = TaskCommentReplySerializer(many=True, read_only=True)
+    parent_id = serializers.UUIDField(required=False, allow_null=True, write_only=True)
+
+    class Meta:
+        model = TaskComment
+        fields = ["id", "author", "parent_id", "body", "reactions", "replies", "created_at", "updated_at"]
+        read_only_fields = ["id", "author", "reactions", "replies", "created_at", "updated_at"]
+
+    def get_reactions(self, obj):
+        return _get_reactions_cached(obj)
 
     def create(self, validated_data):
         validated_data["author"] = self.context["request"].user
@@ -604,38 +642,16 @@ class TaskTemplateSerializer(serializers.ModelSerializer):
 
 
 class TaskDetailSerializer(TaskSerializer):
-    subtasks = SubTaskSerializer(many=True, read_only=True)
-    comments = TaskCommentSerializer(many=True, read_only=True)
-    activities = TaskActivitySerializer(many=True, read_only=True)
     field_values = TaskFieldValueSerializer(many=True, read_only=True)
-    attachments = TaskAttachmentSerializer(many=True, read_only=True)
-    children = serializers.SerializerMethodField()
     ancestors = serializers.SerializerMethodField()
-    blocked_by = serializers.SerializerMethodField()
-    blocking = serializers.SerializerMethodField()
-    relations = serializers.SerializerMethodField()
-    # v3.8.0 — key results this task contributes to
     key_result_links = serializers.SerializerMethodField()
 
     class Meta(TaskSerializer.Meta):
         fields = TaskSerializer.Meta.fields + [
-            "subtasks",
-            "comments",
-            "activities",
             "field_values",
-            "attachments",
-            "children",
             "ancestors",
-            "blocked_by",
-            "blocking",
-            "relations",
             "key_result_links",
         ]
-
-    def get_children(self, obj):
-        return MinimalTaskSerializer(
-            obj.children.select_related("status").all(), many=True
-        ).data
 
     def get_ancestors(self, obj):
         """Walk up the parent chain and return ordered list [root, ..., direct_parent]."""
@@ -650,54 +666,6 @@ class TaskDetailSerializer(TaskSerializer):
             )
             current = current.parent
         return list(reversed(chain))
-
-    def get_blocked_by(self, obj):
-        deps = obj.blocked_by_deps.filter(
-            relation_type=TaskDependency.RelationType.BLOCKS
-        ).select_related("blocker__status")
-        return [
-            {"id": str(d.id), "task": MinimalTaskSerializer(d.blocker).data}
-            for d in deps
-        ]
-
-    def get_blocking(self, obj):
-        deps = obj.blocking_deps.filter(
-            relation_type=TaskDependency.RelationType.BLOCKS
-        ).select_related("blocked__status")
-        return [
-            {"id": str(d.id), "task": MinimalTaskSerializer(d.blocked).data}
-            for d in deps
-        ]
-
-    def get_relations(self, obj):
-        """Non-blocking relations: relates_to, duplicate_of, cloned_from."""
-        non_block = [
-            TaskDependency.RelationType.RELATES_TO,
-            TaskDependency.RelationType.DUPLICATE_OF,
-            TaskDependency.RelationType.CLONED_FROM,
-        ]
-        result = []
-        for dep in obj.blocking_deps.filter(relation_type__in=non_block).select_related(
-            "blocked__status"
-        ):
-            result.append(
-                {
-                    "id": str(dep.id),
-                    "relation_type": dep.relation_type,
-                    "task": MinimalTaskSerializer(dep.blocked).data,
-                }
-            )
-        for dep in obj.blocked_by_deps.filter(
-            relation_type__in=non_block
-        ).select_related("blocker__status"):
-            result.append(
-                {
-                    "id": str(dep.id),
-                    "relation_type": dep.relation_type,
-                    "task": MinimalTaskSerializer(dep.blocker).data,
-                }
-            )
-        return result
 
     def get_key_result_links(self, obj):
         return [
@@ -1028,6 +996,42 @@ class ApprovalSerializer(serializers.ModelSerializer):
         approval = Approval.objects.create(**validated_data)
         for uid in reviewer_ids:
             ApprovalReviewer.objects.get_or_create(approval=approval, user_id=uid)
+        return approval
+
+
+class ApprovalReviewSerializer(serializers.Serializer):
+    """Validates and applies a reviewer's verdict (approved / rejected / changes_requested)."""
+
+    status = serializers.ChoiceField(choices=[
+        ApprovalReviewer.Status.APPROVED,
+        ApprovalReviewer.Status.REJECTED,
+        ApprovalReviewer.Status.CHANGES_REQUESTED,
+    ])
+    comment = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def update(self, reviewer, validated_data):
+        reviewer.status = validated_data["status"]
+        reviewer.comment = validated_data.get("comment", "")
+        reviewer.reviewed_at = timezone.now()
+        reviewer.save(update_fields=["status", "comment", "reviewed_at"])
+        return reviewer
+
+
+class ApprovalResubmitSerializer(serializers.Serializer):
+    """Guards requester identity + approval state, then resets all reviewer verdicts to pending."""
+
+    def validate(self, data):
+        approval = self.instance
+        if approval.requested_by != self.context["request"].user:
+            raise PermissionDenied("Only the original requester can resubmit.")
+        if approval.status == Approval.Status.APPROVED:
+            raise serializers.ValidationError("This approval is already approved.")
+        return data
+
+    def update(self, approval, validated_data):
+        approval.status = Approval.Status.PENDING
+        approval.save(update_fields=["status", "updated_at"])
+        approval.reviewers.all().update(status=ApprovalReviewer.Status.PENDING, comment="")
         return approval
 
 

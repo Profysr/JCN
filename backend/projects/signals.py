@@ -22,17 +22,13 @@ def task_pre_save(sender, instance, **kwargs):
 
 @receiver(post_save, sender="projects.Task")
 def task_post_save(sender, instance, created, **kwargs):
-    from .automation import fire_automation
-
-    if created:
-        fire_automation("task.created", instance)
-        return
-
-    if getattr(instance, "_status_changed", False):
-        fire_automation(
-            "task.status_changed",
-            instance,
-            context={"from": instance._old_status, "to": str(instance.status_id)},
-        )
-    if getattr(instance, "_assignee_changed", False):
-        fire_automation("task.assigned", instance)
+    # ‼️ Automation disabled — fire_automation is a no-op stub until the engine is rebuilt.
+    # from .automation import fire_automation
+    # if created:
+    #     fire_automation("task.created", instance)
+    #     return
+    # if getattr(instance, "_status_changed", False):
+    #     fire_automation("task.status_changed", instance, context={"from": instance._old_status, "to": str(instance.status_id)})
+    # if getattr(instance, "_assignee_changed", False):
+    #     fire_automation("task.assigned", instance)
+    pass

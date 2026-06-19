@@ -206,13 +206,10 @@ def _apply_task_filters(qs, params, user=None):
 
 
 def _task_detail_qs():
-    """Queryset for single-task endpoints — includes full history and field values."""
+    """Queryset for the task detail endpoint — core fields + field_values + ancestors."""
     return Task.objects.select_related(
-        "status", "assignee", "created_by", "sprint"
+        "status", "assignee", "created_by", "sprint", "parent"
     ).prefetch_related(
-        "subtasks",
-        "comments__author",
-        "activities__actor",
         "labels",
         "field_values__field",
     )

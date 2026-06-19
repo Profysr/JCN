@@ -11,9 +11,6 @@ export const useBoardFields = (workspaceId, boardId) =>
     enabled: !!workspaceId && !!boardId,
   });
 
-// Keep legacy alias
-export const useProjectFields = useBoardFields;
-
 export const useCreateField = (workspaceId, boardId) => {
   const qc = useQueryClient();
   return useMutation({

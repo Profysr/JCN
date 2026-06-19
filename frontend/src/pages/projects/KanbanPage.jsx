@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, useMemo, useEffect, useRef } from "react";
+import { lazy, Suspense, useState, useMemo, useEffect } from "react";
 import { Loader } from "@/components/ui/Loader";
 import { ModalSkeleton } from "@/components/ui/Modal";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
@@ -9,7 +9,6 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { useLabels, useCreateLabel } from "@/hooks/useLabels";
 import { useMembers } from "@/hooks/useMembers";
 import { useStatuses } from "@/hooks/useStatusManagement";
-import { useBoardFields } from "@/hooks/useCustomFields";
 import {
   useSavedViews,
   useCreateSavedView,
@@ -55,7 +54,6 @@ const TaskDetailPanel = lazy(
   () => import("@/components/tasks/TaskDetailPanel"),
 );
 import { cn } from "@/lib/utils";
-import { APP_COLORS } from "@/lib/constants";
 import { useBulkUpdateTasks } from "@/hooks/useBulkActions";
 
 const EMPTY_FILTERS = {
@@ -167,8 +165,7 @@ export default function KanbanPage() {
   const { data: allTasks = [] } = useTasks(workspaceId, boardId, apiFilters);
   const { data: labels = [] } = useLabels(workspaceId, boardId);
   const { data: members = [] } = useMembers(workspaceId);
-  const { data: fields = [] } = useBoardFields(workspaceId, boardId);
-  const { data: sprints = [] } = useSprints(workspaceId, boardId);
+const { data: sprints = [] } = useSprints(workspaceId, boardId);
   const { data: statuses = [] } = useStatuses(workspaceId, boardId);
   const perms = useBoardPermissions(workspaceId, boardId);
 
@@ -390,7 +387,7 @@ export default function KanbanPage() {
               {[
                 { label: "Wiki", Icon: BookOpen, path: "wiki" },
                 { label: "Forms", Icon: FormInput, path: "forms" },
-                { label: "Automations", Icon: Zap, path: "automations" },
+                // ‼️ { label: "Automations", Icon: Zap, path: "automations" },
               ].map(({ label, Icon, path }) => (
                 <Tooltip key={path} content={label}>
                   <button
@@ -612,9 +609,15 @@ export default function KanbanPage() {
         <Suspense
           fallback={
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-              <div className="absolute inset-0 bg-background/60 backdrop-blur-md" />
-              <div className="relative w-full max-w-2xl bg-background rounded-md shadow-xl p-5">
-                <ModalSkeleton />
+              <div
+                className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+                onClick={onClose}
+              />
+              <div
+                className="relative w-full max-w-2xl bg-card border border-border rounded-md shadow-2xl flex items-center justify-center"
+                style={{ height: "60vh" }}
+              >
+                <Loader />
               </div>
             </div>
           }
@@ -623,7 +626,6 @@ export default function KanbanPage() {
             taskId={selectedTaskId}
             projectStatuses={statuses || []}
             projectLabels={labels}
-            projectFields={fields}
             onCreateLabel={(data, opts) => createLabel.mutate(data, opts)}
             onClose={closeTask}
             canEdit={perms.canEdit}

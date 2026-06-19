@@ -23,7 +23,7 @@ const KanbanPage = lazy(() => import("@/pages/projects/KanbanPage"));
 const RoadmapPage = lazy(() => import("@/pages/projects/RoadmapPage"));
 const WikiPage = lazy(() => import("@/pages/projects/WikiPage"));
 const FormsPage = lazy(() => import("@/pages/projects/FormsPage"));
-const AutomationsPage = lazy(() => import("@/pages/projects/AutomationsPage"));
+// ‼️ Automation disabled — const AutomationsPage = lazy(() => import("@/pages/projects/AutomationsPage"));
 
 // ── Workspace pages ───────────────────────────────────────────────────────────
 const DashboardsPage = lazy(() => import("@/pages/workspace/DashboardsPage"));
@@ -108,10 +108,11 @@ export default function App() {
               element={<WikiPage />}
             />
             <Route path="boards/:boardId/forms" element={<FormsPage />} />
+            {/* ‼️ Automation disabled
             <Route
               path="boards/:boardId/automations"
               element={<AutomationsPage />}
-            />
+            /> */}
 
             {/* Workspace */}
             <Route path="roadmap" element={<RoadmapPage />} />

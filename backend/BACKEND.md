@@ -176,14 +176,14 @@ Default permission: `IsAuthenticated`. Public endpoints (forms, invite detail) u
 | POST | `/api/workspaces/{ws}/boards/{pid}/tasks/` | Create task |
 | POST | `/api/workspaces/{ws}/boards/{pid}/tasks/bulk/` | Bulk update tasks (status, assignee, priority, labels) |
 | GET | `/api/workspaces/{ws}/boards/{pid}/tasks/export/` | Export tasks as CSV or JSON |
-| GET | `/api/workspaces/{ws}/boards/{pid}/tasks/{tid}/` | Task detail (full nested payload) |
-| PATCH | `/api/workspaces/{ws}/boards/{pid}/tasks/{tid}/` | Update task fields |
+| GET | `/api/workspaces/{ws}/boards/{pid}/tasks/{tid}/` | Task detail — core fields + `field_values`, `ancestors`, `key_result_links`. Subtasks, comments, activities, attachments, children, and dependencies are **not** embedded; fetch via their own endpoints. |
+| PATCH | `/api/workspaces/{ws}/boards/{pid}/tasks/{tid}/` | Update task fields. Returns same stripped `TaskDetailSerializer` payload. |
 | DELETE | `/api/workspaces/{ws}/boards/{pid}/tasks/{tid}/` | Delete task |
 | POST | `/api/workspaces/{ws}/boards/{pid}/tasks/{tid}/move/` | Reorder task within/between statuses |
 | GET | `/api/workspaces/{ws}/boards/{pid}/tasks/{tid}/children/` | List child tasks |
 | POST | `/api/workspaces/{ws}/boards/{pid}/tasks/{tid}/clone/` | Deep-clone task with all children |
 | POST | `/api/workspaces/{ws}/boards/{pid}/tasks/{tid}/apply-template/` | Create task from a template |
-| GET | `/api/workspaces/{ws}/boards/{pid}/tasks/{tid}/activity/` | Audit trail for task |
+| GET | `/api/workspaces/{ws}/boards/{pid}/tasks/{tid}/activity/` | Paginated audit trail. Uses `StandardResultsSetPagination` (50/page). `?page=N`, `?size=N` (max 100). Returns `{count, next, previous, results}`. |
 
 ### Subtasks
 
@@ -196,13 +196,19 @@ Default permission: `IsAuthenticated`. Public endpoints (forms, invite detail) u
 
 ### Comments & Reactions
 
+Views live in `projects/views/comments.py` (extracted from `tasks.py`).
+
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/workspaces/{ws}/boards/{pid}/tasks/{tid}/comments/` | List comments with reactions |
-| POST | `/api/workspaces/{ws}/boards/{pid}/tasks/{tid}/comments/` | Add comment |
-| PATCH | `/api/workspaces/{ws}/boards/{pid}/tasks/{tid}/comments/{id}/` | Edit comment |
-| DELETE | `/api/workspaces/{ws}/boards/{pid}/tasks/{tid}/comments/{id}/` | Delete comment |
-| POST | `/api/workspaces/{ws}/boards/{pid}/tasks/{tid}/comments/{id}/reactions/` | Toggle emoji reaction |
+| GET | `/api/workspaces/{ws}/boards/{pid}/tasks/{tid}/comments/` | Paginated top-level comments (20/page) with replies and reactions nested. `?page=N`, `?size=N` (max 50). Returns `{count, next, previous, results}`. |
+| POST | `/api/workspaces/{ws}/boards/{pid}/tasks/{tid}/comments/` | Add comment or reply. Body: `{ body, parent_id? (UUID — must be a top-level comment), mentioned_user_ids?: [UUID] }`. Notifications sent async via `send_comment_notifications` Celery task. |
+| PATCH | `/api/workspaces/{ws}/boards/{pid}/tasks/{tid}/comments/{id}/` | Edit own comment (author only) |
+| DELETE | `/api/workspaces/{ws}/boards/{pid}/tasks/{tid}/comments/{id}/` | Delete own comment (author only). Cascades to replies. Invalidates reaction cache. |
+| POST | `/api/workspaces/{ws}/boards/{pid}/tasks/{tid}/comments/{id}/reactions/` | Toggle emoji reaction. Body: `{ emoji }`. Response: `{ reactions: {emoji: [{id, user_id, name}]}, action: "added"|"removed" }`. Reaction counts cached in Redis (`rxn:<comment_uuid>`). |
+
+**Reply rules**: `parent_id` must point to a top-level comment (no reply-of-reply). Replies are nested under their parent in GET responses via `TaskCommentReplySerializer` (no further nesting). Parent comment author is notified when a reply is posted.
+
+**Mention resolution**: Frontend resolves `@handle` → user UUID at picker selection time. Backend receives `mentioned_user_ids` (validated against workspace membership) — no regex scanning.
 
 ### Attachments
 
@@ -271,9 +277,17 @@ Default permission: `IsAuthenticated`. Public endpoints (forms, invite detail) u
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/workspaces/{ws}/boards/{pid}/tasks/{tid}/approvals/` | List approvals on task |
-| POST | `/api/workspaces/{ws}/boards/{pid}/tasks/{tid}/approvals/` | Request approval |
-| POST | `/api/workspaces/{ws}/boards/{pid}/tasks/{tid}/approvals/{id}/review/` | Submit reviewer verdict |
-| POST | `/api/workspaces/{ws}/boards/{pid}/tasks/{tid}/approvals/{id}/resubmit/` | Resubmit after changes requested |
+| POST | `/api/workspaces/{ws}/boards/{pid}/tasks/{tid}/approvals/` | Request approval (`reviewer_ids`, `due_date`, `note`) |
+| POST | `/api/workspaces/{ws}/boards/{pid}/tasks/{tid}/approvals/{id}/review/` | Submit reviewer verdict (`status`, `comment`) — validated by `ApprovalReviewSerializer` |
+| POST | `/api/workspaces/{ws}/boards/{pid}/tasks/{tid}/approvals/{id}/resubmit/` | Resubmit after changes requested — validated by `ApprovalResubmitSerializer` |
+
+**Approval helpers** (module-level in `views/tasks.py`):
+
+| Helper | Purpose |
+|--------|---------|
+| `_get_approval(workspace_id, board_id, task_id, approval_id, user)` | Scoped approval lookup with reviewers prefetched |
+| `_notify_reviewers(approval, actor, workspace, task)` | Send `APPROVAL_REQUESTED` inbox notification to all reviewers |
+| `_broadcast_approval(workspace_id, board_id, task_id, event, approval)` | Broadcast approval event with standard task/board context |
 
 ### Wiki
 
@@ -304,14 +318,16 @@ Default permission: `IsAuthenticated`. Public endpoints (forms, invite detail) u
 | GET | `/forms/{token}/` | **Public** — get form schema (AllowAny) |
 | POST | `/forms/{token}/submit/` | **Public** — submit form, creates task (AllowAny) |
 
-### Automations
+### Automations ‼️ DISABLED
+
+> Routes commented out in `urls.py`. `fire_automation()` is a no-op stub. Views exist in `views/automation.py` but are unreachable. Re-enable by uncommenting the three paths in `urls.py` and the import in `views/__init__.py`.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/workspaces/{ws}/boards/{pid}/automations/` | List automation rules |
-| POST | `/api/workspaces/{ws}/boards/{pid}/automations/` | Create rule |
-| GET/PATCH/DELETE | `/api/workspaces/{ws}/boards/{pid}/automations/{id}/` | Rule CRUD |
-| GET | `/api/workspaces/{ws}/boards/{pid}/automations/{id}/logs/` | Rule execution history |
+| ~~GET~~ | ~~`/api/workspaces/{ws}/boards/{pid}/automations/`~~ | ~~List automation rules~~ |
+| ~~POST~~ | ~~`/api/workspaces/{ws}/boards/{pid}/automations/`~~ | ~~Create rule~~ |
+| ~~GET/PATCH/DELETE~~ | ~~`/api/workspaces/{ws}/boards/{pid}/automations/{id}/`~~ | ~~Rule CRUD~~ |
+| ~~GET~~ | ~~`/api/workspaces/{ws}/boards/{pid}/automations/{id}/logs/`~~ | ~~Rule execution history~~ |
 
 ### OKRs (Objectives & Key Results)
 
@@ -405,7 +421,7 @@ Available `{metric}` values:
 | `TaskStatus` | `board` (FK), `name`, `color`, `order`, `is_done` | unique: board+name; ordering: order |
 | `Task` | `board` (FK), `parent` (FK self), `title`, `status` (FK), `priority`, `assignee` (FK), `labels` (M2M), `sprint` (FK), `due_date`, `estimate_points`, `task_type`, `order` | 6 indexes: board+status, board+assignee, board+priority, board+sprint, assignee+status, board+due_date |
 | `SubTask` | `task` (FK), `title`, `is_done`, `order` | ordering: order |
-| `TaskComment` | `task` (FK), `author` (FK), `body` | index: task+created_at |
+| `TaskComment` | `task` (FK), `author` (FK), `body`, `parent` (FK self, nullable, CASCADE, related_name="replies") | index: task+created_at. `parent=None` → top-level comment; `parent!=None` → reply (one level only). Deleting a parent cascades to its replies. |
 | `Label` | `board` (FK), `name`, `color` | unique: board+name |
 | `BoardField` | `board` (FK), `name`, `type` (TEXT/NUMBER/SELECT/URL/DATE), `options` (JSON) | unique: board+name |
 | `TaskFieldValue` | `task` (FK), `field` (FK), `value` | unique: task+field |
@@ -448,6 +464,7 @@ Available `{metric}` values:
 |------|--------|---------|---------|
 | `deliver_webhook` | `workspaces.tasks` | 3 (5min → 30min backoff) | POST signed webhook payload; log WebhookDelivery |
 | `run_import` | `workspaces.tasks` | — | Parse file → create board/statuses → bulk insert tasks; push progress via WebSocket `import.progress` |
+| `send_comment_notifications` | `projects.tasks` | — | Collect all recipients (task assignee/creator, parent comment author, @mentioned users), validate workspace membership for mentions, `bulk_create` all `InboxItem` rows in one DB round-trip, then broadcast per-user via WebSocket. Called with `.delay()` immediately after `POST /comments/` returns. |
 
 ---
 
@@ -457,7 +474,7 @@ Available `{metric}` values:
 |--------|-------|---------|---------|
 | `post_save` | `User` | `create_user_profile` | Auto-create UserProfile on User creation |
 | `pre_save` | `Task` | `task_pre_save` | Snapshot old status/assignee for post_save diff |
-| `post_save` | `Task` | `task_post_save` | Fire automation rules on create/status change/assignment |
+| `post_save` | `Task` | `task_post_save` | ‼️ Automation calls disabled (no-op stub) — `fire_automation` commented out pending rebuild |
 
 ---
 
@@ -469,6 +486,18 @@ Task mutated in projects/views/
   → _fire_webhooks()          → workspaces.tasks.deliver_webhook.delay()
   → notify()                  → InboxItem.create() + WebSocket group "user_{id}"
   → integrations.services     → Teams / Google Chat (fanout_notification)
+
+Comment posted (POST /comments/)
+  → view returns 201 immediately (non-blocking)
+  → send_comment_notifications.delay(comment_id, workspace_id, sender_id, notified_ids, mentioned_user_ids)
+      → validates mentioned_user_ids against workspace membership
+      → InboxItem.objects.bulk_create([...])   ← one DB round-trip for all recipients
+      → broadcast_to_user() per recipient      ← WebSocket push (can't batch, per-user groups)
+
+Comment reaction toggled (POST /comments/{id}/reactions/)
+  → CommentReaction get_or_create (concurrent-safe)
+  → projects.cache.invalidate_reactions(comment_id)
+  → projects.cache.set_reactions(comment_id, grouped)   ← repopulate Redis TTL=2h
 
 File uploaded → ImportJob created → run_import.delay()
   → Channels group_send("workspace_{id}") → frontend progress bar
@@ -504,6 +533,20 @@ Viewer: read-only on boards.
 
 ---
 
+## Redis Cache (`projects/cache.py`)
+
+Connection pool: `max_connections=50`, 1 s socket timeout. All functions are no-op on Redis error (logged as WARNING — never raises to caller).
+
+| Function | Key schema | TTL | Purpose |
+|----------|-----------|-----|---------|
+| `get_reactions(comment_id)` | `rxn:<comment_uuid>` | — | Return grouped reactions dict or `None` on miss |
+| `set_reactions(comment_id, grouped)` | `rxn:<comment_uuid>` | 2 h | Store grouped reactions dict as JSON |
+| `invalidate_reactions(comment_id)` | `rxn:<comment_uuid>` | — | Delete the key (called on every reaction toggle) |
+
+Serializers use `_get_reactions_cached(obj)`: checks Redis first, falls back to prefetch cache (`obj.reactions.all()`), populates Redis on miss. This means reaction data is served from RAM after the first request and never hits Postgres until cache expires or a toggle invalidates it.
+
+---
+
 ## Helper Utilities (`projects/views/helpers.py`)
 
 | Helper | Purpose |
@@ -512,7 +555,7 @@ Viewer: read-only on boards.
 | `_get_board(workspace_id, board_id, user)` | Scoped board lookup |
 | `_get_task(workspace_id, board_id, task_id, user, qs=)` | Scoped task lookup; pass custom queryset |
 | `_task_list_qs()` | Annotated queryset for task list (5 count annotations, no N+1) |
-| `_task_detail_qs()` | Full prefetch queryset for single-task views |
+| `_task_detail_qs()` | Lean queryset for single-task detail — `select_related(status, assignee, created_by, sprint, parent)` + `prefetch_related(labels, field_values__field)`. No subtasks/comments/activities prefetch — those are served by their own endpoints. |
 | `_apply_task_filters(qs, params, user)` | Apply FilterBar params to a Task queryset |
 | `_require_board_perm(user, board, role)` | Raise 403 if insufficient role |
 | `_require_board_admin(request, workspace_id, board_id)` | Return (workspace, board) or raise 403/404 |
@@ -553,6 +596,19 @@ All other events (presence, reactions, etc.) are internal-only and never forward
 
 ---
 
+## Pagination (`core/pagination.py`)
+
+Two paginator classes used across list endpoints:
+
+| Class | `page_size` | `page_size_query_param` | `max_page_size` | Used by |
+|-------|-------------|-------------------------|-----------------|---------|
+| `StandardResultsSetPagination` | 50 | `size` | 100 | `TaskActivityListView` |
+| `CommentPagination` | 20 | `size` | 50 | `TaskCommentListCreateView` |
+
+All paginated responses follow DRF's standard envelope: `{count, next, previous, results}`.
+
+---
+
 ## Constants
 
 ### `core/constants.py` — `DEFAULT_TASK_STATUSES`
@@ -581,6 +637,6 @@ All other events (presence, reactions, etc.) are internal-only and never forward
 | RBAC is simple (3 ws roles + 4 board roles) — no custom role builder | `WorkspaceMember.Role` | v2 RBAC system |
 | `InboxItem` actor fields are denormalized strings | `workspaces/models.py` | Acceptable v1 perf trade-off |
 | Workspace templates are static in `constants.py` | `workspaces/constants.py` | Future: `WorkspaceTemplate` model |
-| Automation runs synchronously in signals | `projects/signals.py` | Future: queue to Celery for large boards |
+| ‼️ Automation engine fully disabled — `fire_automation` is a no-op stub, routes commented out, signals disabled | `projects/automation.py`, `signals.py`, `urls.py` | Rebuild with Celery tasks + action registry pattern before re-enabling |
 | Analytics computed on-the-fly | `analytics/views.py` | Future: materialized views or caching |
 | `TaskTemplate` / `apply-template` included but template features deprioritized | `projects/views/tasks.py` | To be revisited in v2 |
