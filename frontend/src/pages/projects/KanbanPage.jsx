@@ -187,12 +187,15 @@ const { data: sprints = [] } = useSprints(workspaceId, boardId);
   const [selectedTaskId, setSelectedTaskId] = useState(
     () => searchParams.get("task") || null,
   );
+  const [focusCommentId, setFocusCommentId] = useState(
+    () => searchParams.get("comment") || null,
+  );
   const [view, setView] = useState("kanban");
 
   // Automatically get the task id from param and opens up the task
   useEffect(() => {
-    const param = searchParams.get("task") || null;
-    setSelectedTaskId(param);
+    setSelectedTaskId(searchParams.get("task") || null);
+    setFocusCommentId(searchParams.get("comment") || null);
   }, [searchParams]);
 
   // Use for bulk updates
@@ -624,6 +627,7 @@ const { data: sprints = [] } = useSprints(workspaceId, boardId);
         >
           <TaskDetailPanel
             taskId={selectedTaskId}
+            focusCommentId={focusCommentId}
             projectStatuses={statuses || []}
             taskLabels={labels}
             onCreateLabel={(data, opts) => createLabel.mutate(data, opts)}

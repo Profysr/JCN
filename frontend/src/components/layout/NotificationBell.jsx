@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
+import { notificationUrl } from "@/lib/notificationNav";
 import {
   useInbox,
   useUpdateInboxItem,
@@ -139,7 +140,7 @@ export function NotificationItem({ item, onClick }) {
       onClick={() => onClick(item)}
       className={cn(
         "w-full flex items-start gap-2.5 px-4 py-2.5 hover:bg-accent text-left transition-colors",
-        item.status === "unread" && "bg-primary/[0.04]",
+        item.status === "unread" && "bg-primary/5",
       )}
     >
       <div className="relative flex-shrink-0 mt-0.5">
@@ -197,6 +198,7 @@ const FILTERS = [
 
 export default function NotificationBell() {
   const { workspaceId } = useParams();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
 
   // 1. Set "unread" as the default tab view
@@ -251,6 +253,8 @@ export default function NotificationBell() {
     if (item.status === "unread")
       updateItem.mutate({ id: item.id, status: "read" });
     setOpen(false);
+    const url = notificationUrl(item.meta);
+    if (url) navigate(url);
   };
 
   const handleMarkAllRead = () => {

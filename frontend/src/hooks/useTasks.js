@@ -61,26 +61,28 @@ export const useTaskSubtasks = (workspaceId, boardId, taskId) =>
   });
 
 export const useTaskComments = (workspaceId, boardId, taskId) =>
-  useQuery({
+  useInfiniteQuery({
     queryKey: commentsKey(workspaceId, boardId, taskId),
-    queryFn: () =>
-      api
-        .get(`/api/workspaces/${workspaceId}/boards/${boardId}/tasks/${taskId}/comments/`)
-        .then((r) => r.data.results ?? r.data),
+    queryFn: ({ pageParam }) => {
+      const url = pageParam
+        ? pageParam  // full cursor URL from `next`
+        : `/api/workspaces/${workspaceId}/boards/${boardId}/tasks/${taskId}/comments/`;
+      return api.get(url).then((r) => r.data);
+    },
+    getNextPageParam: (lastPage) => lastPage.next ?? undefined,
     enabled: !!taskId,
   });
 
 export const useTaskActivities = (workspaceId, boardId, taskId) =>
   useInfiniteQuery({
     queryKey: ["activities", workspaceId, boardId, taskId],
-    queryFn: ({ pageParam = 1 }) =>
-      api
-        .get(
-          `/api/workspaces/${workspaceId}/boards/${boardId}/tasks/${taskId}/activities/?page=${pageParam}`,
-        )
-        .then((r) => r.data),
-    getNextPageParam: (lastPage, pages) =>
-      lastPage.next ? pages.length + 1 : undefined,
+    queryFn: ({ pageParam }) => {
+      const url = pageParam
+        ? pageParam
+        : `/api/workspaces/${workspaceId}/boards/${boardId}/tasks/${taskId}/activities/`;
+      return api.get(url).then((r) => r.data);
+    },
+    getNextPageParam: (lastPage) => lastPage.next ?? undefined,
     enabled: !!taskId,
   });
 
@@ -174,38 +176,77 @@ export const useMoveTask = (workspaceId, boardId) => {
 export const useCreateComment = (workspaceId, boardId, taskId) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ body, mentioned_user_ids = [] }) =>
+    mutationFn: ({ body, mentioned_user_ids = [], parent_id = null }) =>
       api
         .post(
           `/api/workspaces/${workspaceId}/boards/${boardId}/tasks/${taskId}/comments/`,
-          { body, mentioned_user_ids },
+          { body, mentioned_user_ids, ...(parent_id ? { parent_id } : {}) },
         )
         .then((r) => r.data),
-    onSuccess: (comment) => {
-      qc.setQueryData(commentsKey(workspaceId, boardId, taskId), (old) =>
-        old ? [...old, comment] : [comment],
-      );
-      qc.setQueryData(detailKey(workspaceId, boardId, taskId), (old) =>
-        old ? { ...old, comment_count: (old.comment_count || 0) + 1 } : old,
-      );
+    onSuccess: (comment, { parent_id }) => {
+      qc.setQueryData(commentsKey(workspaceId, boardId, taskId), (old) => {
+        if (!old) return old;
+        if (parent_id) {
+          // Nest reply under its parent comment in the cache
+          const pages = old.pages.map((page) => ({
+            ...page,
+            results: page.results.map((c) =>
+              c.id === parent_id
+                ? { ...c, replies: [...(c.replies || []), comment] }
+                : c,
+            ),
+          }));
+          return { ...old, pages };
+        }
+        // Top-level: append to last page
+        const pages = [...old.pages];
+        const last = pages[pages.length - 1];
+        pages[pages.length - 1] = { ...last, results: [...last.results, comment] };
+        return { ...old, pages };
+      });
+      // Only increment scalar for top-level comments
+      if (!parent_id) {
+        qc.setQueryData(detailKey(workspaceId, boardId, taskId), (old) =>
+          old ? { ...old, comment_count: (old.comment_count || 0) + 1 } : old,
+        );
+      }
     },
   });
 };
 
+// mutate({ commentId, parentId? }) — parentId required when deleting a reply
 export const useDeleteComment = (workspaceId, boardId, taskId) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (commentId) =>
+    mutationFn: ({ commentId }) =>
       api.delete(
         `/api/workspaces/${workspaceId}/boards/${boardId}/tasks/${taskId}/comments/${commentId}/`,
       ),
-    onSuccess: (_, commentId) => {
-      qc.setQueryData(commentsKey(workspaceId, boardId, taskId), (old) =>
-        old ? old.filter((c) => c.id !== commentId) : old,
-      );
-      qc.setQueryData(detailKey(workspaceId, boardId, taskId), (old) =>
-        old ? { ...old, comment_count: Math.max(0, (old.comment_count || 1) - 1) } : old,
-      );
+    onSuccess: (_, { commentId, parentId }) => {
+      qc.setQueryData(commentsKey(workspaceId, boardId, taskId), (old) => {
+        if (!old) return old;
+        if (parentId) {
+          const pages = old.pages.map((page) => ({
+            ...page,
+            results: page.results.map((c) =>
+              c.id === parentId
+                ? { ...c, replies: (c.replies || []).filter((r) => r.id !== commentId) }
+                : c,
+            ),
+          }));
+          return { ...old, pages };
+        }
+        const pages = old.pages.map((page) => ({
+          ...page,
+          results: page.results.filter((c) => c.id !== commentId),
+        }));
+        return { ...old, pages };
+      });
+      if (!parentId) {
+        qc.setQueryData(detailKey(workspaceId, boardId, taskId), (old) =>
+          old ? { ...old, comment_count: Math.max(0, (old.comment_count || 1) - 1) } : old,
+        );
+      }
     },
   });
 };

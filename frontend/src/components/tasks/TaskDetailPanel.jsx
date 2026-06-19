@@ -57,6 +57,7 @@ function getLayoutPrefs() {
 // ── Main export ───────────────────────────────────────────────────────────────
 export default function TaskDetailPanel({
   taskId,
+  focusCommentId = null,
   projectStatuses = [],
   taskLabels = [],
   onCreateLabel,
@@ -85,7 +86,7 @@ export default function TaskDetailPanel({
 
   const [layoutPrefs, setLayoutPrefs] = useState(getLayoutPrefs);
   const [activePanel, setActivePanel] = useState(
-    () => getLayoutPrefs().defaultPanel ?? "properties",
+    () => focusCommentId ? "comments" : (getLayoutPrefs().defaultPanel ?? "properties"),
   );
   const [approvalDropdown, setApprovalDropdown] = useState(false);
   const approvalBtnRef = useRef(null);
@@ -269,6 +270,7 @@ export default function TaskDetailPanel({
                   user={user}
                   members={members}
                   typingUsers={typingUsers}
+                  focusCommentId={focusCommentId}
                 />
               )}
               {activePanel === "activity" && (

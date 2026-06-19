@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { notificationUrl } from "@/lib/notificationNav";
 import { formatDistanceToNow, format } from "date-fns";
 import {
   Bell,
@@ -94,15 +95,8 @@ export default function InboxPage() {
   };
 
   const openTask = (item) => {
-    if (
-      item.meta?.workspace_id &&
-      item.meta?.board_id &&
-      item.meta?.task_id
-    ) {
-      navigate(
-        `/w/${item.meta.workspace_id}/boards/${item.meta.board_id}?task=${item.meta.task_id}`,
-      );
-    }
+    const url = notificationUrl(item.meta);
+    if (url) navigate(url);
   };
 
   // Keyboard shortcuts
