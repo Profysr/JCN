@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     "projects",  # projects, tasks, subtasks, comments
     "integrations",  # Teams, Google Chat integrations (v4.3.0)
     "analytics",  # analytics metrics + report builder
+    "organization",  # org structure: departments, teams, job titles, reporting lines
 ]
 
 MIDDLEWARE = [
@@ -202,9 +203,8 @@ REST_AUTH = {
 
 # allauth account behaviour
 ACCOUNT_ADAPTER = "accounts.adapter.CustomAccountAdapter"
-ACCOUNT_AUTHENTICATION_METHOD = "email"  # login with email, not username
-ACCOUNT_EMAIL_REQUIRED = True
-ACCOUNT_USERNAME_REQUIRED = False
+ACCOUNT_LOGIN_METHODS = {"email"}
+ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
 ACCOUNT_USER_MODEL_USERNAME_FIELD = (
     None  # our User model has no username field — stops allauth looking for one
 )

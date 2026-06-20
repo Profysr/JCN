@@ -1,5 +1,7 @@
 from django.urls import path
 from .views import (
+    WorkspaceModuleListView,
+    WorkspaceModuleToggleView,
     WorkspaceListCreateView,
     WorkspaceDetailView,
     WorkspaceMemberListView,
@@ -75,4 +77,8 @@ urlpatterns = [
     path(f"{_ws}/import/jobs/<str:job_id>/", ImportJobDetailView.as_view()),
     path(f"{_ws}/import/jobs/<str:job_id>/run/", ImportJobRunView.as_view()),
     path(f"{_ws}/import/jobs/<str:job_id>/rollback/", ImportJobRollbackView.as_view()),
+
+    # Module System
+    path(f"{_ws}/modules/", WorkspaceModuleListView.as_view()),
+    path(f"{_ws}/modules/<str:module_key>/", WorkspaceModuleToggleView.as_view()),
 ]

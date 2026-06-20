@@ -379,3 +379,34 @@ class OnboardingState(models.Model):
 
     def __str__(self):
         return f"Onboarding: {self.workspace.name}"
+
+
+# ── Module System ─────────────────────────────────────────────────────────────
+class WorkspaceModule(models.Model):
+    """Tracks which optional product modules a workspace has enabled."""
+
+    PREFIX = "wmd"
+
+    id = UUIDv7Field()
+    workspace = models.ForeignKey(
+        Workspace, on_delete=models.CASCADE, related_name="modules"
+    )
+    module_key = models.CharField(max_length=50)
+    is_enabled = models.BooleanField(default=True)
+    enabled_at = models.DateTimeField(auto_now_add=True)
+    enabled_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="enabled_modules",
+    )
+
+    class Meta:
+        unique_together = ["workspace", "module_key"]
+        indexes = [
+            models.Index(fields=["workspace", "is_enabled"], name="wsmodule_workspace_enabled_idx"),
+        ]
+
+    def __str__(self):
+        state = "on" if self.is_enabled else "off"
+        return f"{self.workspace.name} / {self.module_key} ({state})"

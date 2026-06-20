@@ -1,13 +1,13 @@
 """
-Module Registry — single source of truth for all JCN feature modules.
+Module Registry — single source of truth for all JCN product modules.
 
-Modules gate entire product areas behind a tier.  Views call
-`_require_module(workspace, key)` which checks WorkspaceModule rows.
+Each module gates a product area behind a tier:
+  free       → always on, cannot be disabled
+  pro        → workspace admin opts in (paid in future billing)
+  enterprise → like pro, higher tier, may depend on pro modules
+
+Views call _require_module(workspace, key) to enforce access.
 Frontend reads GET /api/workspaces/:id/modules/ and uses useModules().isEnabled(key).
-
-Tiers:   free → always bundled
-         pro  → workspace admin must explicitly enable (paid in future)
-         enterprise → like pro but higher tier
 """
 
 MODULE_REGISTRY = {
@@ -45,5 +45,4 @@ MODULE_REGISTRY = {
     },
 }
 
-# Ordered from lowest to highest for UI display / tier comparison
 TIER_ORDER = ["free", "pro", "enterprise"]

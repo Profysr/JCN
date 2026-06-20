@@ -1,0 +1,168 @@
+from django.db import models
+from django.conf import settings
+
+from core.fields import UUIDv7Field
+from workspaces.models import Workspace, WorkspaceMember
+
+
+class JobTitle(models.Model):
+    PREFIX = "jbt"
+    id = UUIDv7Field()
+    workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE, related_name="job_titles")
+    name = models.CharField(max_length=100)
+    level = models.PositiveSmallIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ["workspace", "name"]
+        ordering = ["level", "name"]
+        indexes = [
+            models.Index(fields=["workspace", "level"], name="jobtitle_workspace_level_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.workspace.name})"
+
+
+class Department(models.Model):
+    PREFIX = "dep"
+    id = UUIDv7Field()
+    workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE, related_name="departments")
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    color = models.CharField(max_length=7, default="#6366f1")
+    identifier = models.CharField(max_length=6)
+    parent = models.ForeignKey(
+        "self", on_delete=models.SET_NULL, null=True, blank=True, related_name="sub_departments"
+    )
+    head = models.ForeignKey(
+        WorkspaceMember, on_delete=models.SET_NULL, null=True, blank=True, related_name="headed_departments"
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="created_departments"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ["workspace", "name"]
+        indexes = [
+            models.Index(fields=["workspace", "parent"], name="dept_workspace_parent_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.workspace.name})"
+
+
+class DepartmentMember(models.Model):
+    PREFIX = "dpm"
+    id = UUIDv7Field()
+    department = models.ForeignKey(Department, on_delete=models.CASCADE, related_name="memberships")
+    member = models.ForeignKey(WorkspaceMember, on_delete=models.CASCADE, related_name="department_memberships")
+    is_head = models.BooleanField(default=False)
+    joined_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ["department", "member"]
+        indexes = [
+            models.Index(fields=["department", "is_head"], name="deptmember_dept_head_idx"),
+            models.Index(fields=["member"], name="deptmember_member_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.member} in {self.department.name}"
+
+
+class Team(models.Model):
+    PREFIX = "tem"
+    id = UUIDv7Field()
+    workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE, related_name="teams")
+    department = models.ForeignKey(
+        Department, on_delete=models.SET_NULL, null=True, blank=True, related_name="teams"
+    )
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    identifier = models.CharField(max_length=6)
+    color = models.CharField(max_length=7, default="#8b5cf6")
+    lead = models.ForeignKey(
+        WorkspaceMember, on_delete=models.SET_NULL, null=True, blank=True, related_name="led_teams"
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="created_teams"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ["workspace", "name"]
+        indexes = [
+            models.Index(fields=["workspace", "department"], name="team_workspace_dept_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.workspace.name})"
+
+
+class TeamMember(models.Model):
+    PREFIX = "tmm"
+    id = UUIDv7Field()
+    team = models.ForeignKey(Team, on_delete=models.CASCADE, related_name="memberships")
+    member = models.ForeignKey(WorkspaceMember, on_delete=models.CASCADE, related_name="team_memberships")
+    is_lead = models.BooleanField(default=False)
+    joined_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ["team", "member"]
+        indexes = [
+            models.Index(fields=["team", "is_lead"], name="teammember_team_lead_idx"),
+            models.Index(fields=["member"], name="teammember_member_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.member} in {self.team.name}"
+
+
+class OrgProfile(models.Model):
+    """Extends WorkspaceMember with org-specific attributes."""
+    PREFIX = "ogp"
+    id = UUIDv7Field()
+    member = models.OneToOneField(WorkspaceMember, on_delete=models.CASCADE, related_name="org_profile")
+    job_title = models.ForeignKey(
+        JobTitle, on_delete=models.SET_NULL, null=True, blank=True, related_name="members"
+    )
+    employee_id = models.CharField(max_length=50, blank=True)
+    start_date = models.DateField(null=True, blank=True)
+    location = models.CharField(max_length=100, blank=True)
+    bio = models.TextField(blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["job_title"], name="orgprofile_jobtitle_idx"),
+        ]
+
+    def __str__(self):
+        return f"OrgProfile({self.member})"
+
+
+class ReportingLine(models.Model):
+    """Direct manager → report relationship. Each person has at most one manager."""
+    PREFIX = "rln"
+    id = UUIDv7Field()
+    workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE, related_name="reporting_lines")
+    manager = models.ForeignKey(
+        WorkspaceMember, on_delete=models.CASCADE, related_name="direct_reports"
+    )
+    report = models.ForeignKey(
+        WorkspaceMember, on_delete=models.CASCADE, related_name="reports_to"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ["workspace", "report"]
+        indexes = [
+            models.Index(fields=["workspace", "manager"], name="repline_workspace_manager_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.manager} → {self.report}"
