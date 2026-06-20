@@ -8,25 +8,22 @@ import {
   Link,
   Clock,
   X,
-  Send,
-  CheckCircle2,
 } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   useMembers,
-  useInviteMember,
   useUpdateMemberRole,
   useRemoveMember,
 } from "@/hooks/useMembers";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useAuthStore } from "@/store/authStore";
 import api from "@/lib/api";
+import InviteModal from "@/components/workspace/InviteModal";
 
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 
@@ -201,21 +198,16 @@ export default function MembersPage() {
   const { user } = useAuthStore();
   const qc = useQueryClient();
 
-  // Data fetching hooks
   const { data: members = [], isLoading } = useMembers(workspaceId);
   const { data: workspace } = useWorkspace(workspaceId);
 
   const { data: pendingInvites = [] } = useQuery({
     queryKey: ["workspace-invites", workspaceId],
     queryFn: () =>
-      api
-        .get(`/api/workspaces/${workspaceId}/invites/pending/`)
-        .then((r) => r.data),
+      api.get(`/api/workspaces/${workspaceId}/invites/pending/`).then((r) => r.data),
     enabled: !!workspaceId,
   });
 
-  // Action Mutation hooks
-  const inviteMember = useInviteMember(workspaceId);
   const updateRole = useUpdateMemberRole(workspaceId);
   const removeMember = useRemoveMember(workspaceId);
 
@@ -226,45 +218,13 @@ export default function MembersPage() {
       qc.invalidateQueries({ queryKey: ["workspace-invites", workspaceId] }),
   });
 
-  // Local state configurations
-  const [email, setEmail] = useState("");
-  const [role, setRole] = useState("member");
+  const [inviteOpen, setInviteOpen] = useState(false);
   const [confirmState, setConfirmState] = useState(null);
-  const [inviteError, setInviteError] = useState("");
-  const [inviteSuccess, setInviteSuccess] = useState("");
   const [copiedToken, setCopiedToken] = useState(null);
 
-  // Authorization checks
   const currentMember = members.find((m) => m.user?.email === user?.email);
   const isAdmin =
     currentMember?.role === "admin" || workspace?.owner?.email === user?.email;
-
-  // Handlers
-  const handleInvite = (e) => {
-    e.preventDefault();
-    setInviteError("");
-    setInviteSuccess("");
-    inviteMember.mutate(
-      { email, role },
-      {
-        onSuccess: () => {
-          setInviteSuccess(`Invite sent to ${email}`);
-          setEmail("");
-          qc.invalidateQueries({
-            queryKey: ["workspace-invites", workspaceId],
-          });
-          setTimeout(() => setInviteSuccess(""), 4000);
-        },
-        onError: (err) => {
-          setInviteError(
-            err.response?.data?.email?.[0] ||
-              err.response?.data?.non_field_errors?.[0] ||
-              "Failed to send invite.",
-          );
-        },
-      },
-    );
-  };
 
   const copyInviteLink = (token) => {
     navigator.clipboard.writeText(`${window.location.origin}/invites/${token}`);
@@ -274,85 +234,43 @@ export default function MembersPage() {
 
   return (
     <div className="p-8 max-w-7xl space-y-6">
-      {/* 1. Page Title Header Block */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Team Members</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          {members.length} member{members.length !== 1 ? "s" : ""} ·{" "}
-          {workspace?.name}
-        </p>
+      {/* 1. Page header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Team Members</h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            {members.length} member{members.length !== 1 ? "s" : ""} ·{" "}
+            {workspace?.name}
+          </p>
+        </div>
+        {isAdmin && (
+          <Button onClick={() => setInviteOpen(true)} className="gap-2">
+            <UserPlus className="w-4 h-4" />
+            Invite members
+          </Button>
+        )}
       </div>
 
-      {/* 2. Admin Management / Invitation Block */}
-      {isAdmin && (
+      {/* 2. Pending invites */}
+      {isAdmin && pendingInvites.length > 0 && (
         <div className="rounded-lg border bg-card overflow-hidden">
-          <InviteFormHeader workspaceName={workspace?.name} />
-
-          <form onSubmit={handleInvite} className="p-4">
-            <div className="flex gap-2">
-              <Input
-                type="email"
-                placeholder="colleague@company.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="flex-1"
+          <div className="px-4 py-2.5 flex items-center gap-2 bg-muted/40 border-b">
+            <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+            <span className="text-xs font-medium text-muted-foreground">
+              Pending invites ({pendingInvites.length})
+            </span>
+          </div>
+          <div className="divide-y">
+            {pendingInvites.map((invite) => (
+              <PendingInviteItem
+                key={invite.id}
+                invite={invite}
+                onCopy={copyInviteLink}
+                copiedToken={copiedToken}
+                onCancel={(token) => cancelInvite.mutate(token)}
               />
-              <select
-                className="h-9 rounded-md border border-input bg-background px-2.5 text-sm outline-none focus:ring-1 focus:ring-ring"
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-              >
-                {ROLES.map((r) => (
-                  <option key={r} value={r}>
-                    {ROLE_CONFIG[r].label}
-                  </option>
-                ))}
-              </select>
-              <Button
-                type="submit"
-                disabled={inviteMember.isPending}
-                className="gap-1.5"
-              >
-                <Send className="w-3.5 h-3.5" />
-                {inviteMember.isPending ? "Sending…" : "Send Invite"}
-              </Button>
-            </div>
-
-            {inviteError && (
-              <p className="text-xs text-destructive mt-2 flex items-center gap-1.5">
-                <X className="w-3.5 h-3.5" /> {inviteError}
-              </p>
-            )}
-            {inviteSuccess && (
-              <p className="text-xs text-emerald-600 mt-2 flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5" /> {inviteSuccess}
-              </p>
-            )}
-          </form>
-
-          {/* Pending Invites List Sub-Block */}
-          {pendingInvites.length > 0 && (
-            <div className="border-t">
-              <div className="px-4 py-2.5 flex items-center gap-2 bg-muted/40">
-                <Clock className="w-3.5 h-3.5 text-muted-foreground" />
-                <span className="text-xs font-medium text-muted-foreground">
-                  Pending ({pendingInvites.length})
-                </span>
-              </div>
-              <div className="divide-y">
-                {pendingInvites.map((invite) => (
-                  <PendingInviteItem
-                    key={invite.id}
-                    invite={invite}
-                    onCopy={copyInviteLink}
-                    copiedToken={copiedToken}
-                    onCancel={(token) => cancelInvite.mutate(token)}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
+            ))}
+          </div>
         </div>
       )}
 
@@ -391,7 +309,14 @@ export default function MembersPage() {
         </div>
       </div>
 
-      {/* 4. Global Action Confirmation Modal */}
+      {/* 4. Modals */}
+      <InviteModal
+        workspaceId={workspaceId}
+        workspaceName={workspace?.name || ""}
+        open={inviteOpen}
+        onOpenChange={setInviteOpen}
+      />
+
       {confirmState && (
         <ConfirmModal
           title="Remove member?"

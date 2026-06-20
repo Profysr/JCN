@@ -51,3 +51,22 @@ export const useAcceptInvite = (token) => {
     },
   });
 };
+
+export const usePendingInvites = (workspaceId, { refetchInterval } = {}) =>
+  useQuery({
+    queryKey: ["workspace-invites", workspaceId],
+    queryFn: () =>
+      api.get(`/api/workspaces/${workspaceId}/invites/pending/`).then((r) => r.data),
+    enabled: !!workspaceId,
+    refetchInterval,
+  });
+
+export const useCancelInvite = (workspaceId) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (token) =>
+      api.delete(`/api/workspaces/${workspaceId}/invites/${token}/`),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["workspace-invites", workspaceId] }),
+  });
+};

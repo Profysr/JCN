@@ -9,9 +9,12 @@ import {
   Send,
   Users,
   Eye,
+  CheckCircle2,
+  Clock,
 } from "lucide-react";
 import { useUpdateOnboarding } from "@/hooks/useOnboarding";
 import { useMutation } from "@tanstack/react-query";
+import { usePendingInvites } from "@/hooks/useMembers";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -337,7 +340,13 @@ function InviteStep({
 }
 
 /* ── Component: ReadyStep ─────────────────────────────────────────────────── */
-function ReadyStep({ onComplete }) {
+function ReadyStep({ onComplete, workspaceId, sentCount }) {
+  const { data: pending = [] } = usePendingInvites(
+    sentCount > 0 ? workspaceId : null,
+    { refetchInterval: 5000 }
+  );
+  const accepted = Math.max(0, sentCount - pending.length);
+
   return (
     <div className="text-center space-y-6">
       <div className="text-6xl animate-bounce">🎉</div>
@@ -347,6 +356,21 @@ function ReadyStep({ onComplete }) {
           Everything is set up. Start building something great.
         </p>
       </div>
+
+      {sentCount > 0 && (
+        <div className="flex items-center justify-center gap-6 py-3 px-6 bg-muted/50 border rounded-lg text-sm">
+          <span className="flex items-center gap-1.5 text-green-600 font-medium">
+            <CheckCircle2 className="w-4 h-4" />
+            {accepted} accepted
+          </span>
+          <span className="text-muted-foreground/40">·</span>
+          <span className="flex items-center gap-1.5 text-muted-foreground">
+            <Clock className="w-4 h-4" />
+            {pending.length} pending
+          </span>
+        </div>
+      )}
+
       <Button size="lg" onClick={onComplete}>
         Go to workspace <ChevronRight className="w-4 h-4 ml-1" />
       </Button>
@@ -363,6 +387,7 @@ export default function SetupWizard() {
   const [teamType, setTeamType] = useState(null);
   const [emails, setEmails] = useState([]);
   const [inviteRole, setInviteRole] = useState("member");
+  const [sentCount, setSentCount] = useState(0);
 
   const fireConfetti = useConfetti();
   const updateOnboarding = useUpdateOnboarding(workspaceId);
@@ -373,6 +398,7 @@ export default function SetupWizard() {
   });
 
   const handleFinish = async () => {
+    setSentCount(emails.length);
     await Promise.allSettled(
       emails.map((email) =>
         inviteMutation.mutateAsync({ email, role: inviteRole }),
@@ -414,7 +440,13 @@ export default function SetupWizard() {
             />
           )}
 
-          {step === 2 && <ReadyStep onComplete={handleGoToWorkspace} />}
+          {step === 2 && (
+            <ReadyStep
+              onComplete={handleGoToWorkspace}
+              workspaceId={workspaceId}
+              sentCount={sentCount}
+            />
+          )}
         </div>
       </div>
     </div>

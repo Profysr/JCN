@@ -34,10 +34,11 @@ INSTALLED_APPS = [
     "rest_framework.authtoken",
     # Adds CORS headers so the React frontend (different port) can talk to this API
     "corsheaders",
-    # allauth — handles registration flow, email verification, social auth later
+    # allauth — handles registration flow, email verification, social auth
     "allauth",
     "allauth.account",
-    "allauth.socialaccount",  # needed even if we don't use social login yet — dj-rest-auth requires it
+    "allauth.socialaccount",
+    "allauth.socialaccount.providers.google",
     # dj-rest-auth — wraps allauth into DRF-compatible login/register/logout endpoints
     "dj_rest_auth",
     "dj_rest_auth.registration",
@@ -208,6 +209,23 @@ ACCOUNT_EMAIL_VERIFICATION = (
     "none"  # disable email verification in dev; set to "mandatory" in production
 )
 
+# Google OAuth provider — credentials come from env, no DB SocialApp record needed
+SOCIALACCOUNT_PROVIDERS = {
+    "google": {
+        "APP": {
+            "client_id": env("GOOGLE_CLIENT_ID", default=""),
+            "secret": env("GOOGLE_CLIENT_SECRET", default=""),
+            "key": "",
+        },
+        "SCOPE": ["profile", "email"],
+        "AUTH_PARAMS": {"access_type": "online"},
+    }
+}
+# Auto-connect a Google sign-in to an existing email+password account
+SOCIALACCOUNT_EMAIL_AUTHENTICATION = True
+SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = True
+SOCIALACCOUNT_STORE_TOKENS = False
+
 # CORS — allow the React dev server to call this API
 # In production, replace with your actual frontend domain
 CORS_ALLOWED_ORIGINS = env.list(
@@ -229,5 +247,9 @@ SLACK_CLIENT_ID = env("SLACK_CLIENT_ID", default="")
 SLACK_CLIENT_SECRET = env("SLACK_CLIENT_SECRET", default="")
 SLACK_SIGNING_SECRET = env("SLACK_SIGNING_SECRET", default="")
 
-# Frontend URL — used to build deep links sent in integration messages
-FRONTEND_URL = env("FRONTEND_URL", default="http://localhost:5173")
+# Frontend URL — used in invite email links and integration deep-links
+FRONTEND_URL = env("VITE_FRONTEND_URL", default="http://localhost:5173")
+
+# ── Email (Resend) ────────────────────────────────────────────────────────────
+RESEND_API_KEY = env("RESEND_API_KEY", default="")
+FROM_EMAIL = env("FROM_EMAIL", default="onboarding@resend.dev")

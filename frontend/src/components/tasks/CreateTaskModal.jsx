@@ -3,8 +3,8 @@ import { useCreateTask } from "@/hooks/useTasks";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import * as Dialog from "@radix-ui/react-dialog";
-import { X, ChevronDown } from "lucide-react";
+import { ChevronDown } from "lucide-react";
+import Modal from "@/components/ui/Modal";
 import { PRIORITIES, TASK_TYPES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
@@ -85,32 +85,17 @@ export default function CreateTaskModal({
   };
 
   return (
-    <Dialog.Root
-      open={open}
-      onOpenChange={(o) => {
-        if (!o) {
-          onClose();
-          reset();
-        }
-      }}
+    <Modal
+      isOpen={open}
+      onClose={() => { onClose(); reset(); }}
+      title="Create Task"
+      showFooter={false}
+      padding="p-0"
+      flexBody
+      maxWidth="512px"
     >
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 bg-black/40 z-40 animate-fade-in" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-card border rounded-md shadow-xl w-full max-w-lg animate-scale-in max-h-[90vh] overflow-y-auto">
-          <div className="flex items-center justify-between px-5 py-4 border-b sticky top-0 bg-card z-10">
-            <Dialog.Title className="text-sm font-semibold">
-              Create Task
-            </Dialog.Title>
-            <div className="flex items-center gap-2">
-              <Dialog.Close asChild>
-                <button className="text-muted-foreground hover:text-foreground p-1 rounded hover:bg-accent">
-                  <X className="w-4 h-4" />
-                </button>
-              </Dialog.Close>
-            </div>
-          </div>
-
-          <form onSubmit={handleSubmit} className="p-5 space-y-4">
+      <div className="overflow-y-auto">
+      <form onSubmit={handleSubmit} className="p-5 space-y-4">
             {/* Type chips */}
             <div>
               <p className="text-xs font-medium text-muted-foreground mb-1.5">
@@ -312,8 +297,7 @@ export default function CreateTaskModal({
               </Button>
             </div>
           </form>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+      </div>
+    </Modal>
   );
 }

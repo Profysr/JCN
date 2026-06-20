@@ -60,6 +60,19 @@ export const useAuthStore = create(
         set({ user: null, accessToken: null, refreshToken: null });
       },
 
+      googleLogin: async (accessToken) => {
+        queryClient.clear();
+        const { data } = await api.post("/api/auth/google/", {
+          access_token: accessToken,
+        });
+        get().setTokens(data.access, data.refresh);
+        set({ user: data.user });
+        // Return pending invite token if one was stored before the OAuth redirect
+        const pending = localStorage.getItem("pendingInvite");
+        if (pending) localStorage.removeItem("pendingInvite");
+        return { ...data, pendingInviteToken: pending || null };
+      },
+
       fetchMe: async () => {
         const { data } = await api.get("/api/users/me/");
         set({ user: data });

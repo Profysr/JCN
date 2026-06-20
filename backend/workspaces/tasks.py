@@ -26,6 +26,9 @@ import logging
 import time
 from itertools import islice
 
+import resend
+from django.conf import settings
+
 import requests
 from asgiref.sync import async_to_sync
 from celery import shared_task
@@ -155,6 +158,48 @@ def deliver_webhook(self, webhook_id, event, payload_dict):
             webhook_id,
             event,
         )
+
+
+# ── vA.2 — Invite Email ───────────────────────────────────────────────────────
+
+@shared_task(bind=True, max_retries=2, default_retry_delay=60)
+def send_invite_email(self, invite_id):
+    from .models import WorkspaceInvite
+
+    try:
+        invite = WorkspaceInvite.objects.select_related(
+            "workspace", "invited_by"
+        ).get(id=invite_id, status=WorkspaceInvite.Status.PENDING)
+    except WorkspaceInvite.DoesNotExist:
+        return
+
+    from .emails import render as render_email
+
+    inviter = invite.invited_by.full_name or invite.invited_by.email
+    workspace_name = invite.workspace.name
+    accept_url = f"{settings.FRONTEND_URL}/invites/{invite.token}"
+
+    html = render_email("invite.html", {
+        "inviter": inviter,
+        "workspace_name": workspace_name,
+        "initial": workspace_name[0].upper(),
+        "role": invite.role.capitalize(),
+        "accept_url": accept_url,
+        "recipient_email": invite.email,
+    })
+
+    try:
+        resend.api_key = settings.RESEND_API_KEY
+        resend.Emails.send({
+            "from": settings.FROM_EMAIL,
+            "to": [invite.email],
+            "subject": f"{inviter} invited you to join {workspace_name} on JCN",
+            "html": html,
+        })
+        logger.info("[invite_email] Sent to %s for workspace %s", invite.email, workspace_name)
+    except Exception as exc:
+        logger.warning("[invite_email] Failed (attempt %d): %s", self.request.retries + 1, exc)
+        raise self.retry(exc=exc)
 
 
 # ── v4.6.0 — Import Runner ────────────────────────────────────────────────────

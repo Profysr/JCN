@@ -1,4 +1,5 @@
 import { lazy, Suspense } from "react";
+import { GoogleOAuthProvider } from "@react-oauth/google";
 import { Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { Loader } from "@/components/ui/Loader";
 
@@ -77,6 +78,7 @@ function SuspenseOutlet() {
 
 export default function App() {
   return (
+    <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID}>
     <Routes>
       {/* Public — full-page suspense */}
       <Route element={<FullPageSuspense />}>
@@ -130,12 +132,13 @@ export default function App() {
             />
             <Route path="settings/api" element={<APIKeysPage />} />
             <Route path="settings/webhooks" element={<WebhooksPage />} />
-            <Route path="settings/import" element={<ImportPage />} />`
+            <Route path="settings/import" element={<ImportPage />} />
           </Route>
         </Route>
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </GoogleOAuthProvider>
   );
 }

@@ -90,7 +90,6 @@ export default function CreateProjectModal({ workspaceId, open, onClose }) {
           )}
 
           {/* Name + Description */}
-          {/* <div className="grid grid-cols-2 gap-4"> */}
           <div className="space-y-1.5">
             <Label htmlFor="board-name">Board name</Label>
             <Input
@@ -116,11 +115,28 @@ export default function CreateProjectModal({ workspaceId, open, onClose }) {
               placeholder="What is this board about?"
             />
           </div>
-          {/* </div> */}
 
-          {/* Board type */}
+          {/* Board icon */}
           <div className="space-y-2">
-            <Label>Board type</Label>
+            <Label>Board icon</Label>
+            <div className="flex items-center gap-3 mb-2">
+              {(() => {
+                const selected = BOARD_TYPES.find(
+                  (t) => t.value === form.board_type
+                );
+                const SelectedIcon = selected?.icon;
+                return (
+                  <div className="w-12 h-12 rounded-xl bg-primary/20 border border-primary/25 flex items-center justify-center shrink-0">
+                    {SelectedIcon && (
+                      <SelectedIcon className="w-6 h-6 text-primary" />
+                    )}
+                  </div>
+                );
+              })()}
+              <p className="text-xs text-muted-foreground leading-snug">
+                This icon will identify your board across the workspace.
+              </p>
+            </div>
             <div className="grid grid-cols-4 gap-2">
               {BOARD_TYPES.map(({ value, label, icon: Icon }) => (
                 <button

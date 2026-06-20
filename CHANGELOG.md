@@ -1736,71 +1736,85 @@ The existing `DashboardPage` (workspace home, fixed stats + recent projects) and
 
 # V2 — MANAGEMENT ECOSYSTEM (Next 6 Months)
 
-> **The pivot.** JCN launched as a project management tool. Five phases later, the foundation is solid — tasks, sprints, wikis, automations, real-time collaboration, analytics, and integrations are all shipped. Now we expand.
+> **The pivot.** JCN launched as a project management tool. Five phases later, the foundation is solid — tasks, sprints, wikis, automations, real-time collaboration, analytics, and integrations are all shipped. Now we expand into a full management ecosystem.
 >
-> The next six months build three major additions on top of that foundation: a public landing page to tell the story, an org structure layer so every workspace has a real company skeleton, and an HR module so small businesses can manage their people without buying BambooHR. Custom RBAC lands in Week 19 — after we have three apps running, because granular permissions only matter when there is real complexity to protect.
+> The next six months build three major apps on top of that foundation: an org structure layer so every workspace has a real company skeleton, and an HR module so small businesses can manage their people without buying BambooHR. Custom RBAC lands in Week 19 — after we have three apps running, because granular permissions only matter when there is real complexity to protect. The public landing page ships last — once the ecosystem has two or three apps to showcase, the story writes itself.
 >
-> **North star:** By Week 26, a 50-person company should be able to run their entire operational layer on JCN — projects, people, and HR — without a single external tool.
+> **North star:** By Week 26, a 50-person company should be able to run their entire operational layer on JCN — projects, people, and HR — without a single external tool. Then we launch to the world.
 
 ---
 
 ## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-## PHASE A — ECOSYSTEM RELAUNCH (Weeks 1–3)
+## PHASE A — ECOSYSTEM RELAUNCH (Weeks 1–2)
 
 ## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-> **Goal:** Tell the story. Remove signup friction. Make the first 10 minutes count.
+> **Goal:** Remove signup friction. Make the first 10 minutes count. The landing page comes at launch — once we have a full ecosystem to show, not just one app.
 
 ---
 
-## vA.1 — Public Landing Page (Week 1)
+## vA.1 — Google OAuth Signup & Login (Week 1)
 
-> Status: PLANNED 📋
-> **Why it matters:** We're competing with tools that spend millions on marketing. Our landing page is our pitch, our proof, and our first impression — all in one URL.
+> Status: COMPLETE ✅
 
-### Page structure (standalone route at `/`)
+### Backend
 
-- **Hero** — headline that speaks directly to the target ("One workspace for everything your team does"), animated product demo GIF, single primary CTA ("Start free — no credit card")
-- **Problem section** — honest side-by-side comparison: Jira (enterprise bloat), ClickUp (feature paralysis), Notion (weak PM), Asana/Monday (expensive + dated). Not vague — specific and confident
-- **Ecosystem showcase** — three module preview cards: Projects · Org Structure · HR — "Each app is great alone. Together, they replace your entire tool stack."
-- **How it works** — 3-step visual: Create workspace → Invite team → Start managing (under 5 minutes to first value)
-- **Social proof** — "Built for teams of 10–200" positioning, early adopter testimonials when available
-- **Pricing preview** — three tier cards (Free / Pro / Business) with feature highlights; no hidden fees language
-- **Footer** — docs, changelog, status page, Twitter/X, GitHub
+- Added `allauth.socialaccount.providers.google` to `INSTALLED_APPS` — no new major package, just activating the Google provider that was already bundled with allauth
+- Upgraded `dj-rest-auth` to `dj-rest-auth[with-social]` to unlock `SocialLoginView` base class
+- Added `resend==2.10.0` to requirements for invite emails (Week 2)
+- `SOCIALACCOUNT_PROVIDERS` config in `settings.py` — scoped to `profile` + `email` only, credentials read from env (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`)
+- `SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = True` — a Google sign-in with an existing email+password account silently merges the two identities, no error thrown
+- `SOCIALACCOUNT_STORE_TOKENS = False` — Google access tokens are not persisted in the DB
+- New file `accounts/social_views.py` — `GoogleLogin(SocialLoginView)` with `GoogleOAuth2Adapter` and `OAuth2Client`; response shape is identical to email login (access + refresh JWT pair)
+- New URL `POST /api/auth/google/` wired in `accounts/urls.py` — accepts `{ access_token }` from frontend, returns same JWT pair as email auth
+- `FRONTEND_URL` in settings now reads `VITE_FRONTEND_URL` from `.env` (was reading a separate `FRONTEND_URL` key that didn't exist)
+- `RESEND_API_KEY` and `FROM_EMAIL` added to settings — reads from `.env`, defaults to `onboarding@resend.dev` for local dev (no domain verification needed)
 
-### Technical
+### Frontend
 
-- Standalone React route at `/` — public, no auth required, no app sidebar
-- Built with the existing design system tokens (`theme.css`) — same fonts, colours, and components as the app
-- Mobile-first responsive; no horizontal scroll at 375px
-- `<meta>` OG tags, `sitemap.xml`, `robots.txt` for SEO baseline
-- CTA buttons route to `/register`; "Log in" link in the nav for existing users
+- Installed `@react-oauth/google` — Google's official React SDK; handles the OAuth popup and returns an access token
+- `VITE_GOOGLE_CLIENT_ID` added to `frontend/.env`
+- `App.jsx` wrapped with `GoogleOAuthProvider` (client ID from env); stray backtick in route definition also fixed
+- `authStore.js` — new `googleLogin(accessToken)` method: POSTs to `/api/auth/google/`, stores JWT pair, same flow as email login
+- New component `components/auth/GoogleButton.jsx` — shared button using `useGoogleLogin` hook (implicit flow); calls `googleLogin()` on success, surfaces specific error message on failure
+- `LoginPage.jsx` + `RegisterPage.jsx` — Google button added above the email form with an "or continue with email" divider; "account already exists" error shown inline without disrupting the form
+
+### Setup & Env
+
+- Signed up for Resend, API key stored in `backend/.env`
+- Google Cloud Console project created — OAuth 2.0 credentials (Client ID + Secret) stored in `backend/.env`
+- `README.md` updated with step-by-step Google Cloud Console setup guide and Resend configuration instructions
 
 ---
 
-## vA.2 — Onboarding Integrations (Weeks 2–3)
+## vA.2 — Invite Flow Upgrade (Week 2)
 
-> Status: PLANNED 📋
-> **Why it matters:** Every extra step in signup loses users. Google OAuth alone typically lifts registration conversion 30–40%. A polished invite flow turns a single signup into a team.
+> Status: COMPLETE ✅
 
-### Google OAuth Signup / Login
+### Backend
 
-**Backend**
-- `python-social-auth` + Google OAuth2 strategy; creates `User` + `UserProfile` on first login; email from Google pre-verified — no email confirmation step
-- `/api/auth/google/` callback issues DRF JWT pair → same token flow as email auth
-- Workspace creation still happens post-OAuth (same setup wizard)
+- `send_invite_email(invite_id)` Celery task in `workspaces/tasks.py` — 2 retries, 60s delay; fetches invite with `select_related(workspace, invited_by)`, builds inline HTML email (workspace initial, inviter name, role, CTA), sends via Resend SDK (`resend.Emails.send()`)
+- `InviteMemberView` updated to fire `send_invite_email.delay(str(invite.id))` immediately after the invite row is created — fire-and-forget, does not block the API response
+- `BACKEND.md` and `FRONTEND.md` updated to document all new endpoints, the Celery task, and both onboarding flows (admin path and invited-user path)
 
-**Frontend**
-- "Continue with Google" button on Login and Register pages — above the email form, with a visual divider
-- Handles "account already exists with this email" gracefully: merges OAuth identity, prompts login
+### Frontend
 
-### Invite Flow Upgrade
-
-- Invite email template redesign: workspace logo, inviter name, 3-bullet preview of what JCN is, single CTA button — replaces the current plain-text email
-- Accept invite for non-registered users: landing screen shows workspace name + who invited them → "Create account to join" → auto-joins on register (no second accept click)
-- "Copy invite link" promoted to primary action on the Members page (was a secondary icon)
-- Setup wizard Step 3 (invite team): live "X accepted / Y pending" counter updating via polling
+- `AcceptInvitePage.jsx` fully redesigned for unauthenticated users: workspace initial/logo, inviter name, workspace name, role badge, "What you'll get" feature list (Zap / Users / BarChart2), two CTAs:
+  - "Create account to join" → stores token in `localStorage("pendingInvite")`, navigates to `/register?invite=TOKEN&email=EMAIL`
+  - "I already have an account" → navigates to `/login?next=/invites/TOKEN&email=EMAIL`
+- `RegisterPage.jsx` — reads `?invite=TOKEN` and `?email=` params; after email registration OR Google OAuth auto-calls `POST /api/invites/:token/accept/` and navigates directly to the workspace — no second click
+- `authStore.googleLogin()` — reads `pendingInvite` from `localStorage` on Google auth success, returns it to the component so invite is accepted before navigation
+- `LoginPage.jsx` + `RegisterPage.jsx` — email field pre-filled from `?email=` param; Google OAuth error shown inline
+- New `components/workspace/InviteModal.jsx` — replaces the old inline form on MembersPage:
+  - Email chip input (comma / space / Enter / Tab to add, Backspace to remove last, paste support)
+  - 3-role card picker (Member / Viewer / Admin) with description per role
+  - Send button shows live count ("Send 3 invites"); fires `Promise.all` over `useInviteMember` mutations
+  - Success flash (CheckCircle2 + count) auto-closes modal after 1.8s
+  - "Copy invite link" footer action
+- `MembersPage.jsx` — inline invite form replaced with a primary "Invite members" button in the page header; pending invites list promoted to its own standalone card; `InviteModal` rendered at the bottom and wired to the button
+- `SetupWizard.jsx` ReadyStep — polls `GET /api/workspaces/:id/invites/pending/` every 5s when invites were sent; shows live "X accepted · Y pending" counter with CheckCircle2 / Clock icons
+- `useMembers.js` — added `usePendingInvites(workspaceId, { refetchInterval })` and `useCancelInvite(workspaceId)` hooks
 
 ---
 
@@ -2114,7 +2128,32 @@ report.view       settings.manage   api_keys.manage
 
 ---
 
-## vE.3 — Launch Prep (Weeks 25–26)
+## vE.3 — Public Landing Page (Week 25)
+
+> Status: PLANNED 📋
+> **Why now and not earlier:** The landing page ships here because the ecosystem is complete — Projects, Org Structure, and HR are all live. The pitch is no longer "another project management tool" but "replace your entire tool stack." Three apps in an ecosystem is a story worth telling. One app is not.
+
+### Page structure (standalone route at `/`)
+
+- **Hero** — headline that leads with the ecosystem angle ("One workspace. Projects, people, and HR — for teams that mean business"), animated product demo, single primary CTA ("Start free — no credit card")
+- **Ecosystem showcase** — three app cards: **Projects** · **Org Structure** · **HR** — "Each app is great alone. Together, they replace ClickUp + BambooHR + your org chart tool — for less than either one."
+- **Problem section** — honest side-by-side: Jira (enterprise bloat), ClickUp (feature paralysis), BambooHR (HR-only silo), Monday/Asana (expensive + dated). Not vague — specific and confident
+- **How it works** — 3-step visual: Create workspace → Build your org → Manage people and projects (under 5 minutes to first value)
+- **Social proof** — early adopter testimonials; "Built for teams of 10–200" positioning
+- **Pricing preview** — three tier cards (Free / Pro / Business) with feature highlights; no hidden fees language
+- **Footer** — docs, changelog, status page, Twitter/X, GitHub
+
+### Technical
+
+- Standalone React route at `/` — public, no auth required, no app sidebar
+- Built with the existing design system tokens (`theme.css`) — same fonts, colours, and components as the app
+- Mobile-first responsive; no horizontal scroll at 375px
+- `<meta>` OG tags, `sitemap.xml`, `robots.txt` for SEO baseline
+- CTA buttons route to `/register`; "Log in" link in the nav for existing users
+
+---
+
+## vE.4 — Launch Prep (Week 26)
 
 > Status: PLANNED 📋
 
@@ -2137,11 +2176,11 @@ report.view       settings.manage   api_keys.manage
 
 | Phase | Weeks | What Ships | Why It Matters |
 |-------|-------|-----------|----------------|
-| **A — Relaunch** | 1–3 | Landing page, Google OAuth, improved invite flow | Tell the story; remove signup friction |
-| **B — Org Structure** | 4–10 | Departments, teams, employee profiles, org chart | Company skeleton every team needs daily |
-| **C — HR Management** | 11–18 | Leave management, attendance tracking, HR dashboard | Replaces BambooHR for small businesses |
-| **D — Custom RBAC** | 19–22 | Role builder, granular permission flags, role assignment UI | Secure three apps properly with one permission layer |
-| **E — Platform & Launch** | 23–26 | Mobile PWA, billing & plans, performance, public launch | Ship it. Get paid. Scale. |
+| **A — Relaunch** | 1–2 | Google OAuth, improved invite flow | Remove signup friction before building the ecosystem |
+| **B — Org Structure** | 3–9 | Departments, teams, employee profiles, org chart | Company skeleton every team needs daily |
+| **C — HR Management** | 10–17 | Leave management, attendance tracking, HR dashboard | Replaces BambooHR for small businesses |
+| **D — Custom RBAC** | 18–21 | Role builder, granular permission flags, role assignment UI | Secure three apps properly with one permission layer |
+| **E — Platform & Launch** | 22–26 | Mobile PWA, billing & plans, **ecosystem landing page**, performance, public launch | Build the story last — once there's a full ecosystem to tell it |
 
 > **After these 6 months JCN will be:**
 >

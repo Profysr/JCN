@@ -66,6 +66,7 @@ Default permission: `IsAuthenticated`. Public endpoints (forms, invite detail) u
 | POST | `/api/auth/logout/` | Invalidate refresh token |
 | POST | `/api/auth/registration/` | Register new user (email, full_name, password) |
 | POST | `/api/auth/token/refresh/` | Exchange refresh token for new access token |
+| POST | `/api/auth/google/` | Google OAuth — body: `{ access_token }` (from `@react-oauth/google` implicit flow). Returns same JWT pair + user as email login. Silently merges with existing email account if emails match (`SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = True`). View: `accounts/social_views.py::GoogleLogin`. |
 
 ### Users (`/api/users/`)
 
@@ -90,7 +91,7 @@ Default permission: `IsAuthenticated`. Public endpoints (forms, invite detail) u
 | GET | `/api/workspaces/{ws}/members/` | List all workspace members with roles |
 | PATCH | `/api/workspaces/{ws}/members/{id}/` | Change member role (admin only) |
 | DELETE | `/api/workspaces/{ws}/members/{id}/` | Remove member from workspace |
-| POST | `/api/workspaces/{ws}/invites/` | Send invite email to a new member |
+| POST | `/api/workspaces/{ws}/invites/` | Create invite row and fire `send_invite_email.delay()` async (Resend) |
 | GET | `/api/workspaces/{ws}/invites/pending/` | List pending invites |
 | DELETE | `/api/workspaces/{ws}/invites/{token}/` | Cancel a pending invite |
 | GET | `/api/invites/{token}/` | Public — get invite info (workspace name, inviter) |
@@ -465,6 +466,7 @@ Available `{metric}` values:
 | Task | Module | Retries | Purpose |
 |------|--------|---------|---------|
 | `deliver_webhook` | `workspaces.tasks` | 3 (5min → 30min backoff) | POST signed webhook payload; log WebhookDelivery |
+| `send_invite_email` | `workspaces.tasks` | 2 (60s delay) | Send invite email via Resend SDK. Fetches invite with `select_related(workspace, invited_by)`, builds inline HTML, sends from `settings.FROM_EMAIL`. Fired by `POST /api/workspaces/{ws}/invites/` immediately after invite row is created. |
 | `run_import` | `workspaces.tasks` | — | Parse file → create board/statuses → bulk insert tasks; push progress via WebSocket `import.progress` |
 | `send_comment_notifications` | `projects.tasks` | — | Collect all recipients (task assignee/creator, parent comment author, @mentioned users), validate workspace membership for mentions, `bulk_create` all `InboxItem` rows in one DB round-trip, then broadcast per-user via WebSocket. Called with `.delay()` immediately after `POST /comments/` returns. |
 

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
+import GoogleButton from "@/components/auth/GoogleButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,12 +19,14 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const next = searchParams.get("next") || "/";
+  const prefillEmail = searchParams.get("email") || "";
   const login = useAuthStore((s) => s.login);
 
-  const [form, setForm] = useState({ email: "", password: "" });
+  const [form, setForm] = useState({ email: prefillEmail, password: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [googleError, setGoogleError] = useState("");
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -83,6 +86,21 @@ export default function LoginPage() {
           <CardTitle className="text-2xl font-bold">Welcome back</CardTitle>
           <CardDescription>Sign in to your JCN account</CardDescription>
         </CardHeader>
+
+        <div className="px-8 pb-2">
+          <GoogleButton next={next} onError={setGoogleError} />
+          {googleError && (
+            <p className="text-sm text-destructive mt-2 animate-slide-up">{googleError}</p>
+          )}
+          <div className="relative my-5">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-border" />
+            </div>
+            <div className="relative flex justify-center text-xs text-muted-foreground">
+              <span className="bg-card px-3">or continue with email</span>
+            </div>
+          </div>
+        </div>
 
         <form onSubmit={handleLogin}>
           <CardContent className="space-y-5 px-8">

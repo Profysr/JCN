@@ -1,0 +1,113 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background: #f4f4f5;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      .wrap {
+        max-width: 520px;
+        margin: 40px auto;
+        background: #fff;
+        border-radius: 10px;
+        overflow: hidden;
+        border: 1px solid #e4e4e7;
+      }
+      .top {
+        background: #18181b;
+        padding: 28px;
+        text-align: center;
+      }
+      .logo {
+        display: inline-block;
+        width: 48px;
+        height: 48px;
+        background: #3b82f6;
+        border-radius: 10px;
+        font-size: 22px;
+        font-weight: 700;
+        color: #fff;
+        line-height: 48px;
+        text-align: center;
+      }
+      .body {
+        padding: 36px 36px 28px;
+      }
+      h1 {
+        margin: 0 0 6px;
+        font-size: 20px;
+        font-weight: 700;
+        color: #18181b;
+      }
+      .ws {
+        display: inline-block;
+        background: #f4f4f5;
+        border: 1px solid #e4e4e7;
+        border-radius: 6px;
+        padding: 5px 14px;
+        font-size: 14px;
+        font-weight: 600;
+        color: #18181b;
+        margin: 16px 0 24px;
+      }
+      p {
+        margin: 0 0 16px;
+        color: #52525b;
+        font-size: 15px;
+        line-height: 1.6;
+      }
+      ul {
+        margin: 0 0 28px;
+        padding-left: 20px;
+        color: #52525b;
+        font-size: 14px;
+        line-height: 2;
+      }
+      .btn {
+        display: block;
+        background: #3b82f6;
+        color: #fff;
+        text-decoration: none;
+        border-radius: 8px;
+        padding: 14px 24px;
+        font-size: 15px;
+        font-weight: 600;
+        text-align: center;
+      }
+      .foot {
+        padding: 20px 36px;
+        border-top: 1px solid #f4f4f5;
+        font-size: 12px;
+        color: #a1a1aa;
+        line-height: 1.6;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="top"><div class="logo">{{initial}}</div></div>
+      <div class="body">
+        <h1>{{inviter}} invited you to join</h1>
+        <div class="ws">{{workspace_name}}</div>
+        <p>
+          You'll join as <strong>{{role}}</strong>. Here's what your team gets:
+        </p>
+        <ul>
+          <li>Kanban boards, sprints &amp; task management</li>
+          <li>Real-time collaboration &amp; notifications</li>
+          <li>Wiki, forms, analytics &amp; more — all in one workspace</li>
+        </ul>
+        <a href="{{accept_url}}" class="btn">Accept invitation →</a>
+      </div>
+      <div class="foot">
+        This invite was sent to {{recipient_email}}. If you weren't expecting
+        it, you can safely ignore this email.
+      </div>
+    </div>
+  </body>
+</html>

@@ -300,6 +300,8 @@ Despite the file name, this manages boards (the backend calls them "projects" in
 
 Board mutations also invalidate `["portfolio", ws]` since the portfolio shows board summaries.
 
+**Board icon convention:** Boards do not have a dedicated icon field. The `board_type` value (`general`, `software`, `marketing`, etc.) is used as the board's visual identifier — each type maps to a Lucide icon in `BOARD_TYPES` inside `CreateProjectModal.jsx`. When rendering a board avatar/logo anywhere in the UI, look up the icon from this map using `board.board_type`.
+
 ---
 
 ### `useStatusManagement.js`
@@ -898,3 +900,91 @@ Query key: `["automations", workspaceId, boardId]`
 | `hooks/useAutomations.js` | Hook | Only used by dead AutomationsPage | Yes (with page) |
 
 **Hooks confirmed alive despite dead pages:** `useInbox`, `useInboxUnreadCount`, `useUpdateInboxItem`, `useBulkUpdateInbox` — all used by `NotificationBell.jsx` and `Sidebar.jsx`. Do not delete these.
+
+---
+
+## Onboarding Flows
+
+Two completely separate paths depending on how the user enters the product.
+
+---
+
+### Path A — Admin (creates their own workspace)
+
+**Trigger:** User registers with email or Google OAuth and has no workspaces yet.
+
+```
+Register / Google OAuth
+  → WorkspaceRedirect (/)
+      GET /api/workspaces/ → empty list
+  → /onboarding  (OnboardingPage)
+      Enter workspace name + optional logo upload → POST /api/workspaces/ as multipart/form-data
+      Logo is an optional ImageField — sent as FormData; omitted if not selected.
+      User.can_create_workspace flips False (one workspace per account, enforced server-side)
+  → /w/:workspaceId/setup  (SetupWizard)
+      Step 0 — Team type: pick from 6 categories (required to proceed)
+      Step 1 — Invite: email chip input + Member/Viewer role picker (skippable)
+                       fires POST /api/workspaces/:id/invites/ per email
+                       Celery sends invite email via Resend
+      Step 2 — Ready: confetti + PATCH /api/workspaces/:id/onboarding/ { wizard_completed: true, team_type }
+                       if invites sent → polls GET /api/workspaces/:id/invites/pending/ every 5s
+                       shows "X accepted · Y pending" live counter
+  → /w/:workspaceId  (main app)
+
+Post-entry — GettingStartedChecklist (dashboard)
+  Visible only to workspace admins. 5 items:
+    ✓ Create your first board  → /boards
+    ✓ Add a task               → /boards
+    ✓ Invite a teammate        → /members
+    ○ Integration              (Soon)
+    ○ Set up an automation     (Soon)
+  Progress bar. Collapses. Permanently dismissible.
+  PATCH /api/workspaces/:id/onboarding/ { checklist_dismissed: true } on dismiss.
+```
+
+**Key invariant:** `can_create_workspace` is `True` by default on signup and flips to `False` the moment the workspace is created. Attempting `POST /api/workspaces/` a second time returns a permission error from the serializer.
+
+---
+
+### Path B — Invited user (joins an existing workspace)
+
+**Trigger:** Admin sends an invite → user receives an email with `/invites/:token`.
+
+```
+/invites/:token  (AcceptInvitePage)
+
+  Case 1 — Already logged in, correct email:
+    Auto-accepts via POST /api/invites/:token/accept/
+    Redirects to /w/:workspaceId after 1.8s
+
+  Case 2 — Already logged in, wrong email:
+    Shows "Wrong account" screen — no action available.
+
+  Case 3 — Not logged in (most common):
+    Rich landing screen: workspace initial, inviter name, role badge, feature list
+    Two CTAs:
+      "Create account to join"
+        → localStorage.setItem("pendingInvite", token)
+        → /register?invite=TOKEN&email=EMAIL
+        → After register (email or Google): POST /api/invites/:token/accept/ → /w/:workspaceId
+
+      "I already have an account"
+        → /login?next=/invites/TOKEN&email=EMAIL
+        → After login: AcceptInvitePage re-renders (Case 1 above)
+```
+
+**Key invariant:** Invited users skip `OnboardingPage` and `SetupWizard` entirely — they land directly in an existing workspace. `GettingStartedChecklist` is also hidden from them (admin-only check via `onboarding.user_is_admin`).
+
+**Google OAuth + pending invite:** When the user clicks "Create account to join" and then signs up via Google, the token survives the OAuth redirect via `localStorage`. `authStore.googleLogin()` reads and returns it, `RegisterPage.handleGoogleSuccess()` auto-accepts and navigates to the workspace.
+
+---
+
+### Decision tree summary
+
+```
+User arrives at /
+├── Has workspaces?  → /w/:id  (straight in)
+└── No workspaces?
+    ├── Has pending invite token in localStorage?  → register, auto-accept, /w/:id
+    └── No invite?  → /onboarding → SetupWizard → /w/:id
+```

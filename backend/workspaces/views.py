@@ -181,12 +181,14 @@ class InviteMemberView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, workspace_id):
+        from .tasks import send_invite_email
         workspace = _get_workspace(workspace_id, request.user)
         serializer = WorkspaceInviteSerializer(
             data=request.data, context={"request": request, "workspace": workspace}
         )
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        invite = serializer.save()
+        send_invite_email.delay(str(invite.id))
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
