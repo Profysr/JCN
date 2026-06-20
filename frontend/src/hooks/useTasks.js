@@ -95,7 +95,10 @@ export const useCreateTask = (workspaceId, boardId) => {
       api
         .post(`/api/workspaces/${workspaceId}/boards/${boardId}/tasks/`, data)
         .then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks", workspaceId, boardId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tasks", workspaceId, boardId] });
+      qc.invalidateQueries({ queryKey: ["sprint", workspaceId, boardId] });
+    },
   });
 };
 
@@ -110,6 +113,7 @@ export const useUpdateTask = (workspaceId, boardId) => {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tasks", workspaceId, boardId] });
       qc.invalidateQueries({ queryKey: ["children", workspaceId, boardId] });
+      qc.invalidateQueries({ queryKey: ["sprint", workspaceId, boardId] });
     },
   });
 };
@@ -125,6 +129,7 @@ export const useUpdateTaskDetail = (workspaceId, boardId, taskId) => {
     onSuccess: (updated) => {
       qc.setQueryData(detailKey(workspaceId, boardId, taskId), (old) => ({ ...old, ...updated }));
       qc.invalidateQueries({ queryKey: ["tasks", workspaceId, boardId] });
+      qc.invalidateQueries({ queryKey: ["sprint", workspaceId, boardId] });
     },
   });
 };
@@ -134,7 +139,10 @@ export const useDeleteTask = (workspaceId, boardId) => {
   return useMutation({
     mutationFn: (taskId) =>
       api.delete(`/api/workspaces/${workspaceId}/boards/${boardId}/tasks/${taskId}/`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks", workspaceId, boardId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tasks", workspaceId, boardId] });
+      qc.invalidateQueries({ queryKey: ["sprint", workspaceId, boardId] });
+    },
   });
 };
 
@@ -162,11 +170,21 @@ export const useMoveTask = (workspaceId, boardId) => {
       ctx.snapshots.forEach(([key, data]) => qc.setQueryData(key, data));
     },
     onSuccess: (data) => {
+      // Merge full server response — fixes partial optimistic state (status_id + order only)
+      qc.setQueriesData(
+        { queryKey: ["tasks", workspaceId, boardId] },
+        (old) => Array.isArray(old) ? old.map((t) => (t.id === data.id ? { ...t, ...data } : t)) : old,
+      );
+      qc.setQueryData(
+        detailKey(workspaceId, boardId, data.id),
+        (old) => old ? { ...old, ...data } : old,
+      );
       qc.setQueriesData(
         { queryKey: ["children", workspaceId, boardId], exact: false },
         (old) =>
           Array.isArray(old) ? old.map((c) => (c.id === data.id ? { ...c, ...data } : c)) : old,
       );
+      qc.invalidateQueries({ queryKey: ["sprint", workspaceId, boardId] });
     },
   });
 };

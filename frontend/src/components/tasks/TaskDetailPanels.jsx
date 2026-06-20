@@ -1074,7 +1074,7 @@ export function LayoutPanel({ prefs, onChange }) {
       <div className="flex items-center justify-between py-1">
         <div>
           <p className="text-sm font-medium">Show Work Items</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Subtasks and child tasks in main body</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Checklist and child tasks in main body</p>
         </div>
         <Switch
           checked={showWorkItems}

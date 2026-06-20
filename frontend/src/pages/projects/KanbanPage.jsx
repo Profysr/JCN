@@ -529,6 +529,8 @@ export default function KanbanPage() {
             selectedTaskId={selectedTaskId}
             selectedIds={selectedIds}
             onToggleSelect={toggleSelect}
+            workspaceId={workspaceId}
+            boardId={boardId}
           />
         )}
 

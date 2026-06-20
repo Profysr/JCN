@@ -10,7 +10,6 @@ export const useSprints = (workspaceId, boardId, enabled = true) =>
     queryKey: sprintsKey(workspaceId, boardId),
     queryFn: () => api.get(`/api/workspaces/${workspaceId}/boards/${boardId}/sprints/`).then(r => r.data),
     enabled: !!workspaceId && !!boardId && enabled,
-    staleTime: Infinity,
   });
 
 export const useSprintDetail = (workspaceId, boardId, sprintId) =>

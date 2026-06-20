@@ -22,33 +22,34 @@ export function useWorkspaceSocket(workspaceId) {
       // ── Task events ────────────────────────────────────────────
       // All use setQueriesData (prefix match) because useTasks stores data under a 4-element key ["tasks", workspaceId, boardId, filters]. setQueryData (exact match) would miss it and write to a ghost entry nobody reads.
       if (type === "task.created") {
-        // Invalidate so the refetch respects active filters — we can't know if the new task matches whatever filters are currently applied.
         qc.invalidateQueries({ queryKey: ["tasks", workspaceId, payload.board_id] });
+        qc.invalidateQueries({ queryKey: ["sprint", workspaceId, payload.board_id] });
       }
 
       if (type === "task.updated") {
         qc.setQueriesData({ queryKey: ["tasks", workspaceId, payload.board_id] }, (old) => {
           if (!old) return old;
-          return old.map((t) => (t.id === payload.id ? payload : t));
+          return old.map((t) => (t.id === payload.id ? { ...t, ...payload } : t));
         });
+        qc.setQueryData(["task-detail", workspaceId, payload.board_id, payload.id], (old) =>
+          old ? { ...old, ...payload } : old,
+        );
+        qc.invalidateQueries({ queryKey: ["sprint", workspaceId, payload.board_id] });
       }
 
-      // ! Needs rework
       if (type === "task.moved") {
         qc.setQueriesData({ queryKey: ["tasks", workspaceId, payload.board_id] }, (old) => {
           if (!old) return old;
-          return old.map((t) =>
-            t.id === payload.id
-              ? { ...payload, order: t.order }   // preserve optimistic order
-              : t
-          );
+          return old.map((t) => (t.id === payload.id ? { ...t, ...payload } : t));
         });
+        qc.invalidateQueries({ queryKey: ["sprint", workspaceId, payload.board_id] });
       }
 
       if (type === "task.deleted") {
         qc.setQueriesData({ queryKey: ["tasks", workspaceId, payload.board_id] }, (old) =>
           old?.filter((t) => t.id !== payload.id)
         );
+        qc.invalidateQueries({ queryKey: ["sprint", workspaceId, payload.board_id] });
       }
 
       // ── Comment events — update the task detail cache ──────────

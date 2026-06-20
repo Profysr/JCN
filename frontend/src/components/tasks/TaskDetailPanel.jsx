@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useParams, useNavigate } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
-import { Copy, ShieldCheck, Trash2, ChevronRight } from "lucide-react";
+import { Copy, CopyPlus, ShieldCheck, Trash2, ChevronRight } from "lucide-react";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Loader } from "@/components/ui/Loader";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
@@ -26,6 +26,7 @@ import {
   useChildTasks,
   useCreateChildTask,
   useAttachChildTask,
+  useCloneTask,
 } from "@/hooks/useTaskHierarchy";
 import { useApprovals, useRequestApproval } from "@/hooks/useApprovals";
 import {
@@ -88,7 +89,17 @@ export default function TaskDetailPanel({
   const createChild = useCreateChildTask(workspaceId, boardId, taskId);
   const attachChild = useAttachChildTask(workspaceId, boardId, taskId);
   const requestApproval = useRequestApproval(workspaceId, boardId, taskId);
+  const cloneTask = useCloneTask(workspaceId, boardId);
   const { toast } = useToast();
+
+  const handleClone = () => {
+    cloneTask.mutate(taskId, {
+      onSuccess: (data) => {
+        toast.success("Task cloned");
+        navigate(`?task=${data.id}`, { replace: true });
+      },
+    });
+  };
   const qc = useQueryClient();
 
   const [layoutPrefs, setLayoutPrefs] = useState(getLayoutPrefs);
@@ -154,9 +165,9 @@ export default function TaskDetailPanel({
         padding="p-0"
         maxWidth="80rem"
       >
-        <div className="flex items-center justify-center min-h-[600px]">
+        {/* <div className="flex items-center justify-center min-h-[600px]"> */}
           <Loader />
-        </div>
+        {/* </div> */}
       </Modal>
     );
   }
@@ -187,6 +198,8 @@ export default function TaskDetailPanel({
         onClose={onClose}
         toast={toast}
         onDeleteConfirm={(obj) => setConfirmState(obj)}
+        onClone={handleClone}
+        isCloning={cloneTask.isPending}
       />
 
       {conflict && (
@@ -204,7 +217,7 @@ export default function TaskDetailPanel({
 
       <div className="flex flex-1 overflow-hidden min-h-0">
         {/* ── Main body ─────────────────────────────────────────── */}
-        <div className="flex-1 min-w-0 overflow-y-auto px-6 py-5 space-y-6">
+        <div className="flex-1 min-w-0 overflow-y-auto px-6 py-5 space-y-4">
           {task.ancestors?.length > 0 && (
             <div className="flex items-center gap-1 flex-wrap">
               {task.ancestors.map((a, i) => (
@@ -381,6 +394,8 @@ function PanelHeader({
   onClose,
   toast,
   onDeleteConfirm,
+  onClone,
+  isCloning,
 }) {
   return (
     <div className="flex items-center justify-between px-5 py-2 border-b flex-shrink-0">
@@ -402,6 +417,18 @@ function PanelHeader({
             <Copy className="w-3.5 h-3.5" />
           </button>
         </Tooltip>
+
+        {canEdit && (
+          <Tooltip content="Duplicate task">
+            <button
+              onClick={onClone}
+              disabled={isCloning}
+              className="p-1.5 rounded-md bg-accent/60 text-foreground/70 hover:text-foreground hover:bg-accent transition-colors active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <CopyPlus className="w-3.5 h-3.5" />
+            </button>
+          </Tooltip>
+        )}
 
         {canEdit && (
           <div className="relative" ref={approvalBtnRef}>
