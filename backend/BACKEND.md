@@ -677,3 +677,25 @@ All paginated responses follow DRF's standard envelope: `{count, next, previous,
 | ‼️ Automation engine fully disabled — `fire_automation` is a no-op stub, routes commented out, signals disabled | `projects/automation.py`, `signals.py`, `urls.py` | Rebuild with Celery tasks + action registry pattern before re-enabling |
 | Analytics computed on-the-fly | `analytics/views.py` | Future: materialized views or caching |
 | `TaskTemplate` / `apply-template` included but template features deprioritized | `projects/views/tasks.py` | To be revisited in v2 |
+| No human-readable task IDs | `projects/models.py` | v2 — see Planned Features below |
+
+---
+
+## Planned Features
+
+### v2 — Jira-style Sequential Task IDs
+
+**Goal:** Replace opaque UUIDs with short, human-readable task identifiers scoped per-project (e.g. `PROJ-1`, `PROJ-432`). This shifts task lookups from linear search to **binary search** — a sequential integer index is sorted by definition, so the DB can binary-search a B-tree on `sequence_id` in O(log n) instead of scanning. At millions of rows the difference is significant.
+
+**Design:**
+- Add `sequence_id = PositiveIntegerField` to `Task`, unique per board.
+- Add a `BoardCounter` model (or use a DB sequence per board) as the atomic counter — never derive the next ID from `MAX(sequence_id) + 1` (race condition under concurrent inserts).
+- Board identifier (e.g. `PROJ`) derived from board name slug, stored on `Board` as `key` (unique per workspace, max 6 chars, uppercase).
+- Display format: `f"{board.key}-{task.sequence_id}"` — computed at the API layer, never stored.
+- Expose as a read-only field on `TaskSerializer` and `TaskCardSerializer`.
+- Add `sequence_id` as a filter param on the task list endpoint for direct lookup.
+
+**Why not now:**
+- Requires a migration adding `BoardCounter` table + backfill of existing tasks.
+- Atomic counter needs either `SELECT FOR UPDATE` on the counter row or a native PostgreSQL sequence per board — the latter is cleaner but requires raw SQL in the migration.
+- The `board.key` uniqueness constraint needs careful handling on board rename/delete.

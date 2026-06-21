@@ -16,9 +16,6 @@ class JobTitle(models.Model):
     class Meta:
         unique_together = ["workspace", "name"]
         ordering = ["level", "name"]
-        indexes = [
-            models.Index(fields=["workspace", "level"], name="jobtitle_workspace_level_idx"),
-        ]
 
     def __str__(self):
         return f"{self.name} ({self.workspace.name})"
@@ -47,6 +44,7 @@ class Department(models.Model):
     class Meta:
         unique_together = ["workspace", "name"]
         indexes = [
+            # fetching top-level or child departments when rendering the department tree
             models.Index(fields=["workspace", "parent"], name="dept_workspace_parent_idx"),
         ]
 
@@ -65,7 +63,7 @@ class DepartmentMember(models.Model):
     class Meta:
         unique_together = ["department", "member"]
         indexes = [
-            models.Index(fields=["department", "is_head"], name="deptmember_dept_head_idx"),
+            # "which departments is this person in?" — queried on every member profile load
             models.Index(fields=["member"], name="deptmember_member_idx"),
         ]
 
@@ -96,6 +94,7 @@ class Team(models.Model):
     class Meta:
         unique_together = ["workspace", "name"]
         indexes = [
+            # "all teams in department X" — primary query when rendering a department page
             models.Index(fields=["workspace", "department"], name="team_workspace_dept_idx"),
         ]
 
@@ -114,7 +113,7 @@ class TeamMember(models.Model):
     class Meta:
         unique_together = ["team", "member"]
         indexes = [
-            models.Index(fields=["team", "is_lead"], name="teammember_team_lead_idx"),
+            # "which teams is this person in?" — queried on every member profile load
             models.Index(fields=["member"], name="teammember_member_idx"),
         ]
 
@@ -136,11 +135,6 @@ class OrgProfile(models.Model):
     bio = models.TextField(blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    class Meta:
-        indexes = [
-            models.Index(fields=["job_title"], name="orgprofile_jobtitle_idx"),
-        ]
-
     def __str__(self):
         return f"OrgProfile({self.member})"
 
@@ -161,6 +155,7 @@ class ReportingLine(models.Model):
     class Meta:
         unique_together = ["workspace", "report"]
         indexes = [
+            # "get all direct reports of manager X" — core org chart query
             models.Index(fields=["workspace", "manager"], name="repline_workspace_manager_idx"),
         ]
 

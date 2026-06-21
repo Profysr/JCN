@@ -7,6 +7,7 @@ import {
   Loader2,
   Clock,
   UserPlus,
+  Hash,
 } from "lucide-react";
 import BoardTypeIcon from "@/shared/components/ui/BoardTypeIcon";
 import LoadMoreButton from "@/shared/components/ui/LoadMoreButton";

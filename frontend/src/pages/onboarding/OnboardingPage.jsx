@@ -28,9 +28,23 @@ export default function OnboardingPage() {
       setError(err.response?.data?.name?.[0] || "Something went wrong."),
   });
 
+  const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+  const MAX_SIZE_MB = 2;
+
   const handleLogoChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    if (!ACCEPTED_TYPES.includes(file.type)) {
+      setError("Logo must be a JPEG, PNG, GIF, or WebP image.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+    if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+      setError(`Logo must be smaller than ${MAX_SIZE_MB} MB.`);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+    setError("");
     setLogoFile(file);
     setLogoPreview(URL.createObjectURL(file));
   };
@@ -100,7 +114,7 @@ export default function OnboardingPage() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/gif,image/webp"
                 className="sr-only"
                 onChange={handleLogoChange}
               />

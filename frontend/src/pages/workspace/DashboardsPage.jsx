@@ -14,6 +14,7 @@ import { useWorkspace } from "@/shared/hooks/useWorkspace";
 import { useBoards } from "@/apps/project-management/hooks/useProjects";
 import { useObjectives, CONFIDENCE_CONFIG } from "@/shared/hooks/useGoals";
 import { useVelocity, useThroughput } from "@/shared/hooks/useAnalyticsV2";
+import GettingStartedChecklist from "@/shared/components/dashboard/GettingStartedChecklist";
 
 // ── Stat card ────────────────────────────────────────────────────────────────
 function StatCard({ label, value, sub, icon: Icon, color }) {

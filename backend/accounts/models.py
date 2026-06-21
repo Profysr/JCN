@@ -2,9 +2,7 @@ from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseU
 from django.db import models
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-
 from core.fields import UUIDv7Field
-
 
 class UserManager(BaseUserManager):
     def create_user(self, email, password=None, **extra_fields):
@@ -20,7 +18,6 @@ class UserManager(BaseUserManager):
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
         return self.create_user(email, password, **extra_fields)
-
 
 class User(AbstractBaseUser, PermissionsMixin):
     PREFIX = "usr"
@@ -55,7 +52,6 @@ class User(AbstractBaseUser, PermissionsMixin):
     def __str__(self):
         return self.email
 
-
 class UserProfile(models.Model):
     THEME_CHOICES = [("light", "Light"), ("dark", "Dark"), ("midnight", "Midnight")]
     ACCENT_CHOICES = [
@@ -72,7 +68,6 @@ class UserProfile(models.Model):
 
     def __str__(self):
         return f"Profile({self.user.email})"
-
 
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):

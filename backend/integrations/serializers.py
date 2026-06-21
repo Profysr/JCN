@@ -1,7 +1,6 @@
 from rest_framework import serializers
 from .models import TeamsIntegration, GoogleChatIntegration, IntegrationChannelMapping
 
-
 class TeamsIntegrationSerializer(serializers.ModelSerializer):
 
     class Meta:

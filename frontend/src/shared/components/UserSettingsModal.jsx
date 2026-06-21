@@ -114,7 +114,7 @@ function AvatarPicker({ user }) {
 
   const optionCls = (active) =>
     cn(
-      "flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-colors cursor-pointer",
+      "flex items-center gap-2 px-3 py-2 rounded border text-sm font-medium transition-colors cursor-pointer",
       active
         ? "border-primary bg-primary/10 text-primary"
         : "border-border text-muted-foreground hover:bg-accent hover:text-foreground",
@@ -192,7 +192,7 @@ function AvatarPicker({ user }) {
                 key={emoji}
                 onClick={() => selectIcon(emoji)}
                 className={cn(
-                  "w-9 h-9 rounded-lg flex items-center justify-center text-lg transition-colors hover:bg-accent",
+                  "w-9 h-9 rounded flex items-center justify-center text-lg transition-colors hover:bg-accent",
                   user?.avatar_type === "icon" && user?.avatar_icon === emoji
                     ? "bg-primary/15 ring-2 ring-primary"
                     : "bg-muted/40",
@@ -317,6 +317,7 @@ function PwField({ id, label, value, onChange }) {
 
 // ── Password tab ──────────────────────────────────────────────────────────────
 function PasswordTab() {
+  const { user } = useAuthStore();
   const [form, setForm] = useState({
     old_password: "",
     new_password1: "",
@@ -324,6 +325,7 @@ function PasswordTab() {
   });
   const [success, setSuccess] = useState(false);
   const [serverError, setError] = useState("");
+  const [resetSent, setResetSent] = useState(false);
 
   // Uses dj_rest_auth's built-in endpoint: POST /api/auth/password/change/
   const change = useMutation({
@@ -345,6 +347,15 @@ function PasswordTab() {
         data.non_field_errors?.[0] ||
         "Failed to change password.";
       setError(msg);
+    },
+  });
+
+  const reset = useMutation({
+    mutationFn: () =>
+      api.post("/api/auth/password/reset/", { email: user?.email }).then((r) => r.data),
+    onSuccess: () => {
+      setResetSent(true);
+      setTimeout(() => setResetSent(false), 6000);
     },
   });
 
@@ -391,7 +402,7 @@ function PasswordTab() {
         ))}
 
         {serverError && (
-          <div className="flex items-start gap-2 text-sm text-destructive bg-destructive/8 border border-destructive/20 rounded-lg px-3 py-2">
+          <div className="flex items-start gap-2 text-sm text-destructive bg-destructive/8 border border-destructive/20 rounded px-3 py-2">
             <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
             {serverError}
           </div>
@@ -408,6 +419,30 @@ function PasswordTab() {
           )}
         </div>
       </form>
+
+      <div className="border-t border-border pt-3">
+        <p className="text-sm font-medium mb-0.5">Forgot your current password?</p>
+        <p className="text-xs text-muted-foreground mb-3">
+          We'll send a reset link to{" "}
+          <span className="font-medium text-foreground">{user?.email}</span>.
+        </p>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={reset.isPending || resetSent}
+            onClick={() => reset.mutate()}
+          >
+            {reset.isPending ? "Sending…" : "Send reset link"}
+          </Button>
+          {resetSent && (
+            <span className="flex items-center gap-1.5 text-sm text-emerald-600 font-medium">
+              <Check className="w-3.5 h-3.5" /> Check your inbox
+            </span>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -482,30 +517,6 @@ const ACCENTS = Object.entries(ACCENT_COLORS).map(([value, { hex }]) => ({
 function AppearanceTab() {
   const { theme, accent, density, setTheme, setAccent, setDensity } =
     useThemeStore();
-  const [success, setSuccess] = useState(false);
-
-  const save = useMutation({
-    mutationFn: (data) => api.patch("/api/users/me/", data).then((r) => r.data),
-    onSuccess: (updated) => {
-      // qc.setQueryData(["me"], updated);
-      useAuthStore.setState((s) => ({ ...s, user: { ...s.user, ...updated } }));
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 2500);
-    },
-  });
-
-  const applyTheme = (v) => {
-    setTheme(v);
-    save.mutate({ theme: v });
-  };
-  const applyAccent = (v) => {
-    setAccent(v);
-    save.mutate({ accent_color: v });
-  };
-  const applyDensity = (v) => {
-    setDensity(v);
-    save.mutate({ density_mode: v });
-  };
 
   return (
     <div className="space-y-7">
@@ -516,12 +527,12 @@ function AppearanceTab() {
           {THEMES.map((t) => (
             <button
               key={t.value}
-              onClick={() => applyTheme(t.value)}
+              onClick={() => setTheme(t.value)}
               className={cn("flex flex-col items-center gap-1.5 group")}
             >
               <div
                 className={cn(
-                  "w-16 h-10 rounded-lg border-2 transition-all",
+                  "w-16 h-10 rounded border-2 transition-all",
                   t.preview,
                   theme === t.value
                     ? "border-primary ring-2 ring-primary/30"
@@ -565,7 +576,7 @@ function AppearanceTab() {
           {ACCENTS.map((a) => (
             <button
               key={a.value}
-              onClick={() => applyAccent(a.value)}
+              onClick={() => setAccent(a.value)}
               title={a.value}
               className={cn(
                 "w-7 h-7 rounded-full border-2 transition-transform hover:scale-110",
@@ -586,9 +597,9 @@ function AppearanceTab() {
           {DENSITIES.map((d) => (
             <button
               key={d.value}
-              onClick={() => applyDensity(d.value)}
+              onClick={() => setDensity(d.value)}
               className={cn(
-                "px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors",
+                "px-3 py-1.5 rounded border text-sm font-medium transition-colors",
                 density === d.value
                   ? "border-primary bg-primary/10 text-primary"
                   : "border-border text-muted-foreground hover:bg-accent",
@@ -600,11 +611,6 @@ function AppearanceTab() {
         </div>
       </div>
 
-      {success && (
-        <span className="flex items-center gap-1.5 text-sm text-emerald-600 font-medium">
-          <Check className="w-3.5 h-3.5" /> Appearance saved
-        </span>
-      )}
     </div>
   );
 }
@@ -683,7 +689,7 @@ export default function UserSettingsModal({ onClose, defaultTab = "me" }) {
               key={id}
               onClick={() => setActiveTab(id)}
               className={cn(
-                "w-full flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors text-left",
+                "w-full flex items-center gap-2.5 rounded px-3 py-2 text-sm font-medium transition-colors text-left",
                 activeTab === id
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:text-foreground hover:bg-accent",

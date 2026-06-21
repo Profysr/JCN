@@ -1,12 +1,11 @@
 from rest_framework import serializers
 
 from accounts.serializers import MiniUserSerializer
-from core.fields import PrefixedUUIDField
 from .models import Department, DepartmentMember, JobTitle, OrgProfile, ReportingLine, Team, TeamMember
 
 
 class JobTitleSerializer(serializers.ModelSerializer):
-    id = PrefixedUUIDField(read_only=True)
+    id = serializers.UUIDField(read_only=True)
 
     class Meta:
         model = JobTitle
@@ -15,7 +14,7 @@ class JobTitleSerializer(serializers.ModelSerializer):
 
 
 class MiniDepartmentSerializer(serializers.ModelSerializer):
-    id = PrefixedUUIDField(read_only=True)
+    id = serializers.UUIDField(read_only=True)
 
     class Meta:
         model = Department
@@ -23,7 +22,7 @@ class MiniDepartmentSerializer(serializers.ModelSerializer):
 
 
 class MiniMemberSerializer(serializers.ModelSerializer):
-    id = PrefixedUUIDField(read_only=True)
+    id = serializers.UUIDField(read_only=True)
     user = MiniUserSerializer(read_only=True)
 
     class Meta:
@@ -33,11 +32,11 @@ class MiniMemberSerializer(serializers.ModelSerializer):
 
 
 class DepartmentSerializer(serializers.ModelSerializer):
-    id = PrefixedUUIDField(read_only=True)
+    id = serializers.UUIDField(read_only=True)
     head = MiniMemberSerializer(read_only=True)
-    head_id = serializers.CharField(write_only=True, required=False, allow_null=True)
+    head_id = serializers.UUIDField(write_only=True, required=False, allow_null=True)
     parent = MiniDepartmentSerializer(read_only=True)
-    parent_id = serializers.CharField(write_only=True, required=False, allow_null=True)
+    parent_id = serializers.UUIDField(write_only=True, required=False, allow_null=True)
     member_count = serializers.SerializerMethodField()
 
     class Meta:
@@ -59,9 +58,9 @@ class DepartmentSerializer(serializers.ModelSerializer):
 
 
 class DepartmentMemberSerializer(serializers.ModelSerializer):
-    id = PrefixedUUIDField(read_only=True)
+    id = serializers.UUIDField(read_only=True)
     member = MiniMemberSerializer(read_only=True)
-    member_id = serializers.CharField(write_only=True)
+    member_id = serializers.UUIDField(write_only=True)
 
     class Meta:
         model = DepartmentMember
@@ -74,7 +73,7 @@ class DepartmentMemberSerializer(serializers.ModelSerializer):
 
 
 class MiniTeamSerializer(serializers.ModelSerializer):
-    id = PrefixedUUIDField(read_only=True)
+    id = serializers.UUIDField(read_only=True)
 
     class Meta:
         model = Team
@@ -82,11 +81,11 @@ class MiniTeamSerializer(serializers.ModelSerializer):
 
 
 class TeamSerializer(serializers.ModelSerializer):
-    id = PrefixedUUIDField(read_only=True)
+    id = serializers.UUIDField(read_only=True)
     lead = MiniMemberSerializer(read_only=True)
-    lead_id = serializers.CharField(write_only=True, required=False, allow_null=True)
+    lead_id = serializers.UUIDField(write_only=True, required=False, allow_null=True)
     department = MiniDepartmentSerializer(read_only=True)
-    department_id = serializers.CharField(write_only=True, required=False, allow_null=True)
+    department_id = serializers.UUIDField(write_only=True, required=False, allow_null=True)
     member_count = serializers.SerializerMethodField()
 
     class Meta:
@@ -108,9 +107,9 @@ class TeamSerializer(serializers.ModelSerializer):
 
 
 class TeamMemberSerializer(serializers.ModelSerializer):
-    id = PrefixedUUIDField(read_only=True)
+    id = serializers.UUIDField(read_only=True)
     member = MiniMemberSerializer(read_only=True)
-    member_id = serializers.CharField(write_only=True)
+    member_id = serializers.UUIDField(write_only=True)
 
     class Meta:
         model = TeamMember
@@ -123,9 +122,9 @@ class TeamMemberSerializer(serializers.ModelSerializer):
 
 
 class OrgProfileSerializer(serializers.ModelSerializer):
-    id = PrefixedUUIDField(read_only=True)
+    id = serializers.UUIDField(read_only=True)
     job_title = JobTitleSerializer(read_only=True)
-    job_title_id = serializers.CharField(write_only=True, required=False, allow_null=True)
+    job_title_id = serializers.UUIDField(write_only=True, required=False, allow_null=True)
 
     class Meta:
         model = OrgProfile
@@ -134,11 +133,11 @@ class OrgProfileSerializer(serializers.ModelSerializer):
 
 
 class ReportingLineSerializer(serializers.ModelSerializer):
-    id = PrefixedUUIDField(read_only=True)
+    id = serializers.UUIDField(read_only=True)
     manager = MiniMemberSerializer(read_only=True)
     report = MiniMemberSerializer(read_only=True)
-    manager_id = serializers.CharField(write_only=True)
-    report_id = serializers.CharField(write_only=True)
+    manager_id = serializers.UUIDField(write_only=True)
+    report_id = serializers.UUIDField(write_only=True)
 
     class Meta:
         model = ReportingLine
