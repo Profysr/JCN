@@ -123,11 +123,21 @@ class TeamMember(models.Model):
 
 class OrgProfile(models.Model):
     """Extends WorkspaceMember with org-specific attributes."""
+
+    class EmploymentType(models.TextChoices):
+        FULL_TIME = "full_time", "Full-time"
+        PART_TIME = "part_time", "Part-time"
+        CONTRACTOR = "contractor", "Contractor"
+        INTERN = "intern", "Intern"
+
     PREFIX = "ogp"
     id = UUIDv7Field()
     member = models.OneToOneField(WorkspaceMember, on_delete=models.CASCADE, related_name="org_profile")
     job_title = models.ForeignKey(
         JobTitle, on_delete=models.SET_NULL, null=True, blank=True, related_name="members"
+    )
+    employment_type = models.CharField(
+        max_length=20, choices=EmploymentType.choices, default=EmploymentType.FULL_TIME
     )
     employee_id = models.CharField(max_length=50, blank=True)
     start_date = models.DateField(null=True, blank=True)

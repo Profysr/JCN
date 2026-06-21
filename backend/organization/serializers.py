@@ -133,11 +133,42 @@ class OrgProfileSerializer(serializers.ModelSerializer):
     id = serializers.UUIDField(read_only=True)
     job_title = MiniJobTitleSerializer(read_only=True)
     job_title_id = serializers.UUIDField(write_only=True, required=False, allow_null=True)
+    departments = serializers.SerializerMethodField()
+    teams = serializers.SerializerMethodField()
+    manager = serializers.SerializerMethodField()
+    direct_reports_count = serializers.SerializerMethodField()
 
     class Meta:
         model = OrgProfile
-        fields = ["id", "job_title", "job_title_id", "employee_id", "start_date", "location", "bio", "updated_at"]
-        read_only_fields = ["id", "updated_at"]
+        fields = [
+            "id", "job_title", "job_title_id", "employment_type",
+            "employee_id", "start_date", "location", "bio",
+            "departments", "teams", "manager", "direct_reports_count",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "updated_at", "departments", "teams", "manager", "direct_reports_count"]
+
+    def get_departments(self, obj):
+        from .models import DepartmentMember
+        memberships = DepartmentMember.objects.filter(member=obj.member).select_related("department")
+        return [{"id": str(dm.department.id), "name": dm.department.name, "color": dm.department.color} for dm in memberships]
+
+    def get_teams(self, obj):
+        from .models import TeamMember
+        memberships = TeamMember.objects.filter(member=obj.member).select_related("team")
+        return [{"id": str(tm.team.id), "name": tm.team.name, "color": tm.team.color} for tm in memberships]
+
+    def get_manager(self, obj):
+        from .models import ReportingLine
+        line = ReportingLine.objects.filter(report=obj.member).select_related("manager", "manager__user").first()
+        if not line:
+            return None
+        mgr = line.manager
+        return {"id": str(mgr.id), "name": mgr.user.full_name, "email": mgr.user.email}
+
+    def get_direct_reports_count(self, obj):
+        from .models import ReportingLine
+        return ReportingLine.objects.filter(manager=obj.member).count()
 
 
 class ReportingLineSerializer(serializers.ModelSerializer):

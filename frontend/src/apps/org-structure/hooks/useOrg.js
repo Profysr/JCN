@@ -179,3 +179,31 @@ export const useOrgChart = (workspaceId) =>
     enabled: !!workspaceId,
     staleTime: 5 * 60 * 1000,
   });
+
+// ── Org Profile ───────────────────────────────────────────────────────────────
+const profileKey = (ws, memberId) => ["org-profile", ws, memberId];
+
+export const useOrgProfile = (workspaceId, memberId) =>
+  useQuery({
+    queryKey: profileKey(workspaceId, memberId),
+    queryFn: () =>
+      api
+        .get(`/api/workspaces/${workspaceId}/org/members/${memberId}/profile/`)
+        .then((r) => r.data),
+    enabled: !!workspaceId && !!memberId,
+    staleTime: 2 * 60 * 1000,
+  });
+
+export const useUpdateOrgProfile = (workspaceId, memberId) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data) =>
+      api
+        .patch(`/api/workspaces/${workspaceId}/org/members/${memberId}/profile/`, data)
+        .then((r) => r.data),
+    onSuccess: (updated) => {
+      qc.setQueryData(profileKey(workspaceId, memberId), updated);
+      qc.invalidateQueries({ queryKey: chartKey(workspaceId) });
+    },
+  });
+};

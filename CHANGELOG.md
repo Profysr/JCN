@@ -1950,30 +1950,39 @@ Mutation hooks: `useCreateDepartment`, `useUpdateDepartment`, `useDeleteDepartme
 
 ## vB.2 — Employee Profiles & Org Chart (Weeks 7–10)
 
-> Status: PLANNED 📋
+> Status: COMPLETE ✅
 
 **Backend**
 
-| Model | Key Fields | Notes |
-|-------|-----------|-------|
-| `EmployeeProfile` | `workspace_member` O2O, `department` FK (nullable), `job_title`, `employment_type` (FULL_TIME/PART_TIME/CONTRACTOR/INTERN), `start_date`, `reports_to` FK→User (nullable), `employee_id` (CharField) | Auto-created on `WorkspaceMember` creation via `post_save` signal |
+- `employment_type` field added to `OrgProfile` model — choices: `full_time / part_time / contractor / intern`; defaults to `full_time`; **migration required**: `python manage.py makemigrations organization --name add_employment_type_to_orgprofile && python manage.py migrate`
+- `OrgProfileSerializer` enriched with computed read fields: `departments` (dept chips with color), `teams` (team chips with color), `manager` (name + email of reporting-to manager), `direct_reports_count` (count of direct reports via `ReportingLine`)
+- Existing `GET/PATCH /api/workspaces/{ws}/org/members/{id}/profile/` endpoint now returns the full enriched profile — no new endpoint needed
 
-**API surface**
-- `GET/PATCH /api/workspaces/{ws}/members/{id}/profile/`
-- `GET /api/workspaces/{ws}/org-chart/` — full tree (dept → sub-depts → teams → members) in one response; used by the org chart page
+**Frontend — `src/apps/org-structure/hooks/useOrg.js`**
 
-**Frontend**
+- `useOrgProfile(workspaceId, memberId)` — fetches enriched profile; 2-min stale time
+- `useUpdateOrgProfile(workspaceId, memberId)` — PATCH profile; invalidates org chart cache on success
 
-- **Member Profile Card** (extended from existing `MembersPage`): shows job title, level badge, department, team(s), direct reports count, start date, employee ID — editable by admins inline
-- **Org Chart page** `/w/:ws/org-chart`:
-  - Tree layout: company root → departments → sub-departments → teams → members
-  - Zoom in/out (scroll wheel / pinch), drag to pan
-  - Each node: avatar, name, title — compact at low zoom, expanded at high zoom
-  - Click a node → profile card popover with quick links (send message, view tasks)
-  - Controls: "Collapse all" / "Expand all", view switcher (Hierarchy / By Department / By Team)
-  - Admin controls: drag node to re-parent (triggers `PATCH profile` for department/reports_to)
-- **Task filtering by team**: "Team" option added to `FilterBar` assignee picker in the Kanban board — selects all members of a team as a group filter
-- **Command Palette**: `@Backend Team` resolves to all team members as a compound assignee filter
+**Frontend — `MembersPage.jsx` (extended)**
+
+- Clicking any member row opens a slide-out **Profile Panel** (right side, 320px)
+- Panel shows: employment type badge (colour-coded: Full-time green / Part-time blue / Contractor amber / Intern violet), job title (editable dropdown for admins), departments + teams as coloured chips, manager name, direct reports count, employee ID, start date, location, bio — all inline-editable for admins (click → input, blur to save)
+- Selected row gets a primary-coloured left border + chevron rotates down
+- Panel closes when same row is re-clicked or `X` button pressed
+
+**Frontend — `OrgChartPage.jsx` (full rewrite)**
+
+- **Interactive SVG canvas** with CSS `transform: translate + scale` — smooth pan and zoom without a library
+- **Pan**: drag on the background (cursor changes to `grab`/`grabbing`)
+- **Zoom**: scroll wheel (`onWheel` listener, passive: false); zoom buttons in toolbar; displays `%` readout
+- **Fit to screen**: auto-zooms on data load; "Fit" button re-centers at any time
+- **Hierarchy view** (default): tree layout computed from `manager_id` links (`buildTree` → `layoutTree` using subtree-width algorithm); edges are bezier `<path>` curves; multiple roots auto-wrapped in a virtual "Company" root
+- **By Department view**: members grouped into department rectangles with coloured background + label; grid layout per dept
+- **Collapse/Expand**: each node with children shows a toggle badge (chevron + child count); "Collapse all" / "Expand all" toolbar buttons
+- **Node cards**: compact at zoom < 65% (avatar + name only); expanded shows job title + team list; click opens profile popover (top-right corner card with dept/team chips + role badge)
+- **Admin drag-to-reparent**: admins can drag any node onto another to set a new `ReportingLine` (`POST /org/reporting-lines/`); drag overlay follows cursor; target node highlighted in blue
+- **Dot-grid background**: subtle `<pattern>` element that pans with the canvas for visual depth
+- View switcher (Hierarchy / By Department) as segmented control in toolbar
 
 ---
 

@@ -137,6 +137,7 @@ The master index of every React Query key used in the codebase. Prefix-match inv
 ["org-team-members", workspaceId, teamId]
 ["org-job-titles",   workspaceId]
 ["org-chart",        workspaceId]
+["org-profile",      workspaceId, memberId]
 ```
 
 ---
@@ -150,6 +151,7 @@ How long data is considered fresh before React Query will refetch on next mount/
 | `Infinity` (never auto-stale) | `workspace`, `workspaces`, `boards`, `board`, `workspace-members`, `labels`, `statuses`, `saved-views`, `onboarding`, `import sources`, `presence`, `org-departments`, `org-dept-members`, `org-teams`, `org-team-members`, `org-job-titles` |
 | `60_000` (1 min) | `portfolio`, all `analytics` keys, `burndown` |
 | `5 * 60_000` (5 min) | `org-chart` |
+| `2 * 60_000` (2 min) | `org-profile` |
 | `30_000` (30 s) | `inbox`, `inbox-unread-count`, `integrations`, `api-keys`, `sprint detail` |
 | `15_000` (15 s) | `import jobs`, `webhook deliveries` |
 | default (`0`) | `tasks`, `task-detail`, `sprints list`, `approvals`, `attachments`, `automations`, `forms`, `wiki`, `children`, `dependencies` |
@@ -548,7 +550,7 @@ Create/revoke both invalidate this key.
 
 ### `useOrg.js`  *(src/apps/org-structure/hooks/useOrg.js)*
 
-All data hooks for the Org Structure module. Follows the same key-factory pattern as `useTasks.js`. All list/detail keys use `staleTime: Infinity` (near-static config data); only `org-chart` uses `5 * 60_000` because it aggregates across members.
+All data hooks for the Org Structure module. Follows the same key-factory pattern as `useTasks.js`. All list/detail keys use `staleTime: Infinity` (near-static config data); `org-chart` uses `5 * 60_000`; `org-profile` uses `2 * 60_000`.
 
 ```
 ["org-departments",  workspaceId]                  staleTime: Infinity
@@ -557,6 +559,7 @@ All data hooks for the Org Structure module. Follows the same key-factory patter
 ["org-team-members", workspaceId, teamId]          staleTime: Infinity
 ["org-job-titles",   workspaceId]                  staleTime: Infinity
 ["org-chart",        workspaceId]                  staleTime: 5 * 60_000
+["org-profile",      workspaceId, memberId]        staleTime: 2 * 60_000
 ```
 
 #### Query hooks
@@ -569,6 +572,7 @@ All data hooks for the Org Structure module. Follows the same key-factory patter
 | `useTeamMembers(ws, teamId)` | `org-team-members` | `GET /org/teams/{id}/members/` |
 | `useJobTitles(ws)` | `org-job-titles` | `GET /org/job-titles/` |
 | `useOrgChart(ws)` | `org-chart` | `GET /org/chart/` |
+| `useOrgProfile(ws, memberId)` | `org-profile` | `GET /org/members/{id}/profile/` |
 
 #### Mutation hooks
 
@@ -581,6 +585,32 @@ All mutations invalidate their respective list key. `useRemoveDepartmentMember` 
 | `useCreateTeam` / `useUpdateTeam` / `useDeleteTeam` | `org-teams` |
 | `useAddTeamMember` / `useRemoveTeamMember` | `org-teams`, `org-team-members` |
 | `useCreateJobTitle` | `org-job-titles` |
+| `useUpdateOrgProfile(ws, memberId)` | `setQueryData` on `org-profile` + invalidates `org-chart` |
+
+**`useUpdateOrgProfile`** — PATCH `/org/members/{id}/profile/`
+- `onSuccess`: `setQueryData(profileKey)` with the server response (no network round-trip for the panel), then `invalidateQueries(chartKey)` so the org chart node reflects the updated job title.
+
+#### `OrgProfileSerializer` response shape
+
+```json
+{
+  "id": "...",
+  "job_title": { "id": "...", "name": "Senior Engineer", "level": 3 },
+  "job_title_id": "<write-only>",
+  "employment_type": "full_time",
+  "employee_id": "EMP-042",
+  "start_date": "2023-04-01",
+  "location": "London",
+  "bio": "...",
+  "departments": [{ "id": "...", "name": "Engineering", "color": "#6366f1" }],
+  "teams": [{ "id": "...", "name": "Platform", "color": "#8b5cf6" }],
+  "manager": { "id": "...", "name": "Jane Smith", "email": "jane@..." },
+  "direct_reports_count": 3,
+  "updated_at": "..."
+}
+```
+
+`departments`, `teams`, `manager`, `direct_reports_count` are **read-only** — computed server-side from `DepartmentMember`, `TeamMember`, and `ReportingLine`. To change a member's department/team, use the department/team member endpoints. To change reporting lines, POST to `/org/reporting-lines/`.
 
 #### Write field convention
 
@@ -593,6 +623,21 @@ Backend serializers split read and write fields. Always use these write-only fie
 | `department_id` | Team's department (Department PK) |
 | `lead_id` | Team lead (WorkspaceMember PK) |
 | `member_id` | Member to add (WorkspaceMember PK) |
+| `job_title_id` | OrgProfile job title (JobTitle PK; send `null` to clear) |
+| `employment_type` | `"full_time"` \| `"part_time"` \| `"contractor"` \| `"intern"` |
+
+#### `OrgChartPage` — Interactive SVG canvas
+
+`OrgChartPage.jsx` is a fully client-side interactive canvas — **no external graph library**. Key design decisions:
+
+- **Pan**: `onMouseDown` on the SVG background stores `{ startX, startY }` in a `useRef` (not state — no re-render per mouse-move tick). `onMouseMove` updates `pan` state only on release / frame.
+- **Zoom**: `wheel` event listener added with `{ passive: false }` (must `preventDefault()` to stop page scroll). Zoom range: `0.3 – 2`.
+- **Fit-to-screen**: computed once on data load via `useEffect([nodes.length])`, exposes a toolbar button for re-centering.
+- **Hierarchy layout** (`buildTree` + `layoutTree`): builds a tree from `manager_id` links; `computeSubtreeWidth` recurses bottom-up so parent x-positions center over their children. Multiple roots get wrapped in a virtual `"__root__"` node.
+- **Department layout** (`buildDeptLayout`): members bucketed by `departments[]`; each bucket rendered as a coloured SVG `<rect>` with a 4-column grid of node cards inside.
+- **Collapse/expand**: `collapsed: Set<id>` in state; `layoutTree` prunes collapsed subtrees from position computation; the toggle badge renders as a `<g>` element at the bottom-center of the node card (not a `foreignObject` — avoids cross-browser foreignObject click issues with SVG transforms).
+- **Drag-to-reparent** (admin only): `onMouseDown` on a node card stores `drag: { node, screenX, screenY }` in state; `onMouseMove` updates `drag.screenX/Y`; `onMouseUp` fires `POST /org/reporting-lines/` if `dragOver !== drag.node.id`. The drag overlay is a fixed-position `<div>` that follows `drag.screenX/Y` — it lives outside the SVG to avoid transform inheritance.
+- **Dot-grid background**: a `<pattern>` element with `patternUnits="userSpaceOnUse"` and its `x/y` attributes set to `pan.x % (20 * zoom)` so the grid tiles infinitely as the canvas is dragged.
 
 ---
 
