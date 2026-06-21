@@ -83,7 +83,11 @@ class WorkspaceListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        workspaces = Workspace.objects.filter(members__user=request.user).distinct()
+        workspaces = (
+            Workspace.objects.filter(members__user=request.user)
+            .prefetch_related("members")
+            .distinct()
+        )
         serializer = WorkspaceSerializer(
             workspaces, many=True, context={"request": request}
         )
@@ -351,18 +355,18 @@ class InboxBulkUpdateView(APIView):
         )
 
         if action == "read":
-            qs.update(status=InboxItem.Status.READ)
+            updated = qs.update(status=InboxItem.Status.READ)
         elif action == "archive":
-            qs.update(status=InboxItem.Status.ARCHIVED)
+            updated = qs.update(status=InboxItem.Status.ARCHIVED)
         elif action == "snooze":
             if not snooze_until:
                 return Response(
                     {"detail": "snoozed_until required."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            qs.update(status=InboxItem.Status.SNOOZED, snoozed_until=snooze_until)
+            updated = qs.update(status=InboxItem.Status.SNOOZED, snoozed_until=snooze_until)
 
-        return Response({"updated": qs.count()})
+        return Response({"updated": updated})
 
 
 # ==============================================================================

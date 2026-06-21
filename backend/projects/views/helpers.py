@@ -142,10 +142,14 @@ def _task_list_qs():
         .prefetch_related("labels", "blocked_by_deps")
         .annotate(
             _child_count=Count("children", distinct=True),
+            _done_child_count=Count(
+                "children", filter=DQ(children__status__is_done=True), distinct=True
+            ),
             _subtask_count=Count("subtasks", distinct=True),
             _done_subtask_count=Count(
                 "subtasks", filter=DQ(subtasks__is_done=True), distinct=True
             ),
+            _comment_count=Count("comments", distinct=True),
             _pending_approval_count=Count(
                 "approvals",
                 filter=DQ(approvals__status__in=["pending", "changes_requested"]),

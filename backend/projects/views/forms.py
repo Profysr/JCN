@@ -2,6 +2,7 @@ from rest_framework import permissions, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
+from django.db.models import Count
 from ..models import Board, Form, FormField, FormSubmission, TaskStatus, Task
 from ..serializers import (
     FormSerializer,
@@ -25,7 +26,7 @@ class FormListCreateView(APIView):
     def get(self, request, workspace_id, board_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
         board = get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
-        forms = board.forms.prefetch_related("fields")
+        forms = board.forms.prefetch_related("fields").annotate(_submission_count=Count("submissions", distinct=True))
         return Response(FormSerializer(forms, many=True).data)
 
     def post(self, request, workspace_id, board_id):

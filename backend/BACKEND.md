@@ -82,7 +82,7 @@ Default permission: `IsAuthenticated`. Public endpoints (forms, invite detail) u
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/workspaces/` | List workspaces the current user belongs to |
+| GET | `/api/workspaces/` | List workspaces the current user belongs to. Queryset prefetches `members` so `WorkspaceSerializer` reads `member_count` and `my_role` from the cache — no per-workspace queries. |
 | POST | `/api/workspaces/` | Create workspace; caller auto-added as ADMIN member |
 | GET | `/api/workspaces/{ws}/` | Workspace detail |
 | PATCH | `/api/workspaces/{ws}/` | Update workspace name/logo |
@@ -371,7 +371,7 @@ Available `{metric}` values:
 
 | Metric | What it computes |
 |--------|-----------------|
-| `overview` | Total/open/done/overdue counts + open by priority |
+| `overview` | Total/open/done/overdue counts + open by priority. `tasks` and `open_tasks` computed in a single `aggregate()` call. |
 | `velocity` | Completed story points or task count per sprint |
 | `cycle_time` | Avg time from In Progress → Done (median, p75, p90) |
 | `lead_time` | Avg time from Backlog → Done |
@@ -383,6 +383,7 @@ Available `{metric}` values:
 | `overdue_aging` | Distribution of overdue tasks by days late |
 | `completion_rate` | % tasks completed on-time vs late vs overdue |
 | `estimation_accuracy` | Estimated vs actual hours deviation |
+| `sprint_burndown` | Ideal vs actual burndown for a single sprint. Requires `sprint_id` + `board_id`. Fetches all "first done" timestamps in one annotated query (`Min(created_at)` per task), then accumulates in Python — never issues a per-day COUNT query. |
 
 ### Miscellaneous
 
@@ -442,9 +443,9 @@ Available `{metric}` values:
 
 | Model | Key Fields / Indexes | Notes |
 |-------|---------------------|-------|
-| `Board` | `workspace` (FK), `name`, `board_type`, `status`, `is_private` | Custom manager `for_user()` filters private boards. ordering: -id |
+| `Board` | `workspace` (FK), `name`, `board_type`, `status`, `is_private`, `key` (CharField max 6, db_index) | Custom manager `for_user()` filters private boards. ordering: -id. `key` is a short uppercase slug reserved for v2 sequential task IDs — not yet populated or unique-constrained. |
 | `TaskStatus` | `board` (FK), `name`, `color`, `order`, `is_done` | unique: board+name; ordering: order |
-| `Task` | `board` (FK), `parent` (FK self), `title`, `status` (FK), `priority`, `assignee` (FK), `labels` (M2M), `sprint` (FK), `due_date`, `estimate_points`, `task_type`, `order` | 6 indexes: board+status, board+assignee, board+priority, board+sprint, assignee+status, board+due_date |
+| `Task` | `board` (FK), `parent` (FK self), `title`, `status` (FK), `priority`, `assignee` (FK), `labels` (M2M), `sprint` (FK), `due_date`, `estimate_points`, `task_type`, `order` | 6 indexes: board+status+order (covering — filter+sort in one scan), board+assignee, board+priority, board+sprint, assignee+status, board+due_date. `Meta.ordering = ["-id"]`; per-column Kanban sort uses explicit `.order_by("status_id", "order")` in the task list view. |
 | `SubTask` | `task` (FK), `title`, `is_done`, `order` | ordering: order |
 | `TaskComment` | `task` (FK), `author` (FK), `body`, `parent` (FK self, nullable, CASCADE, related_name="replies") | index: task+created_at. `parent=None` → top-level comment; `parent!=None` → reply (one level only). Deleting a parent cascades to its replies. |
 | `Label` | `board` (FK), `name`, `color` | unique: board+name |
@@ -581,6 +582,24 @@ Serializers use `_get_reactions_cached(obj)`: checks Redis first, falls back to 
 
 ---
 
+## Helper Utilities (`organization/views.py`)
+
+Module-level helpers shared across all org-structure views:
+
+| Helper | Purpose |
+|--------|---------|
+| `_get_workspace(workspace_id, user)` | 404 if user not a member (same pattern as projects) |
+| `_require_module(workspace, module_key)` | 403 if module not enabled; no-op for `always_on` modules |
+| `_require_admin(workspace, user)` | 403 if not workspace owner or admin member |
+| `_require_admin_or_self(workspace, requesting_user, target_member)` | Allows self-edit; otherwise delegates to `_require_admin`. Used by `OrgProfileView.patch`. |
+
+**Serializer conventions:**
+- `DepartmentSerializer` and `TeamSerializer`: `get_member_count` uses `len(obj.memberships.all())` — reads from the prefetch cache set by `prefetch_related("memberships")` in list views.
+- `OrgProfileSerializer`: uses `MiniJobTitleSerializer` (fields: `id`, `name`, `level`) — omits `created_at` which is irrelevant in this context.
+- `OrgChartView`: prefetches `reports_to` only (not `reports_to__manager__user`) — `manager_id` is a stored FK column, no join needed.
+
+---
+
 ## Helper Utilities (`projects/views/helpers.py`)
 
 | Helper | Purpose |
@@ -588,7 +607,7 @@ Serializers use `_get_reactions_cached(obj)`: checks Redis first, falls back to 
 | `get_workspace_for_user(workspace_id, user)` | 404 if user not a member |
 | `_get_board(workspace_id, board_id, user)` | Scoped board lookup |
 | `_get_task(workspace_id, board_id, task_id, user, qs=)` | Scoped task lookup; pass custom queryset |
-| `_task_list_qs()` | Annotated queryset for task list (5 count annotations, no N+1) |
+| `_task_list_qs()` | Annotated queryset for task list — 7 count annotations (`_child_count`, `_done_child_count`, `_subtask_count`, `_done_subtask_count`, `_comment_count`, `_pending_approval_count`, `_approved_approval_count`), no N+1. `TaskSerializer` and `TaskCardSerializer` read these via `getattr(obj, "_<annotation>", fallback)` so they're safe for both list (annotation) and single-object (fallback) contexts. |
 | `_task_detail_qs()` | Lean queryset for single-task detail — `select_related(status, assignee, created_by, sprint, parent)` + `prefetch_related(labels, field_values__field)`. No subtasks/comments/activities prefetch — those are served by their own endpoints. |
 | `_apply_task_filters(qs, params, user)` | Apply FilterBar params to a Task queryset |
 | `_require_board_perm(user, board, role)` | Raise 403 if insufficient role |
@@ -626,10 +645,12 @@ All other events (presence, reactions, typing, etc.) are internal-only and never
 2. **No N+1**: Every view queryset must use `select_related` for FK/O2O and `prefetch_related` for M2M/reverse FK before serialization. Attach prefetches in `get_queryset()` on the view, not the serializer.
 3. **Composite indexes** for every multi-column filter/order pattern. Follow naming: `<model_abbr>_<fields>_idx`.
 4. **Bulk writes**: use `bulk_create()` / `bulk_update()` for multi-row mutations (import runner, automation actions, batch status changes).
-5. **`QuerySet.update()`** over fetch-loop-save for batch field mutations.
+5. **`QuerySet.update()`** over fetch-loop-save for batch field mutations. Capture the return value (`updated = qs.update(...)`) — it is the affected row count. Never call `.count()` after `.update()`.
 6. **`values()` / `values_list()`** when only a subset of columns is needed (counts, ID lists, analytics aggregations).
 7. **Never call `.count()` inside a loop** — aggregate in one query before the loop.
 8. **Analytics views**: compute with `.annotate()` + `.values()` + DB aggregations, never Python loops over full querysets.
+9. **Never call `.count()` or `.filter()` on a prefetched relation** — it bypasses the prefetch cache and hits the DB. Use `len(obj.relation.all())` for totals and Python iteration/`sum()` for filtered counts. Only use annotation-based counts (rule 2 above) when the queryset is shared across many rows (list views).
+10. **`SerializerMethodField` counts** must use `getattr(obj, "_annotation", fallback)` so the same serializer works safely for both list views (annotation path, zero extra queries) and single-object responses (fallback path, one query).
 
 ---
 

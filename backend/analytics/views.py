@@ -1,6 +1,6 @@
 import datetime
 import logging
-from django.db.models import Count, Min, Sum
+from django.db.models import Count, Min, Q, Sum
 from django.db.models.functions import TruncDate, TruncMonth, TruncWeek
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -104,12 +104,16 @@ def _metric_overview(workspace, params):
         for r in workload_qs
     ]
 
+    task_agg = all_tasks.aggregate(
+        total=Count("id"),
+        open=Count("id", filter=Q(status__is_done=False)),
+    )
     return {
         "overview": {
             "boards": workspace.boards.count(),
-            "tasks": all_tasks.count(),
+            "tasks": task_agg["total"],
             "members": workspace.members.count(),
-            "open_tasks": all_tasks.filter(status__is_done=False).count(),
+            "open_tasks": task_agg["open"],
         },
         "tasks_by_status": list(
             all_tasks.values("status__name", "status__color")
@@ -810,10 +814,27 @@ def _metric_sprint_burndown(workspace, params):
     sprint_tasks = sprint.tasks.all()
     total = sprint_tasks.count()
 
+    done_name = done_status.name if done_status else "Done"
+
+    # One query: earliest date each task was marked done.
+    first_done_by_date = {}
+    for row in (
+        TaskActivity.objects.filter(
+            task__sprint=sprint,
+            verb=TaskActivity.Verb.STATUS,
+            meta__to=done_name,
+        )
+        .values("task_id")
+        .annotate(first_done=Min("created_at"))
+    ):
+        d = row["first_done"].date()
+        first_done_by_date[d] = first_done_by_date.get(d, 0) + 1
+
     today = datetime.date.today()
     days_list, ideal, actual = [], [], []
     total_days = max((sprint.end_date - sprint.start_date).days, 1)
     current = sprint.start_date
+    cumulative_done = 0
     idx = 0
 
     while current <= sprint.end_date:
@@ -821,18 +842,8 @@ def _metric_sprint_burndown(workspace, params):
         ideal.append(round(total * (1 - idx / total_days), 1))
 
         if current <= today:
-            done_by_day = (
-                TaskActivity.objects.filter(
-                    task__sprint=sprint,
-                    verb=TaskActivity.Verb.STATUS,
-                    created_at__date__lte=current,
-                    meta__to=done_status.name if done_status else "Done",
-                )
-                .values("task")
-                .distinct()
-                .count()
-            )
-            actual.append(max(total - done_by_day, 0))
+            cumulative_done += first_done_by_date.get(current, 0)
+            actual.append(max(total - cumulative_done, 0))
         else:
             actual.append(None)
 

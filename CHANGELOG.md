@@ -1832,6 +1832,54 @@ The existing `DashboardPage` (workspace home, fixed stats + recent projects) and
 
 ---
 
+## vB.0 — Phase B Foundations (Architecture & Module System)
+
+> Status: COMPLETED ✅
+
+### Architectural decisions
+
+**CLI-first development practice**
+All generated artifacts (Django apps, migrations, package installs) must be created via CLI commands — never hand-written. `python manage.py startapp`, `makemigrations`, `migrate`, `npm install` are the source of truth. Hand-writing migration files or `apps.py` introduces drift and skips framework validation hooks.
+
+**Frontend `src/apps/` modular architecture**
+The frontend moved from a flat `src/pages/` + `src/components/` layout to a feature-sliced `src/apps/` model. Each product module is a self-contained entity:
+
+```
+src/apps/project-management/   — PM pages, components, hooks
+src/apps/org-structure/        — Org Structure pages, components, hooks
+src/apps/hr-management/        — HR Management pages, components, hooks
+src/shared/                    — cross-app UI primitives, layout, hooks, lib
+```
+
+Motivation: if a product area ever ships as a standalone application (or a white-label), it can be extracted cleanly. Each `apps/<module>` folder only imports from `src/shared/` or its own folder — never from a sibling app.
+
+**Module system for granular feature gating**
+JCN's product areas are licensed as modules. A workspace can use JCN for project management only. Paying users unlock Org Structure; enterprise users unlock HR Management. The system has three layers:
+
+- **`core/modules.py`** — single source of truth: `MODULE_REGISTRY` dict with tier (`free` / `pro` / `enterprise`), `always_on` flag, and `depends_on` list.
+- **`WorkspaceModule` model** — DB record of which modules each workspace has enabled.
+- **`_require_module(workspace, key)` utility** — raises HTTP 403 if the module is disabled; used at the top of every org/HR view.
+- **`ModuleContext` + `useModules()` hook** — React context that fetches `/api/workspaces/:id/modules/` and exposes `isEnabled(key)` to any component.
+
+Dependency graph: `hr_management` depends on `org_structure`. Disabling `org_structure` while `hr_management` is active is blocked server-side.
+
+**`organization` Django app — additive org layer**
+`WorkspaceMember` is NOT replaced or modified. Org structure models (`Department`, `Team`, `JobTitle`, `OrgProfile`, `ReportingLine`) are an additive layer that FK into `WorkspaceMember`. This means org structure can be enabled/disabled without touching the workspace access model.
+
+All endpoints live under `/api/workspaces/<id>/org/…` and require the `org_structure` module to be enabled.
+
+**Dependency upgrades to latest stable**
+All pip dependencies bumped to latest stable for maximum long-term support window:
+- Django 5.2.15 LTS (supported until April 2028)
+- dj-rest-auth 7.2.0 + django-allauth 65.18.0 (compatible pair)
+- channels 4.3.2 + channels-redis 4.3.0 + daphne 4.2.2
+- celery 5.6.3, redis 7.4.1, Pillow 12.2.0, and all others at latest stable
+
+**Future: desktop app for HR time tracking**
+An Electron or Tauri desktop app will be built as a separate module for HR time tracking. It connects to the JCN backend via WebSocket, lets HR managers see real-time working hours per employee, and runs as an always-on background process on the user's machine. This is scoped to a future phase and will not ship as part of the web app — it's a standalone binary that authenticates with the same JWT token.
+
+---
+
 ## vB.1 — Departments & Teams (Weeks 4–6)
 
 > Status: PLANNED 📋

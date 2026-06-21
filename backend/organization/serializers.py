@@ -13,6 +13,14 @@ class JobTitleSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at"]
 
 
+class MiniJobTitleSerializer(serializers.ModelSerializer):
+    id = serializers.UUIDField(read_only=True)
+
+    class Meta:
+        model = JobTitle
+        fields = ["id", "name", "level"]
+
+
 class MiniDepartmentSerializer(serializers.ModelSerializer):
     id = serializers.UUIDField(read_only=True)
 
@@ -49,7 +57,7 @@ class DepartmentSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "updated_at"]
 
     def get_member_count(self, obj):
-        return obj.memberships.count()
+        return len(obj.memberships.all())
 
     def create(self, validated_data):
         validated_data["workspace"] = self.context["workspace"]
@@ -98,7 +106,7 @@ class TeamSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "updated_at"]
 
     def get_member_count(self, obj):
-        return obj.memberships.count()
+        return len(obj.memberships.all())
 
     def create(self, validated_data):
         validated_data["workspace"] = self.context["workspace"]
@@ -123,7 +131,7 @@ class TeamMemberSerializer(serializers.ModelSerializer):
 
 class OrgProfileSerializer(serializers.ModelSerializer):
     id = serializers.UUIDField(read_only=True)
-    job_title = JobTitleSerializer(read_only=True)
+    job_title = MiniJobTitleSerializer(read_only=True)
     job_title_id = serializers.UUIDField(write_only=True, required=False, allow_null=True)
 
     class Meta:

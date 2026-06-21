@@ -55,9 +55,13 @@ def _require_admin(workspace, user):
         raise PermissionDenied("Admin access required.")
 
 
+def _require_admin_or_self(workspace, requesting_user, target_member):
+    if target_member.user == requesting_user:
+        return
+    _require_admin(workspace, requesting_user)
+
+
 # ── Departments ───────────────────────────────────────────────────────────────
-
-
 class DepartmentListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -82,7 +86,6 @@ class DepartmentListCreateView(APIView):
         ser.is_valid(raise_exception=True)
         ser.save()
         return Response(ser.data, status=status.HTTP_201_CREATED)
-
 
 class DepartmentDetailView(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -158,8 +161,6 @@ class DepartmentMemberDetailView(APIView):
 
 
 # ── Teams ─────────────────────────────────────────────────────────────────────
-
-
 class TeamListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -243,7 +244,6 @@ class TeamMemberListCreateView(APIView):
         ser.save()
         return Response(ser.data, status=status.HTTP_201_CREATED)
 
-
 class TeamMemberDetailView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -258,8 +258,6 @@ class TeamMemberDetailView(APIView):
 
 
 # ── Job Titles ────────────────────────────────────────────────────────────────
-
-
 class JobTitleListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -282,28 +280,26 @@ class JobTitleListCreateView(APIView):
 class JobTitleDetailView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
-    def patch(self, request, workspace_id, title_id):
-        workspace = _get_workspace(workspace_id, request.user)
+    def _get_title(self, workspace_id, title_id, user):
+        workspace = _get_workspace(workspace_id, user)
         _require_module(workspace, "org_structure")
-        _require_admin(workspace, request.user)
-        title = get_object_or_404(JobTitle, id=title_id, workspace=workspace)
+        _require_admin(workspace, user)
+        return get_object_or_404(JobTitle, id=title_id, workspace=workspace)
+
+    def patch(self, request, workspace_id, title_id):
+        title = self._get_title(workspace_id, title_id, request.user)
         ser = JobTitleSerializer(title, data=request.data, partial=True)
         ser.is_valid(raise_exception=True)
         ser.save()
         return Response(ser.data)
 
     def delete(self, request, workspace_id, title_id):
-        workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace, "org_structure")
-        _require_admin(workspace, request.user)
-        title = get_object_or_404(JobTitle, id=title_id, workspace=workspace)
+        title = self._get_title(workspace_id, title_id, request.user)
         title.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 # ── Org Profiles ──────────────────────────────────────────────────────────────
-
-
 class OrgProfileView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -318,14 +314,7 @@ class OrgProfileView(APIView):
         workspace = _get_workspace(workspace_id, request.user)
         _require_module(workspace, "org_structure")
         member = get_object_or_404(WorkspaceMember, id=member_id, workspace=workspace)
-        is_admin = (
-            workspace.owner == request.user
-            or WorkspaceMember.objects.filter(
-                workspace=workspace, user=request.user, role="admin"
-            ).exists()
-        )
-        if not is_admin and member.user != request.user:
-            raise PermissionDenied("You can only edit your own org profile.")
+        _require_admin_or_self(workspace, request.user, member)
         profile, _ = OrgProfile.objects.get_or_create(member=member)
         ser = OrgProfileSerializer(profile, data=request.data, partial=True)
         ser.is_valid(raise_exception=True)
@@ -334,8 +323,6 @@ class OrgProfileView(APIView):
 
 
 # ── Reporting Lines ───────────────────────────────────────────────────────────
-
-
 class ReportingLineListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -374,8 +361,6 @@ class ReportingLineDetailView(APIView):
 
 
 # ── Org Chart ─────────────────────────────────────────────────────────────────
-
-
 class OrgChartView(APIView):
     """Tree of all workspace members with dept, team, title, and manager context."""
 
@@ -391,8 +376,9 @@ class OrgChartView(APIView):
                 "department_memberships__department",
                 "team_memberships__team",
                 "org_profile__job_title",
-                "reports_to__manager__user",
+                "reports_to",
             )
+            .order_by("id")
         )
         nodes = []
         for m in members:

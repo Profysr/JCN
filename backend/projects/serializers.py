@@ -454,13 +454,13 @@ class TaskSerializer(serializers.ModelSerializer):
         )
 
     def get_comment_count(self, obj):
-        return obj.comments.count()
+        return getattr(obj, "_comment_count", obj.comments.count())
 
     def get_child_count(self, obj):
-        return obj.children.count()
+        return getattr(obj, "_child_count", obj.children.count())
 
     def get_done_child_count(self, obj):
-        return obj.children.filter(status__is_done=True).count()
+        return getattr(obj, "_done_child_count", obj.children.filter(status__is_done=True).count())
 
     def get_blocked_by_ids(self, obj):
         return [str(d.blocker_id) for d in obj.blocked_by_deps.all()]
@@ -808,7 +808,7 @@ class WikiPageSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "slug", "created_by", "created_at", "updated_at"]
 
     def get_children_count(self, obj):
-        return obj.children.count()
+        return len(obj.children.all())
 
     def create(self, validated_data):
         from django.utils.text import slugify
@@ -874,7 +874,7 @@ class FormSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "token", "created_by", "created_at", "updated_at"]
 
     def get_submission_count(self, obj):
-        return obj.submissions.count()
+        return getattr(obj, "_submission_count", obj.submissions.count())
 
 
 class FormSubmissionSerializer(serializers.ModelSerializer):
@@ -987,10 +987,10 @@ class ApprovalSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "status", "requested_by", "created_at", "updated_at"]
 
     def get_approved_count(self, obj):
-        return obj.reviewers.filter(status=ApprovalReviewer.Status.APPROVED).count()
+        return sum(1 for r in obj.reviewers.all() if r.status == ApprovalReviewer.Status.APPROVED)
 
     def get_total_count(self, obj):
-        return obj.reviewers.count()
+        return len(obj.reviewers.all())
 
     def create(self, validated_data):
         reviewer_ids = validated_data.pop("reviewer_ids")

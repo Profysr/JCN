@@ -27,13 +27,15 @@ class WorkspaceSerializer(serializers.ModelSerializer):
         read_only_fields = ["owner", "created_at"]
 
     def get_member_count(self, obj):
-        return obj.members.count()
+        return len(obj.members.all())
 
     def get_my_role(self, obj):
         request = self.context.get("request")
         if request and request.user.is_authenticated:
-            member = obj.members.filter(user=request.user).first()
-            return member.role if member else None
+            uid = request.user.id
+            for m in obj.members.all():
+                if m.user_id == uid:
+                    return m.role
         return None
 
     def validate(self, data):
