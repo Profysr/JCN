@@ -196,7 +196,7 @@ class TaskListCreateView(APIView):
 
     def get(self, request, workspace_id, board_id):
         board = _get_board(workspace_id, board_id, request.user)
-        tasks = _task_list_qs().filter(board=board)
+        tasks = _task_list_qs().filter(board=board).order_by("status_id", "order")
         tasks = _apply_task_filters(tasks, request.query_params, user=request.user)
         return Response(TaskCardSerializer(tasks, many=True).data)
 

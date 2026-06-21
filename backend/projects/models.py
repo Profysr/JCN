@@ -1,5 +1,6 @@
+import re
 import uuid
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Count, Q
 from django.conf import settings
 from workspaces.models import Workspace
@@ -61,6 +62,7 @@ class Board(models.Model):
         Workspace, on_delete=models.CASCADE, related_name="boards"
     )
     name = models.CharField(max_length=255)
+    key = models.CharField(max_length=6, blank=True, db_index=True)
     description = models.TextField(blank=True)
     board_type = models.CharField(
         max_length=20, choices=BoardType.choices, default=BoardType.GENERAL
@@ -175,9 +177,9 @@ class Task(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ["order", "-id"]
+        ordering = ["-id"]
         indexes = [
-            models.Index(fields=["board", "status"], name="task_board_status_idx"),
+            models.Index(fields=["board", "status", "order"], name="task_board_status_order_idx"),
             models.Index(fields=["board", "assignee"], name="task_board_assignee_idx"),
             models.Index(fields=["board", "priority"], name="task_board_priority_idx"),
             models.Index(fields=["board", "sprint"], name="task_board_sprint_idx"),
