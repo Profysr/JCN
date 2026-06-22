@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from "react-router-dom";
-import { NAV_ITEMS, workspaceUrl } from "@/shared/lib/navLinks";
+import { WORKSPACE_NAV_ITEMS, workspaceUrl } from "@/shared/lib/navLinks";
 import { useModules } from "@/shared/hooks/useModules";
 import {
   FolderKanban,
@@ -44,7 +44,7 @@ const MODULE_VISUAL = {
   },
 };
 
-const WORKSPACE_PAGES = NAV_ITEMS.filter((item) => item.workspaceLevel);
+const WORKSPACE_PAGES = WORKSPACE_NAV_ITEMS;
 
 export default function AppLauncherPage() {
   const { workspaceId } = useParams();

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { cn } from "@/shared/lib/utils";
 import { ChevronDown, Search, ChevronsLeft } from "lucide-react";
 import BoardTypeIcon from "@/shared/components/ui/BoardTypeIcon";
@@ -13,25 +13,11 @@ import { usePermission } from "@/contexts/PermissionsContext";
 import { useModules } from "@/shared/hooks/useModules";
 import { useInboxUnreadCount } from "@/shared/hooks/useInbox";
 import { useBoards } from "@/apps/project-management/hooks/useProjects";
-import { useMembers } from "@/shared/hooks/useMembers";
-import { useRoles } from "@/shared/hooks/useRoles";
+
 import UserPanel from "@/shared/components/layout/UserPanel";
 import { Tooltip } from "@/shared/components/ui/tooltip";
-
-/** App-key → permission flag that gates access to that app. */
-const APP_PERM = {
-  org_structure: "org.view",
-  hr_management: "hr.view",
-};
-
-/** Derive active app context from the current URL path. */
-function getActiveApp(pathname) {
-  if (/\/departments|\/teams|\/org-chart/.test(pathname)) return "org_structure";
-  // /hr routes AND /members/:id (member detail) live in the HR shell
-  if (/\/hr/.test(pathname) || /\/members\/[^/]/.test(pathname)) return "hr_management";
-  if (/\/members$/.test(pathname) || /\/settings/.test(pathname)) return "workspace";
-  return "projects";
-}
+import AppSwitcherDropdown from "@/shared/components/layout/AppSwitcherDropdown";
+import { useActiveApp } from "@/shared/hooks/useActiveApp";
 
 export default function Sidebar({
   workspace,
@@ -49,25 +35,11 @@ export default function Sidebar({
 }) {
   const inboxUnread = useInboxUnreadCount(workspaceId);
   const { data: boards = [] } = useBoards(workspaceId);
-  const { data: members = [] } = useMembers(workspaceId);
-  const { data: roles = [] } = useRoles(workspaceId);
   const [openSections, setOpenSections] = useState({});
   const { can, isOwner, isLoading: permsLoading } = usePermission();
   const { isEnabled, isLoading: modulesLoading } = useModules();
-  const location = useLocation();
+  const activeApp = useActiveApp();
   const navigate = useNavigate();
-
-  const roleByName = Object.fromEntries(roles.map((r) => [r.name, r]));
-
-  const appMemberCount = (appKey) => {
-    const permKey = APP_PERM[appKey];
-    if (!permKey) return members.length;
-    return members.filter(
-      (m) => roleByName[m.role]?.permissions?.[permKey] === true,
-    ).length;
-  };
-
-  const activeApp = getActiveApp(location.pathname);
 
   const enabledApps = APP_DEFS.filter(
     (app) => !app.moduleKey || modulesLoading || isEnabled(app.moduleKey),
@@ -113,10 +85,12 @@ export default function Sidebar({
     }))
     .filter((group) => group.items.length > 0);
 
-  // In expanded mode, only show the active app's groups.
+  // In expanded mode, show active app's groups; launcher shows only workspace group.
   // In collapsed mode, show all (icon-only view — no app context needed).
   const navGroups = collapsed
     ? allNavGroups
+    : activeApp === "launcher"
+    ? allNavGroups.filter((g) => g.app === "workspace")
     : allNavGroups.filter((g) => g.app === activeApp);
 
   return (
@@ -145,47 +119,11 @@ export default function Sidebar({
       ) : (
         /* ── Expanded header — app switcher + workspace row ── */
         <div className="border-b border-border/40">
-          {/* App switcher tabs */}
-          <div className="flex items-center gap-0.5 px-1.5 pt-2 pb-1">
-            {enabledApps.map((app) => {
-              const Icon = app.icon;
-              const isActive = activeApp === app.key;
-              return (
-                <Tooltip key={app.key} content={app.label} side="bottom" delayDuration={400}>
-                  <button
-                    onClick={() =>
-                      navigate(workspaceUrl(workspaceId, APP_LANDING[app.key]))
-                    }
-                    className={cn(
-                      "flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-md text-xs font-medium transition-colors flex-1 min-w-0",
-                      isActive
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                    )}
-                  >
-                    <div className="flex items-center gap-1">
-                      <Icon className="w-3.5 h-3.5 flex-shrink-0" />
-                      <span className="truncate">{app.shortLabel}</span>
-                    </div>
-                    {members.length > 0 && (
-                      <span className={cn(
-                        "text-[10px] leading-none font-normal",
-                        isActive ? "text-primary/60" : "text-muted-foreground/50",
-                      )}>
-                        {appMemberCount(app.key)}
-                      </span>
-                    )}
-                  </button>
-                </Tooltip>
-              );
-            })}
-          </div>
-
-          {/* Workspace row — secondary, doubles as collapse toggle */}
+          {/* Workspace row — doubles as collapse toggle */}
           <button
             onClick={onToggleCollapse}
             title="Collapse sidebar"
-            className="flex items-center gap-2 w-full px-3 py-2 hover:bg-accent/50 transition-colors group"
+            className="flex items-center gap-2 w-full px-3 pt-2 pb-1.5 hover:bg-accent/50 transition-colors group"
           >
             <div className="w-5 h-5 rounded bg-primary flex items-center justify-center text-primary-foreground font-bold text-[10px] flex-shrink-0 overflow-hidden">
               {workspace?.logo ? (
@@ -199,11 +137,43 @@ export default function Sidebar({
             </span>
             <ChevronsLeft className="w-3 h-3 text-muted-foreground/40 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
           </button>
+
+          {/* App switcher — tabs on regular pages, dropdown on launcher */}
+          {activeApp === "launcher" ? (
+            <AppSwitcherDropdown workspaceId={workspaceId} />
+          ) : (
+            <div className="flex items-center gap-0.5 px-1.5 pb-1">
+              {enabledApps.map((app) => {
+                const Icon = app.icon;
+                const isActive = activeApp === app.key;
+                return (
+                  <Tooltip key={app.key} content={app.label} side="bottom" delayDuration={400}>
+                    <button
+                      onClick={() =>
+                        navigate(workspaceUrl(workspaceId, APP_LANDING[app.key]))
+                      }
+                      className={cn(
+                        "flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-md text-xs font-medium transition-colors flex-1 min-w-0",
+                        isActive
+                          ? "bg-primary/10 text-primary"
+                          : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                      )}
+                    >
+                      <div className="flex items-center gap-1">
+                        <Icon className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span className="truncate">{app.shortLabel}</span>
+                      </div>
+                    </button>
+                  </Tooltip>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Search bar — hidden when collapsed */}
-      {!collapsed && (
+      {/* Search bar — hidden when collapsed or on launcher page */}
+      {!collapsed && activeApp !== "launcher" && (
         <div className="px-3 pt-3 pb-2">
           <button
             onClick={onOpenPalette}

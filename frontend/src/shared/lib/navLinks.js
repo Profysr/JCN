@@ -1,32 +1,55 @@
 import {
-  LayoutDashboard,
   FolderKanban,
-  Users,
-  Users2,
-  Building2,
   Network,
+  Users2,
   Settings,
-  Target,
-  BarChart2,
+  Users,
   Plug,
   Key,
   Webhook,
-  Upload,
-  Inbox,
-  CalendarDays,
-  Timer,
-  BarChart3,
 } from "lucide-react";
 
-/** App definitions — used by the app launcher page. */
+import { PM_NAV_ITEMS, PM_NAV_GROUPS } from "@/apps/project-management/nav";
+import { ORG_NAV_ITEMS, ORG_NAV_GROUPS } from "@/apps/org-structure/nav";
+import { HR_NAV_ITEMS, HR_NAV_GROUPS } from "@/apps/hr-management/nav";
+
+// ── App definitions ────────────────────────────────────────────────────────────
+
 export const APP_DEFS = [
-  { key: "projects", label: "Projects", shortLabel: "Projects", moduleKey: null, icon: FolderKanban },
-  { key: "org_structure", label: "Org Structure", shortLabel: "Org", moduleKey: "org_structure", icon: Network },
-  { key: "hr_management", label: "HR Management", shortLabel: "HR", moduleKey: "hr_management", icon: Users2 },
-  { key: "workspace", label: "Workspace", shortLabel: "Workspace", moduleKey: null, icon: Settings },
+  {
+    key: "projects",
+    label: "Project Management",
+    shortLabel: "Projects",
+    moduleKey: null,
+    permission: null,
+    icon: FolderKanban,
+  },
+  {
+    key: "org_structure",
+    label: "Org Structure",
+    shortLabel: "Org",
+    moduleKey: "org_structure",
+    permission: "org.view",
+    icon: Network,
+  },
+  {
+    key: "hr_management",
+    label: "HR Management",
+    shortLabel: "HR",
+    moduleKey: "hr_management",
+    permission: "hr.view",
+    icon: Users2,
+  },
+  {
+    key: "workspace",
+    label: "Workspace",
+    shortLabel: "Workspace",
+    moduleKey: null,
+    permission: null,
+    icon: Settings,
+  },
 ];
 
-/** Maps app key → the path to navigate to when switching into that app. */
 export const APP_LANDING = {
   projects: "boards",
   org_structure: "departments",
@@ -34,149 +57,16 @@ export const APP_LANDING = {
   workspace: "members",
 };
 
-/**
- * Single source of truth for workspace navigation items.
- * Used by AppLayout (NavLink `to`) and CommandPalette (action + desc).
- */
-export const NAV_ITEMS = [
-  {
-    key: "dashboards",
-    icon: LayoutDashboard,
-    label: "Dashboards",
-    desc: "Overview & analytics",
-    path: "dashboards",
-  },
-  {
-    key: "boards",
-    icon: FolderKanban,
-    label: "Boards",
-    desc: "All boards",
-    path: "boards",
-    collapsible: true,
-  },
-  {
-    key: "my-work",
-    icon: Inbox,
-    label: "My Work",
-    desc: "Tasks assigned to you",
-    path: "my-work",
-  },
-  {
-    key: "goals",
-    icon: Target,
-    label: "Goals",
-    desc: "OKRs & objectives",
-    path: "goals",
-  },
-  {
-    key: "analytics",
-    icon: BarChart2,
-    label: "Analytics",
-    desc: "Velocity, flow & team metrics",
-    path: "analytics",
-    permission: "report.view",
-  },
-  // {
-  //   key: "roadmap",
-  //   icon: Map,
-  //   label: "Roadmap",
-  //   desc: "Sprint timeline",
-  //   path: "roadmap",
-  // },
-  {
-    key: "departments",
-    icon: Building2,
-    label: "Departments",
-    desc: "Company departments & structure",
-    path: "departments",
-    permission: "org.view",
-    moduleKey: "org_structure",
-  },
-  {
-    key: "teams",
-    icon: Users2,
-    label: "Teams",
-    desc: "Teams & their members",
-    path: "teams",
-    permission: "org.view",
-    moduleKey: "org_structure",
-  },
-  {
-    key: "org-chart",
-    icon: Network,
-    label: "Org Chart",
-    desc: "Company org chart",
-    path: "org-chart",
-    permission: "org.view",
-    moduleKey: "org_structure",
-  },
-  {
-    key: "hr-dashboard",
-    icon: BarChart3,
-    label: "HR Overview",
-    desc: "Headcount, leave & attendance summary",
-    path: "hr",
-    permission: "hr.view",
-    moduleKey: "hr_management",
-    end: true,
-  },
-  {
-    key: "hr-leave",
-    icon: CalendarDays,
-    label: "Leave",
-    desc: "Leave requests & balances",
-    path: "hr/leave",
-    permission: "hr.view",
-    moduleKey: "hr_management",
-  },
-  {
-    key: "hr-attendance",
-    icon: Timer,
-    label: "Attendance",
-    desc: "Clock-in/out & team hours",
-    path: "hr/attendance",
-    permission: "hr.view",
-    moduleKey: "hr_management",
-  },
+// ── Workspace-level nav ────────────────────────────────────────────────────────
+// Items that govern the workspace itself, not any individual app.
+
+export const WORKSPACE_NAV_ITEMS = [
   {
     key: "members",
     icon: Users,
     label: "Members",
     desc: "Manage team members",
     path: "members",
-    workspaceLevel: true,
-  },
-  {
-    key: "integrations",
-    icon: Plug,
-    label: "Integrations",
-    desc: "Teams, Google Chat webhooks",
-    path: "settings/integrations",
-    workspaceLevel: true,
-  },
-  {
-    key: "api-keys",
-    icon: Key,
-    label: "API Keys",
-    desc: "Programmatic API access",
-    path: "settings/api",
-    workspaceLevel: true,
-  },
-  {
-    key: "webhooks",
-    icon: Webhook,
-    label: "Webhooks",
-    desc: "Outbound event webhooks",
-    path: "settings/webhooks",
-    workspaceLevel: true,
-  },
-  {
-    key: "import",
-    icon: Upload,
-    label: "Import",
-    desc: "Migrate from Jira, Trello, ClickUp…",
-    path: "settings/import",
-    workspaceLevel: true,
   },
   {
     key: "settings",
@@ -185,57 +75,55 @@ export const NAV_ITEMS = [
     desc: "Workspace settings",
     path: "settings",
     end: true,
-    workspaceLevel: true,
+  },
+  {
+    key: "integrations",
+    icon: Plug,
+    label: "Integrations",
+    desc: "Teams, Google Chat webhooks",
+    path: "settings/integrations",
+  },
+  {
+    key: "api-keys",
+    icon: Key,
+    label: "API Keys",
+    desc: "Programmatic API access",
+    path: "settings/api",
+  },
+  {
+    key: "webhooks",
+    icon: Webhook,
+    label: "Webhooks",
+    desc: "Outbound event webhooks",
+    path: "settings/webhooks",
   },
 ];
 
-/**
- * Grouped nav — used by the sidebar to render section labels between links.
- * `app` ties a group to an app context so the sidebar can filter by active app.
- */
-export const NAV_GROUPS = [
-  {
-    label: null,
-    app: "projects",
-    items: ["dashboards", "boards"],
-  },
-  {
-    label: "Work",
-    app: "projects",
-    items: ["my-work", "goals"],
-  },
-  {
-    label: "Insights",
-    app: "projects",
-    items: ["analytics"],
-  },
-  {
-    label: "People",
-    app: "org_structure",
-    items: ["departments", "teams", "org-chart"],
-  },
-  {
-    label: "HR",
-    app: "hr_management",
-    items: ["hr-dashboard", "hr-leave", "hr-attendance"],
-  },
+const WORKSPACE_NAV_GROUPS = [
   {
     label: "Workspace",
-    app: "workspace",
-    items: [
-      "members",
-      "integrations",
-      "api-keys",
-      "webhooks",
-      "import",
-      "settings",
-    ],
+    items: ["members", "settings", "integrations", "api-keys", "webhooks"],
   },
+];
+
+// ── Aggregated exports (backward compat — command palette, search, etc.) ──────
+
+export const NAV_ITEMS = [
+  ...PM_NAV_ITEMS,
+  ...ORG_NAV_ITEMS,
+  ...HR_NAV_ITEMS,
+  ...WORKSPACE_NAV_ITEMS,
+];
+
+export const NAV_GROUPS = [
+  ...PM_NAV_GROUPS.map((g) => ({ ...g, app: "projects" })),
+  ...ORG_NAV_GROUPS.map((g) => ({ ...g, app: "org_structure" })),
+  ...HR_NAV_GROUPS.map((g) => ({ ...g, app: "hr_management" })),
+  ...WORKSPACE_NAV_GROUPS.map((g) => ({ ...g, app: "workspace" })),
 ];
 
 const _byKey = Object.fromEntries(NAV_ITEMS.map((n) => [n.key, n]));
 
-/** Returns NAV_GROUPS with full item objects resolved. */
 export function resolvedNavGroups() {
   return NAV_GROUPS.map((g) => ({
     ...g,

@@ -155,17 +155,14 @@ export default function App() {
           <Route path="/w/:workspaceId" element={<AppLayout />}>
             <Route element={<SuspenseOutlet />}>
               <Route index element={<Navigate to="apps" replace />} />
-              <Route path="apps" element={<AppLauncherPage />} />
+              <Route path="apps" element={<AppLauncherPage />} handle={{ app: "launcher" }} />
 
               {/* Boards */}
-              <Route path="boards" element={<ProjectsPage />} />
-              <Route path="boards/:boardId" element={<KanbanPage />} />
-              <Route path="boards/:boardId/wiki" element={<WikiPage />} />
-              <Route
-                path="boards/:boardId/wiki/:pageId"
-                element={<WikiPage />}
-              />
-              <Route path="boards/:boardId/forms" element={<FormsPage />} />
+              <Route path="boards" element={<ProjectsPage />} handle={{ app: "projects" }} />
+              <Route path="boards/:boardId" element={<KanbanPage />} handle={{ app: "projects" }} />
+              <Route path="boards/:boardId/wiki" element={<WikiPage />} handle={{ app: "projects" }} />
+              <Route path="boards/:boardId/wiki/:pageId" element={<WikiPage />} handle={{ app: "projects" }} />
+              <Route path="boards/:boardId/forms" element={<FormsPage />} handle={{ app: "projects" }} />
               {/* ‼️ Automation disabled
             <Route
               path="boards/:boardId/automations"
@@ -173,14 +170,14 @@ export default function App() {
             /> */}
 
               {/* Org Structure — gated by org_structure module */}
-              <Route element={<ProtectedModuleRoute moduleKey="org_structure" />}>
+              <Route element={<ProtectedModuleRoute moduleKey="org_structure" />} handle={{ app: "org_structure" }}>
                 <Route path="departments" element={<DepartmentsPage />} />
                 <Route path="teams" element={<TeamsPage />} />
                 <Route path="org-chart" element={<OrgChartPage />} />
               </Route>
 
               {/* HR Management — gated by hr_management module */}
-              <Route element={<ProtectedModuleRoute moduleKey="hr_management" />}>
+              <Route element={<ProtectedModuleRoute moduleKey="hr_management" />} handle={{ app: "hr_management" }}>
                 <Route path="hr" element={<HRDashboardPage />} />
                 <Route path="hr/leave" element={<LeavePage />} />
                 <Route path="hr/attendance" element={<AttendancePage />} />
@@ -189,21 +186,18 @@ export default function App() {
 
               {/* Workspace */}
               {/* <Route path="roadmap" element={<RoadmapPage />} /> */}
-              <Route path="dashboards" element={<DashboardsPage />} />
-              <Route path="analytics" element={<AnalyticsPage />} />
-              <Route path="goals" element={<GoalsPage />} />
-              <Route path="my-work" element={<MyWorkPage />} />
-              <Route path="members" element={<MembersPage />} />
+              <Route path="dashboards" element={<DashboardsPage />} handle={{ app: "projects" }} />
+              <Route path="analytics" element={<AnalyticsPage />} handle={{ app: "projects" }} />
+              <Route path="goals" element={<GoalsPage />} handle={{ app: "projects" }} />
+              <Route path="my-work" element={<MyWorkPage />} handle={{ app: "projects" }} />
+              <Route path="members" element={<MembersPage />} handle={{ app: "workspace" }} />
 
               {/* Settings */}
-              <Route path="settings" element={<SettingsPage />} />
-              <Route
-                path="settings/integrations"
-                element={<IntegrationsPage />}
-              />
-              <Route path="settings/api" element={<APIKeysPage />} />
-              <Route path="settings/webhooks" element={<WebhooksPage />} />
-              <Route path="settings/import" element={<ImportPage />} />
+              <Route path="settings" element={<SettingsPage />} handle={{ app: "workspace" }} />
+              <Route path="settings/integrations" element={<IntegrationsPage />} handle={{ app: "workspace" }} />
+              <Route path="settings/api" element={<APIKeysPage />} handle={{ app: "workspace" }} />
+              <Route path="settings/webhooks" element={<WebhooksPage />} handle={{ app: "workspace" }} />
+              <Route path="settings/import" element={<ImportPage />} handle={{ app: "workspace" }} />
             </Route>
           </Route>
         </Route>
