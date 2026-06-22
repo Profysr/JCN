@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 import GoogleButton from "@/shared/components/auth/GoogleButton";
+import { useToast } from "@/shared/components/ui/toast";
 import api from "@/shared/lib/api";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
@@ -30,6 +31,7 @@ export default function RegisterPage() {
     password1: "",
     password2: "",
   });
+  const { toast } = useToast();
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [googleError, setGoogleError] = useState("");
@@ -81,7 +83,14 @@ export default function RegisterPage() {
       }
       await handlePostAuth(null);
     } catch (err) {
-      setErrors(err.response?.data || {});
+      const data = err.response?.data || {};
+      setErrors(data);
+      const msg =
+        data.non_field_errors?.[0] ||
+        data.email?.[0] ||
+        data.detail ||
+        "Registration failed. Please check the form.";
+      toast.error("Registration failed", msg);
     } finally {
       setLoading(false);
     }

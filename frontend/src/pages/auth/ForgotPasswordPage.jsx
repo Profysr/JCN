@@ -13,8 +13,10 @@ import {
   CardTitle,
 } from "@/shared/components/ui/card";
 import api from "@/shared/lib/api";
+import { useToast } from "@/shared/components/ui/toast";
 
 export default function ForgotPasswordPage() {
+  const { toast } = useToast();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
@@ -29,11 +31,12 @@ export default function ForgotPasswordPage() {
       setSent(true);
     } catch (err) {
       const data = err?.response?.data || {};
-      setError(
+      const msg =
         data.email?.[0] ||
-          data.detail ||
-          "Something went wrong. Please try again.",
-      );
+        data.detail ||
+        "Something went wrong. Please try again.";
+      setError(msg);
+      toast.error("Failed to send reset link", msg);
     } finally {
       setLoading(false);
     }

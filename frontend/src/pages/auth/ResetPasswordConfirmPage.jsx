@@ -13,6 +13,7 @@ import {
   CardTitle,
 } from "@/shared/components/ui/card";
 import api from "@/shared/lib/api";
+import { useToast } from "@/shared/components/ui/toast";
 
 /**
  * Handles /reset-password/:uid/:token — the link sent by dj_rest_auth.
@@ -22,6 +23,7 @@ export default function ResetPasswordConfirmPage() {
   const { uid, token } = useParams();
   const [form, setForm] = useState({ new_password1: "", new_password2: "" });
   const [show, setShow] = useState({ p1: false, p2: false });
+  const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
@@ -59,6 +61,7 @@ export default function ResetPasswordConfirmPage() {
         data.non_field_errors?.[0] ||
         "Reset failed. The link may have expired.";
       setError(msg);
+      toast.error("Password reset failed", msg);
     } finally {
       setLoading(false);
     }

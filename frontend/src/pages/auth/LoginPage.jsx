@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 import GoogleButton from "@/shared/components/auth/GoogleButton";
+import { useToast } from "@/shared/components/ui/toast";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
@@ -22,6 +23,7 @@ export default function LoginPage() {
   const prefillEmail = searchParams.get("email") || "";
   const login = useAuthStore((s) => s.login);
 
+  const { toast } = useToast();
   const [form, setForm] = useState({ email: prefillEmail, password: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -36,10 +38,10 @@ export default function LoginPage() {
       await login(form.email, form.password);
       navigate(next);
     } catch (err) {
-      setError(
-        err.response?.data?.non_field_errors?.[0] ||
-          "Invalid email or password.",
-      );
+      const msg =
+        err.response?.data?.non_field_errors?.[0] || "Invalid email or password.";
+      setError(msg);
+      toast.error("Sign in failed", msg);
     } finally {
       setLoading(false);
     }

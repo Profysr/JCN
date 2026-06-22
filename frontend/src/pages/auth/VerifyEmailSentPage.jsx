@@ -11,11 +11,13 @@ import {
   CardTitle,
 } from "@/shared/components/ui/card";
 import api from "@/shared/lib/api";
+import { useToast } from "@/shared/components/ui/toast";
 
 export default function VerifyEmailSentPage() {
   const [searchParams] = useSearchParams();
   const email = searchParams.get("email") || "your email";
 
+  const { toast } = useToast();
   const [resending, setResending] = useState(false);
   const [resent, setResent] = useState(false);
   const [error, setError] = useState("");
@@ -26,8 +28,11 @@ export default function VerifyEmailSentPage() {
     try {
       await api.post("/api/auth/registration/resend-email/", { email });
       setResent(true);
-    } catch {
-      setError("Could not resend. Please try registering again.");
+    } catch (err) {
+      const msg =
+        err?.response?.data?.detail || "Could not resend. Please try registering again.";
+      setError(msg);
+      toast.error("Failed to resend email", msg);
     } finally {
       setResending(false);
     }
