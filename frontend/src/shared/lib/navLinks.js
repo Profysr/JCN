@@ -18,7 +18,7 @@ import {
   BarChart3,
 } from "lucide-react";
 
-/** App definitions — used by the app switcher in the sidebar. */
+/** App definitions — used by the app launcher page. */
 export const APP_DEFS = [
   { key: "projects", label: "Projects", shortLabel: "Projects", moduleKey: null, icon: FolderKanban },
   { key: "org_structure", label: "Org Structure", shortLabel: "Org", moduleKey: "org_structure", icon: Network },
@@ -144,6 +144,7 @@ export const NAV_ITEMS = [
     label: "Members",
     desc: "Manage team members",
     path: "members",
+    workspaceLevel: true,
   },
   {
     key: "integrations",
@@ -151,6 +152,7 @@ export const NAV_ITEMS = [
     label: "Integrations",
     desc: "Teams, Google Chat webhooks",
     path: "settings/integrations",
+    workspaceLevel: true,
   },
   {
     key: "api-keys",
@@ -158,6 +160,7 @@ export const NAV_ITEMS = [
     label: "API Keys",
     desc: "Programmatic API access",
     path: "settings/api",
+    workspaceLevel: true,
   },
   {
     key: "webhooks",
@@ -165,6 +168,7 @@ export const NAV_ITEMS = [
     label: "Webhooks",
     desc: "Outbound event webhooks",
     path: "settings/webhooks",
+    workspaceLevel: true,
   },
   {
     key: "import",
@@ -172,6 +176,7 @@ export const NAV_ITEMS = [
     label: "Import",
     desc: "Migrate from Jira, Trello, ClickUp…",
     path: "settings/import",
+    workspaceLevel: true,
   },
   {
     key: "settings",
@@ -180,6 +185,7 @@ export const NAV_ITEMS = [
     desc: "Workspace settings",
     path: "settings",
     end: true,
+    workspaceLevel: true,
   },
 ];
 

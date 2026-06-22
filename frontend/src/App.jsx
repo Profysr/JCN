@@ -75,6 +75,7 @@ const DashboardsPage = lazy(() => import("@/pages/workspace/DashboardsPage"));
 const AnalyticsPage = lazy(() => import("@/pages/workspace/AnalyticsPage"));
 const GoalsPage = lazy(() => import("@/pages/workspace/GoalsPage"));
 const MyWorkPage = lazy(() => import("@/pages/workspace/MyWorkPage"));
+const AppLauncherPage = lazy(() => import("@/pages/workspace/AppLauncherPage"));
 const MembersPage = lazy(() => import("@/pages/workspace/MembersPage"));
 const SettingsPage = lazy(() => import("@/pages/workspace/SettingsPage"));
 
@@ -153,7 +154,8 @@ export default function App() {
           {/* AppLayout shell loads eagerly; page content lazy-loads inside SuspenseOutlet */}
           <Route path="/w/:workspaceId" element={<AppLayout />}>
             <Route element={<SuspenseOutlet />}>
-              <Route index element={<Navigate to="dashboards" replace />} />
+              <Route index element={<Navigate to="apps" replace />} />
+              <Route path="apps" element={<AppLauncherPage />} />
 
               {/* Boards */}
               <Route path="boards" element={<ProjectsPage />} />

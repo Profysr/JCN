@@ -57,11 +57,8 @@ export default function Sidebar({
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Build role lookup by name for fast permission checks
   const roleByName = Object.fromEntries(roles.map((r) => [r.name, r]));
 
-  // Count members whose role grants access to each app.
-  // projects is always_on → everyone has access.
   const appMemberCount = (appKey) => {
     const permKey = APP_PERM[appKey];
     if (!permKey) return members.length;
@@ -71,6 +68,10 @@ export default function Sidebar({
   };
 
   const activeApp = getActiveApp(location.pathname);
+
+  const enabledApps = APP_DEFS.filter(
+    (app) => !app.moduleKey || modulesLoading || isEnabled(app.moduleKey),
+  );
 
   const toggleSection = (key) =>
     setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -117,11 +118,6 @@ export default function Sidebar({
   const navGroups = collapsed
     ? allNavGroups
     : allNavGroups.filter((g) => g.app === activeApp);
-
-  // Enabled apps for the switcher
-  const enabledApps = APP_DEFS.filter(
-    (app) => !app.moduleKey || modulesLoading || isEnabled(app.moduleKey),
-  );
 
   return (
     <aside

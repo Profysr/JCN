@@ -2230,78 +2230,9 @@ report.view       settings.manage   api_keys.manage
 
 ---
 
-## vE.4 — App Setup Flows & Cross-App Roster Import (Week 24) --- Hold it for the future
-
-> Status: PARTIAL ⚡ — Step 1 (welcome screen) shipped; steps 2–4 (roster import wizard) deferred to a future phase.
-> **Intent:** When an admin enables a new app, give them a guided setup flow that seeds the app with the right members in one action — not a manual re-invite process. This is the headline convenience feature of the ecosystem.
-
-**Frontend — App Setup Wizard (shown on first visit to a newly-enabled app)**
-
-- Step 1: Welcome screen — what this app does, what setup is needed ✅
-- Step 2: **"Import members from another app"** — admin picks a source app (e.g. "Projects") and a role mapping: "Projects Admin → HR Manager, Projects Member → HR Member, Projects Viewer → HR Viewer"; preview shows who will be added with which role
-- Step 3: Confirm & apply — backend bulk-creates `RoleAssignment` records scoped to the target app's permission set
-- Step 4: Done — links to the app's main page
-
-**Backend**
-
-- `POST /api/workspaces/{ws}/apps/{app_key}/setup/seed-from-app/` — payload: `{source_app, role_mapping: [{source_role_id, target_role_id}]}`; reads existing `RoleAssignment` records for the source app's permission scope; bulk-creates `RoleAssignment` rows scoped to the target app; returns `{seeded: N, skipped: N}`
-- Idempotent: members who already have the target app's access are skipped, not duplicated
-
----
-
 ## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-## PHASE F — WORKSPACE FEDERATION (Weeks 25–26)
-
-## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-> **Goal:** Once a workspace is fully configured — members added, roles defined, app access assigned — an admin can carry that configuration into a new JCN workspace with a single action. "Set up once, deploy everywhere."
->
-> **What this is NOT:** App-to-app live data sync. Projects tasks do not flow into HR records. HR leave data does not appear in project boards. This phase is purely about user identity and access configuration — not operational data integration between apps.
-
----
-
-## vF.1 — Cross-Workspace Member Seeding (Week 25)
-
-> Status: PLANNED 📋
-> **Intent:** An organization running multiple JCN workspaces (e.g. one per client account, one per subsidiary) can onboard a new workspace's member roster from an existing one in one click — no manual re-inviting of every person.
-
-**Backend**
-
-- `FederationLink` model: `source_workspace` FK, `target_workspace` FK, `created_by` FK, `role_mapping` JSONField (`[{source_role_id, target_role_id}]`), `created_at` — records which workspace was seeded from which
-- `POST /api/workspaces/{ws}/federation/seed/` — payload: `{source_workspace_slug, role_mapping}`; reads `WorkspaceMember` roster from the source workspace (caller must be admin of both); bulk-creates `WorkspaceInvite` rows (or direct `WorkspaceMember` if user already has a JCN account) in the target; fires invite emails for new users; returns `{seeded: N, invited: N, skipped: N}`
-- Permission gate: caller must be admin of both source and target workspace — a non-admin cannot pull a roster they don't manage
-
-**Frontend — Workspace Settings → Members → Import from workspace**
-
-- "Import members" button in the members page header
-- Modal: workspace picker (lists workspaces the admin manages), role mapping table (source roles left, target role dropdowns right), preview of members to be added with their mapped role, confirm button
-- Progress toast: "Seeding 47 members…" with live count update
-
----
-
-## vF.2 — Federation Dashboard & Audit (Week 26)
-
-> Status: PLANNED 📋
-> **Intent:** Give admins visibility into which workspaces are federated, when the last seed happened, and what the role mapping looks like — so cross-workspace access is manageable and auditable.
-
-**Backend**
-
-- `GET /api/workspaces/{ws}/federation/` — returns `FederationLink` records where this workspace is source or target; includes `member_count`, `last_seeded_at`, `role_mapping`
-- `DELETE /api/workspaces/{ws}/federation/{id}/` — removes the link record (does NOT remove already-added members; this is a record-keeping action, not a sync revocation)
-- All seed operations logged to `AuditEvent` (already exists from v2.1.0) with action `federation.seed`
-
-**Frontend — Workspace Settings → Federation tab**
-
-- Federation card per linked workspace: name, direction (source / target), member count seeded, last seed date, role mapping summary, "Re-seed" button (adds any new members that joined the source since last seed), "Remove link" button
-- Audit log: filter `AuditEvent` by `federation.*` to see full seeding history with actor + timestamp
-- Empty state: "No federated workspaces yet" with explanation and "Import members from another workspace" CTA
-
----
-
-## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-## PHASE G — PLATFORM & LAUNCH (Weeks 27–30)
+## PHASE G — PLATFORM & LAUNCH (Weeks 25–28)
 
 ## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -2394,6 +2325,87 @@ report.view       settings.manage   api_keys.manage
 
 ---
 
+## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## POST-LAUNCH — FUTURE RELEASE
+
+## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+> These items are deferred until after the platform launch (Phase G). They are fully specced and ready to pick up — not needed for initial launch but natural next steps once the core ecosystem is live.
+
+---
+
+## vE.4 — App Setup Flows & Cross-App Roster Import
+
+> Status: DEFERRED 🔜 — Step 1 (welcome screen) shipped in Phase E; steps 2–4 (roster import wizard) ship here post-launch.
+> **Intent:** When an admin enables a new app, give them a guided setup flow that seeds the app with the right members in one action — not a manual re-invite process. This is the headline convenience feature of the ecosystem.
+
+**Frontend — App Setup Wizard (shown on first visit to a newly-enabled app)**
+
+- Step 1: Welcome screen — what this app does, what setup is needed ✅ (already shipped)
+- Step 2: **"Import members from another app"** — admin picks a source app (e.g. "Projects") and a role mapping: "Projects Admin → HR Manager, Projects Member → HR Member, Projects Viewer → HR Viewer"; preview shows who will be added with which role
+- Step 3: Confirm & apply — backend bulk-creates `RoleAssignment` records scoped to the target app's permission set
+- Step 4: Done — links to the app's main page
+
+**Backend**
+
+- `POST /api/workspaces/{ws}/apps/{app_key}/setup/seed-from-app/` — payload: `{source_app, role_mapping: [{source_role_id, target_role_id}]}`; reads existing `RoleAssignment` records for the source app's permission scope; bulk-creates `RoleAssignment` rows scoped to the target app; returns `{seeded: N, skipped: N}`
+- Idempotent: members who already have the target app's access are skipped, not duplicated
+
+---
+
+## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## PHASE F — WORKSPACE FEDERATION (Post-Launch)
+
+## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+> **Goal:** Once a workspace is fully configured — members added, roles defined, app access assigned — an admin can carry that configuration into a new JCN workspace with a single action. "Set up once, deploy everywhere."
+>
+> **What this is NOT:** App-to-app live data sync. Projects tasks do not flow into HR records. HR leave data does not appear in project boards. This phase is purely about user identity and access configuration — not operational data integration between apps.
+>
+> **Depends on:** Phase G (billing & plans) being live — federation is most valuable to paying customers managing multiple workspaces.
+
+---
+
+## vF.1 — Cross-Workspace Member Seeding
+
+> Status: PLANNED 📋
+> **Intent:** An organization running multiple JCN workspaces (e.g. one per client account, one per subsidiary) can onboard a new workspace's member roster from an existing one in one click — no manual re-inviting of every person.
+
+**Backend**
+
+- `FederationLink` model: `source_workspace` FK, `target_workspace` FK, `created_by` FK, `role_mapping` JSONField (`[{source_role_id, target_role_id}]`), `created_at` — records which workspace was seeded from which
+- `POST /api/workspaces/{ws}/federation/seed/` — payload: `{source_workspace_slug, role_mapping}`; reads `WorkspaceMember` roster from the source workspace (caller must be admin of both); bulk-creates `WorkspaceInvite` rows (or direct `WorkspaceMember` if user already has a JCN account) in the target; fires invite emails for new users; returns `{seeded: N, invited: N, skipped: N}`
+- Permission gate: caller must be admin of both source and target workspace — a non-admin cannot pull a roster they don't manage
+
+**Frontend — Workspace Settings → Members → Import from workspace**
+
+- "Import members" button in the members page header
+- Modal: workspace picker (lists workspaces the admin manages), role mapping table (source roles left, target role dropdowns right), preview of members to be added with their mapped role, confirm button
+- Progress toast: "Seeding 47 members…" with live count update
+
+---
+
+## vF.2 — Federation Dashboard & Audit
+
+> Status: PLANNED 📋
+> **Intent:** Give admins visibility into which workspaces are federated, when the last seed happened, and what the role mapping looks like — so cross-workspace access is manageable and auditable.
+
+**Backend**
+
+- `GET /api/workspaces/{ws}/federation/` — returns `FederationLink` records where this workspace is source or target; includes `member_count`, `last_seeded_at`, `role_mapping`
+- `DELETE /api/workspaces/{ws}/federation/{id}/` — removes the link record (does NOT remove already-added members; this is a record-keeping action, not a sync revocation)
+- All seed operations logged to `AuditEvent` (already exists from v2.1.0) with action `federation.seed`
+
+**Frontend — Workspace Settings → Federation tab**
+
+- Federation card per linked workspace: name, direction (source / target), member count seeded, last seed date, role mapping summary, "Re-seed" button (adds any new members that joined the source since last seed), "Remove link" button
+- Audit log: filter `AuditEvent` by `federation.*` to see full seeding history with actor + timestamp
+- Empty state: "No federated workspaces yet" with explanation and "Import members from another workspace" CTA
+
+---
+
 
 ## Ecosystem v2 — 6-Month Summary
 
@@ -2403,9 +2415,9 @@ report.view       settings.manage   api_keys.manage
 | **B — Org Structure** | 3–9 | Departments, teams, employee profiles, org chart | Company skeleton every team needs daily |
 | **C — HR Management** | 10–17 | Leave management, attendance tracking, HR dashboard | Replaces BambooHR for small businesses |
 | **D — Custom RBAC** | 18–21 | Role builder, granular permission flags, role assignment UI | Secure three apps properly with one permission layer |
-| **E — Ecosystem Shell** | 22–24 | Module gating, app switcher, per-app access, cross-app roster import | Transform the flat sidebar into a true app platform |
-| **F — Workspace Federation** | 25–26 | Cross-workspace member seeding, role mapping, federation audit | Set up once, deploy everywhere — reuse your configured workspace across apps |
-| **G — Platform & Launch** | 27–30 | Mobile PWA, billing & plans, **ecosystem landing page**, performance, public launch | Ship when the ecosystem story is complete |
+| **E — Ecosystem Shell** | 22–24 | Module gating, app switcher, per-app access | Transform the flat sidebar into a true app platform |
+| **G — Platform & Launch** | 25–28 | Mobile PWA, billing & plans, **ecosystem landing page**, performance, public launch | Ship when the ecosystem story is complete |
+| **Post-Launch** | TBD | vE.4 cross-app roster import, Phase F workspace federation | Deferred until after launch — not needed for initial release |
 
 > **After these 6 months JCN will be:**
 >
