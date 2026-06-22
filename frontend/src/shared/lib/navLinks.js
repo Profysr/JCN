@@ -18,6 +18,22 @@ import {
   BarChart3,
 } from "lucide-react";
 
+/** App definitions — used by the app switcher in the sidebar. */
+export const APP_DEFS = [
+  { key: "projects", label: "Projects", shortLabel: "Projects", moduleKey: null, icon: FolderKanban },
+  { key: "org_structure", label: "Org Structure", shortLabel: "Org", moduleKey: "org_structure", icon: Network },
+  { key: "hr_management", label: "HR Management", shortLabel: "HR", moduleKey: "hr_management", icon: Users2 },
+  { key: "workspace", label: "Workspace", shortLabel: "Workspace", moduleKey: null, icon: Settings },
+];
+
+/** Maps app key → the path to navigate to when switching into that app. */
+export const APP_LANDING = {
+  projects: "boards",
+  org_structure: "departments",
+  hr_management: "hr",
+  workspace: "members",
+};
+
 /**
  * Single source of truth for workspace navigation items.
  * Used by AppLayout (NavLink `to`) and CommandPalette (action + desc).
@@ -74,6 +90,7 @@ export const NAV_ITEMS = [
     desc: "Company departments & structure",
     path: "departments",
     permission: "org.view",
+    moduleKey: "org_structure",
   },
   {
     key: "teams",
@@ -82,6 +99,7 @@ export const NAV_ITEMS = [
     desc: "Teams & their members",
     path: "teams",
     permission: "org.view",
+    moduleKey: "org_structure",
   },
   {
     key: "org-chart",
@@ -90,6 +108,7 @@ export const NAV_ITEMS = [
     desc: "Company org chart",
     path: "org-chart",
     permission: "org.view",
+    moduleKey: "org_structure",
   },
   {
     key: "hr-dashboard",
@@ -98,6 +117,7 @@ export const NAV_ITEMS = [
     desc: "Headcount, leave & attendance summary",
     path: "hr",
     permission: "hr.view",
+    moduleKey: "hr_management",
     end: true,
   },
   {
@@ -107,6 +127,7 @@ export const NAV_ITEMS = [
     desc: "Leave requests & balances",
     path: "hr/leave",
     permission: "hr.view",
+    moduleKey: "hr_management",
   },
   {
     key: "hr-attendance",
@@ -115,6 +136,7 @@ export const NAV_ITEMS = [
     desc: "Clock-in/out & team hours",
     path: "hr/attendance",
     permission: "hr.view",
+    moduleKey: "hr_management",
   },
   {
     key: "members",
@@ -161,34 +183,39 @@ export const NAV_ITEMS = [
   },
 ];
 
-/** Grouped nav — used by the sidebar to render section labels between links. */
+/**
+ * Grouped nav — used by the sidebar to render section labels between links.
+ * `app` ties a group to an app context so the sidebar can filter by active app.
+ */
 export const NAV_GROUPS = [
   {
     label: null,
+    app: "projects",
     items: ["dashboards", "boards"],
   },
   {
     label: "Work",
+    app: "projects",
     items: ["my-work", "goals"],
   },
   {
     label: "Insights",
+    app: "projects",
     items: ["analytics"],
   },
-  // {
-  //   label: "Views",
-  //   items: ["roadmap"],
-  // },
   {
     label: "People",
+    app: "org_structure",
     items: ["departments", "teams", "org-chart"],
   },
   {
     label: "HR",
+    app: "hr_management",
     items: ["hr-dashboard", "hr-leave", "hr-attendance"],
   },
   {
     label: "Workspace",
+    app: "workspace",
     items: [
       "members",
       "integrations",

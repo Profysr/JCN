@@ -2185,7 +2185,7 @@ report.view       settings.manage   api_keys.manage
 
 ## vE.1 — Frontend Module Gating (Week 22)
 
-> Status: PLANNED 📋
+> Status: DONE ✅
 > **Intent:** The sidebar and routes should only show what a user's workspace has licensed and what their role permits.
 
 **Frontend**
@@ -2200,7 +2200,7 @@ report.view       settings.manage   api_keys.manage
 
 ## vE.2 — App Switcher & Per-App Shell (Week 22–23)
 
-> Status: PLANNED 📋
+> Status: DONE ✅
 > **Intent:** Make the multi-app nature of JCN visible and navigable — not a flat list of links, but distinct apps a user switches between.
 
 **Frontend**
@@ -2216,7 +2216,7 @@ report.view       settings.manage   api_keys.manage
 
 ## vE.3 — Per-App Membership & Roles (Week 23)
 
-> Status: PLANNED 📋
+> Status: DONE ✅
 > **Intent:** App-level access is already encoded in `CustomRole` permission flags from Phase D. This sub-phase makes that visible and manageable in the UI.
 >
 > ⚠️ **Architecture:** This is NOT a new `AppMembership` model. It is a filtered view of Phase D's `RoleAssignment`. A member's access to an app is determined entirely by whether their `CustomRole` has the `<app>.view` permission flag set. The admin UI simply surfaces this clearly.
@@ -2230,14 +2230,14 @@ report.view       settings.manage   api_keys.manage
 
 ---
 
-## vE.4 — App Setup Flows & Cross-App Roster Import (Week 24)
+## vE.4 — App Setup Flows & Cross-App Roster Import (Week 24) --- Hold it for the future
 
-> Status: PLANNED 📋
+> Status: PARTIAL ⚡ — Step 1 (welcome screen) shipped; steps 2–4 (roster import wizard) deferred to a future phase.
 > **Intent:** When an admin enables a new app, give them a guided setup flow that seeds the app with the right members in one action — not a manual re-invite process. This is the headline convenience feature of the ecosystem.
 
 **Frontend — App Setup Wizard (shown on first visit to a newly-enabled app)**
 
-- Step 1: Welcome screen — what this app does, what setup is needed
+- Step 1: Welcome screen — what this app does, what setup is needed ✅
 - Step 2: **"Import members from another app"** — admin picks a source app (e.g. "Projects") and a role mapping: "Projects Admin → HR Manager, Projects Member → HR Member, Projects Viewer → HR Viewer"; preview shows who will be added with which role
 - Step 3: Confirm & apply — backend bulk-creates `RoleAssignment` records scoped to the target app's permission set
 - Step 4: Done — links to the app's main page

@@ -5,6 +5,7 @@ import { Loader } from "@/shared/components/ui/Loader";
 
 // ── Shell components — always needed, load eagerly ───────────────────────────
 import ProtectedRoute from "@/shared/components/layout/ProtectedRoute";
+import ProtectedModuleRoute from "@/shared/components/layout/ProtectedModuleRoute";
 import AppLayout from "@/shared/components/layout/AppLayout";
 import WorkspaceRedirect from "@/pages/workspace/WorkspaceRedirect";
 
@@ -169,16 +170,20 @@ export default function App() {
               element={<AutomationsPage />}
             /> */}
 
-              {/* Org Structure */}
-              <Route path="departments" element={<DepartmentsPage />} />
-              <Route path="teams" element={<TeamsPage />} />
-              <Route path="org-chart" element={<OrgChartPage />} />
+              {/* Org Structure — gated by org_structure module */}
+              <Route element={<ProtectedModuleRoute moduleKey="org_structure" />}>
+                <Route path="departments" element={<DepartmentsPage />} />
+                <Route path="teams" element={<TeamsPage />} />
+                <Route path="org-chart" element={<OrgChartPage />} />
+              </Route>
 
-              {/* HR Management */}
-              <Route path="hr" element={<HRDashboardPage />} />
-              <Route path="hr/leave" element={<LeavePage />} />
-              <Route path="hr/attendance" element={<AttendancePage />} />
-              <Route path="members/:memberId" element={<MemberDetailPage />} />
+              {/* HR Management — gated by hr_management module */}
+              <Route element={<ProtectedModuleRoute moduleKey="hr_management" />}>
+                <Route path="hr" element={<HRDashboardPage />} />
+                <Route path="hr/leave" element={<LeavePage />} />
+                <Route path="hr/attendance" element={<AttendancePage />} />
+                <Route path="members/:memberId" element={<MemberDetailPage />} />
+              </Route>
 
               {/* Workspace */}
               {/* <Route path="roadmap" element={<RoadmapPage />} /> */}
