@@ -44,7 +44,7 @@ export const useUpdateBoard = (workspaceId, boardId) =>
     ["portfolio", workspaceId],
   );
 
-export const useDeleteBoard = (workspaceId) =>
+const useDeleteBoard = (workspaceId) =>
   useInvalidatingMutation(
     (boardId) => api.delete(`/api/workspaces/${workspaceId}/boards/${boardId}/`),
     ["portfolio", workspaceId],

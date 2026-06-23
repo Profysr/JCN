@@ -1,8 +1,6 @@
 import {
   UserPlus,
-  Shield,
   User,
-  Eye,
   Trash2,
   Crown,
   Link as LinkIcon,
@@ -35,6 +33,11 @@ import {
 import { useRoles, useAssignRole, useBulkAssignRole } from "@/shared/hooks/useRoles";
 import { useModules } from "@/shared/hooks/useModules";
 import { APP_DEFS } from "@/shared/lib/navLinks";
+import {
+  EMPLOYMENT_TYPES,
+  WORKSPACE_ROLE_CONFIG,
+  getWorkspaceRoleConfig,
+} from "@/shared/lib/constants";
 import { useWorkspace } from "@/shared/hooks/useWorkspace";
 import { useAuthStore } from "@/store/authStore";
 import { usePermission } from "@/contexts/PermissionsContext";
@@ -46,41 +49,6 @@ import {
   useJobTitles,
 } from "@/apps/org-structure/hooks/useOrg";
 
-export const ROLE_CONFIG = {
-  Admin: {
-    label: "Admin",
-    icon: Shield,
-    className: "text-primary bg-primary/10 border-primary/20",
-  },
-  Member: {
-    label: "Member",
-    icon: User,
-    className: "text-foreground bg-secondary border-border",
-  },
-  Viewer: {
-    label: "Viewer",
-    icon: Eye,
-    className: "text-muted-foreground bg-secondary border-border",
-  },
-};
-
-function getRoleConfig(roleName) {
-  return (
-    ROLE_CONFIG[roleName] ?? {
-      label: roleName ?? "—",
-      icon: User,
-      className: "text-foreground bg-secondary border-border",
-    }
-  );
-}
-
-const EMPLOYMENT_TYPES = [
-  { value: "full_time", label: "Full-time", color: "bg-emerald-100 text-emerald-700" },
-  { value: "part_time", label: "Part-time", color: "bg-blue-100 text-blue-700" },
-  { value: "contractor", label: "Contractor", color: "bg-amber-100 text-amber-700" },
-  { value: "intern", label: "Intern", color: "bg-violet-100 text-violet-700" },
-];
-
 /** App definitions used in the App Access tab — derived from the central APP_DEFS registry. */
 const APP_ACCESS_DEFS = APP_DEFS
   .filter((a) => a.key !== "workspace")
@@ -89,7 +57,7 @@ const APP_ACCESS_DEFS = APP_DEFS
 /* ==========================================
    INVITE FORM WORKSPACE HEADER
    ========================================== */
-export function InviteFormHeader({ workspaceName }) {
+function InviteFormHeader({ workspaceName }) {
   return (
     <div className="flex items-center gap-2.5 px-4 py-3 bg-primary/5 border-b border-primary/15">
       <div className="w-7 h-7 rounded-md bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
@@ -106,7 +74,7 @@ export function InviteFormHeader({ workspaceName }) {
 /* ==========================================
    PENDING INVITE ROW
    ========================================== */
-export function PendingInviteItem({ invite, onCopy, copiedToken, onCancel }) {
+function PendingInviteItem({ invite, onCopy, copiedToken, onCancel }) {
   return (
     <div className="flex items-center justify-between px-4 py-2.5">
       <div>
@@ -145,7 +113,7 @@ export function PendingInviteItem({ invite, onCopy, copiedToken, onCancel }) {
 /* ==========================================
    ACTIVE MEMBER ROW
    ========================================== */
-export function ActiveMemberItem({
+function ActiveMemberItem({
   member,
   isSelf,
   isWorkspaceOwner,
@@ -158,7 +126,7 @@ export function ActiveMemberItem({
   onRemove,
   roles = [],
 }) {
-  const roleConf = getRoleConfig(member.role);
+  const roleConf = getWorkspaceRoleConfig(member.role);
   const RoleIcon = roleConf.icon;
   const checkable = isAdmin && !isSelf && !isWorkspaceOwner;
 
@@ -685,7 +653,7 @@ function AppAccessTab({ workspaceId, members, roles, isAdmin, user, workspace })
             const isWorkspaceOwner = workspace?.owner?.email === member.user?.email;
             const checkable = isAdmin && !isSelf && !isWorkspaceOwner;
             const isChecked = checkedIds.has(member.id);
-            const roleConf = getRoleConfig(member.role);
+            const roleConf = getWorkspaceRoleConfig(member.role);
             const RoleIcon = roleConf.icon;
             const memberRole = getMemberRole(member, roles);
 

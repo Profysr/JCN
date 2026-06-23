@@ -131,7 +131,7 @@ export function Dropdown({
   );
 }
 
-export function DetailRow({ label, children }) {
+function DetailRow({ label, children }) {
   return (
     <div className="flex items-center gap-3 py-1.5 group -mx-1 px-1 rounded-lg hover:bg-accent/20 transition-colors">
       <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50 w-20 flex-shrink-0">

@@ -102,7 +102,7 @@ const getCapacityStatus = (perPerson) => {
   return "over";
 };
 
-export function CapacityMeter({ stagedCount, memberCount }) {
+function CapacityMeter({ stagedCount, memberCount }) {
   // Prevent division by zero, default to stagedCount if no members
   const perPerson = memberCount > 0 ? stagedCount / memberCount : stagedCount;
 

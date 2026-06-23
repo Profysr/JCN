@@ -15,6 +15,9 @@ import {
   TrendingUp,
   HelpCircle,
   Layers,
+  Shield,
+  User,
+  Eye,
 } from "lucide-react";
 
 // ── Priority ──────────────────────────────────────────────────────────────────
@@ -290,3 +293,28 @@ export const ROLE_PERMS = Object.fromEntries(
     ),
   ])
 );
+
+// ── Member employment types ───────────────────────────────────────────────────
+export const EMPLOYMENT_TYPES = [
+  { value: "full_time",   label: "Full-time",  color: "bg-emerald-100 text-emerald-700" },
+  { value: "part_time",   label: "Part-time",  color: "bg-blue-100 text-blue-700"       },
+  { value: "contractor",  label: "Contractor", color: "bg-amber-100 text-amber-700"     },
+  { value: "intern",      label: "Intern",     color: "bg-violet-100 text-violet-700"   },
+];
+
+// ── Workspace member role display config ──────────────────────────────────────
+export const WORKSPACE_ROLE_CONFIG = {
+  Admin:  { label: "Admin",  icon: Shield, className: "text-primary bg-primary/10 border-primary/20"       },
+  Member: { label: "Member", icon: User,   className: "text-foreground bg-secondary border-border"         },
+  Viewer: { label: "Viewer", icon: Eye,    className: "text-muted-foreground bg-secondary border-border"   },
+};
+
+export function getWorkspaceRoleConfig(roleName) {
+  return (
+    WORKSPACE_ROLE_CONFIG[roleName] ?? {
+      label: roleName ?? "—",
+      icon: User,
+      className: "text-foreground bg-secondary border-border",
+    }
+  );
+}

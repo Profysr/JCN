@@ -10,6 +10,7 @@ import { Button } from "@/shared/components/ui/button";
 import { Loader } from "@/shared/components/ui/Loader";
 import { EmptyState } from "@/shared/components/ui/empty-state";
 import { cn } from "@/shared/lib/utils";
+import { EMPLOYMENT_TYPES } from "@/shared/lib/constants";
 import { useMembers } from "@/shared/hooks/useMembers";
 import { usePermission } from "@/contexts/PermissionsContext";
 import { useLeaveRequests } from "@/apps/hr-management/hooks/useLeave";
@@ -31,19 +32,11 @@ import {
 } from "@/apps/org-structure/hooks/useOrg";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-
 const DOC_TYPES = [
   { value: "contract", label: "Contract" },
   { value: "id", label: "ID" },
   { value: "certificate", label: "Certificate" },
   { value: "other", label: "Other" },
-];
-
-const EMPLOYMENT_TYPES = [
-  { value: "full_time", label: "Full-time" },
-  { value: "part_time", label: "Part-time" },
-  { value: "contractor", label: "Contractor" },
-  { value: "intern", label: "Intern" },
 ];
 
 // ── Small helpers ─────────────────────────────────────────────────────────────

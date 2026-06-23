@@ -11,7 +11,7 @@ export function useBoardMembers(workspaceId, boardId, { enabled = true } = {}) {
   });
 }
 
-export function useAddBoardMember(workspaceId, boardId) {
+function useAddBoardMember(workspaceId, boardId) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data) =>

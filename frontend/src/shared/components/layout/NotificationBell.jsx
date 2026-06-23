@@ -16,7 +16,7 @@ import { Avatar } from "@/shared/components/ui/avatar";
 import { cn } from "@/shared/lib/utils";
 
 // Meta dictionaries used for building out notification templates
-export const VERB_META = {
+const VERB_META = {
   task_assigned: {
     label: "assigned you to",
     icon: "UserPlus",
@@ -39,7 +39,7 @@ export const VERB_META = {
   },
 };
 
-export const fallbackMeta = (verb) => ({
+const fallbackMeta = (verb) => ({
   label: (verb || "updated").replace(/_/g, " "),
   icon: Activity,
   tone: "text-muted-foreground",
@@ -48,7 +48,7 @@ export const fallbackMeta = (verb) => ({
 /* ==========================================
    1. TRIGGER BUTTON
    ========================================== */
-export function NotificationTrigger({ open, onClick, unreadCount }) {
+function NotificationTrigger({ open, onClick, unreadCount }) {
   return (
     <button
       onClick={onClick}
@@ -73,7 +73,7 @@ export function NotificationTrigger({ open, onClick, unreadCount }) {
 /* ==========================================
    2. POPPING PANEL HEADER 
    ========================================== */
-export function NotificationHeader({
+function NotificationHeader({
   unreadCount,
   onMarkAllRead,
   isPending,
@@ -131,7 +131,7 @@ export function NotificationHeader({
 /* ==========================================
    3. SINGLE NOTIFICATION ROW
    ========================================== */
-export function NotificationItem({ item, onClick }) {
+function NotificationItem({ item, onClick }) {
   const meta = VERB_META[item.verb] || fallbackMeta(item.verb);
   const VerbIcon = meta.icon;
 
@@ -165,10 +165,6 @@ export function NotificationItem({ item, onClick }) {
     </button>
   );
 }
-
-/* ==========================================
-   4. LOAD MORE FOOTER ACTION
-   ========================================== */
 
 /* ==========================================
    MAIN COMPONENT

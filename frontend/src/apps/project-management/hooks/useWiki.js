@@ -74,7 +74,7 @@ export function useWikiRevisions(workspaceId, boardId, pageId) {
 
 // ── Documents ─────────────────────────────────────────────────────────────────
 
-export function useDocuments(workspaceId) {
+function useDocuments(workspaceId) {
   return useQuery({
     queryKey: ["documents", workspaceId],
     queryFn: () => api.get(docBase(workspaceId)).then((r) => r.data),
@@ -82,7 +82,7 @@ export function useDocuments(workspaceId) {
   });
 }
 
-export function useDocument(workspaceId, docId) {
+function useDocument(workspaceId, docId) {
   return useQuery({
     queryKey: ["document", workspaceId, docId],
     queryFn: () =>
@@ -91,7 +91,7 @@ export function useDocument(workspaceId, docId) {
   });
 }
 
-export function useCreateDocument(workspaceId) {
+function useCreateDocument(workspaceId) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data) =>
@@ -101,7 +101,7 @@ export function useCreateDocument(workspaceId) {
   });
 }
 
-export function useUpdateDocument(workspaceId, docId) {
+function useUpdateDocument(workspaceId, docId) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data) =>
@@ -113,7 +113,7 @@ export function useUpdateDocument(workspaceId, docId) {
   });
 }
 
-export function useDeleteDocument(workspaceId) {
+function useDeleteDocument(workspaceId) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (docId) => api.delete(`${docBase(workspaceId)}${docId}/`),

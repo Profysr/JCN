@@ -51,7 +51,7 @@ export const useDeleteDepartment = (workspaceId) =>
     deptsKey(workspaceId),
   );
 
-export const useDepartmentMembers = (workspaceId, deptId) =>
+const useDepartmentMembers = (workspaceId, deptId) =>
   useQuery({
     queryKey: deptMemKey(workspaceId, deptId),
     queryFn: () =>
@@ -64,7 +64,7 @@ export const useDepartmentMembers = (workspaceId, deptId) =>
     staleTime: Infinity,
   });
 
-export const useAddDepartmentMember = (workspaceId, deptId) =>
+const useAddDepartmentMember = (workspaceId, deptId) =>
   useInvalidatingMutation(
     (data) =>
       api
@@ -77,7 +77,7 @@ export const useAddDepartmentMember = (workspaceId, deptId) =>
     deptsKey(workspaceId),
   );
 
-export const useRemoveDepartmentMember = (workspaceId, deptId) =>
+const useRemoveDepartmentMember = (workspaceId, deptId) =>
   useInvalidatingMutation(
     (membershipId) =>
       api.delete(
@@ -169,7 +169,7 @@ export const useJobTitles = (workspaceId) =>
     staleTime: Infinity,
   });
 
-export const useCreateJobTitle = (workspaceId) =>
+const useCreateJobTitle = (workspaceId) =>
   useInvalidatingMutation(
     (data) =>
       api

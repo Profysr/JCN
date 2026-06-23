@@ -3,7 +3,7 @@ import api from "@/shared/lib/api";
 
 const BASE = (ws, proj) => `/api/workspaces/${ws}/boards/${proj}/statuses/`;
 
-export const statusesKey = (workspaceId, boardId) => [
+const statusesKey = (workspaceId, boardId) => [
   "statuses",
   workspaceId,
   boardId,
@@ -19,7 +19,7 @@ export function useStatuses(workspaceId, boardId) {
   });
 }
 
-export function useCreateStatus(workspaceId, boardId) {
+function useCreateStatus(workspaceId, boardId) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data) =>

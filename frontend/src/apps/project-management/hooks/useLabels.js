@@ -24,7 +24,7 @@ export const useCreateLabel = (workspaceId, boardId) =>
     labelsKey(workspaceId, boardId),
   );
 
-export const useDeleteLabel = (workspaceId, boardId) =>
+const useDeleteLabel = (workspaceId, boardId) =>
   useInvalidatingMutation(
     (labelId) =>
       api.delete(

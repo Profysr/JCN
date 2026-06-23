@@ -81,7 +81,7 @@ export const useLeaveBalances = (workspaceId) =>
   });
 
 // ── Who's Off ─────────────────────────────────────────────────────────────────
-export const useWhosOff = (workspaceId) =>
+const useWhosOff = (workspaceId) =>
   useQuery({
     queryKey: whosOffKey(workspaceId),
     queryFn: () =>

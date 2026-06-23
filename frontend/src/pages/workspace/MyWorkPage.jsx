@@ -8,7 +8,7 @@ import { getPriority, pickColor } from "@/shared/lib/constants";
 import { formatShortDate } from "@/shared/lib/dateUtils";
 
 // ── Urgency bucketing ─────────────────────────────────────────────────────────
-export function sectionFor(task) {
+function sectionFor(task) {
   if (!task.due_date) return "no_date";
   const today = new Date();
   today.setHours(0, 0, 0, 0);

@@ -136,7 +136,7 @@ const FILTER_SECTIONS = [
   { key: "due", title: "Due date", options: DUE_OPTIONS },
 ];
 
-export function AdvancedFilters({ filters = {}, onChange, labels = [] }) {
+function AdvancedFilters({ filters = {}, onChange, labels = [] }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
