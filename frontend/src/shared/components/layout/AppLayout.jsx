@@ -80,6 +80,7 @@ export default function AppLayout() {
   useKeyboardShortcuts({
     onOpenPalette: () => setPaletteOpen((o) => !o),
     onOpenShortcuts: () => setShortcutsOpen((o) => !o),
+    onToggleSidebar: () => setSidebarCollapsed((v) => !v),
     // Dispatch a custom event; KanbanPage (and other pages) can listen
     onCreateTask: () => {
       window.dispatchEvent(new CustomEvent("jcn:create-task"));

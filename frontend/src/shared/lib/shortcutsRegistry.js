@@ -29,7 +29,7 @@ export const SHORTCUT_GROUPS = [
       {
         keys: ["g", "then", "i"],
         display: ["g", "i"],
-        description: "Go to Inbox",
+        description: "Toggle notifications",
       },
       {
         keys: ["g", "then", "a"],
@@ -42,6 +42,7 @@ export const SHORTCUT_GROUPS = [
         description: "Go to Goals",
       },
       { keys: ["⌘K"], display: ["⌘K"], description: "Open command palette" },
+      { keys: ["Ctrl+."], display: ["Ctrl", "."], description: "Toggle sidebar" },
     ],
   },
   {

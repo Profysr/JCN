@@ -61,4 +61,4 @@ Desktop.ini
 *.orig
 my-shift-sync-ui-main
 .claude
-CLAUDE.md*
+.mcp.json

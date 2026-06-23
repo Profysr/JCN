@@ -211,6 +211,12 @@ export default function NotificationBell() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  useEffect(() => {
+    const handler = () => setOpen((o) => !o);
+    window.addEventListener("jcn:toggle-notifications", handler);
+    return () => window.removeEventListener("jcn:toggle-notifications", handler);
+  }, []);
+
   const visible = useMemo(
     () =>
       filter === "unread" ? items.filter((i) => i.status === "unread") : items,

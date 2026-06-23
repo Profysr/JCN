@@ -53,6 +53,7 @@ export function useKeyboardShortcuts({
   onOpenShortcuts,
   onCreateTask,
   onOpenFilter,
+  onToggleSidebar,
 } = {}) {
   const navigate = useNavigate();
   const { workspaceId } = useParams();
@@ -68,19 +69,26 @@ export function useKeyboardShortcuts({
       p: () => navigate(ws("boards")),
       d: () => navigate(ws("dashboards")),
       m: () => navigate(ws("my-work")),
-      i: () => navigate(ws("inbox")),
-      a: () => navigate(ws("dashboards?tab=analytics")),
+      i: () => window.dispatchEvent(new CustomEvent("jcn:toggle-notifications")),
+      a: () => navigate(ws("analytics")),
       g: () => navigate(ws("goals")),
     };
 
     const handler = (e) => {
-      // Never swallow modifier-key combos (Ctrl/Meta/Alt) except ⌘K
+      // Never swallow modifier-key combos (Ctrl/Meta/Alt) except ⌘ K
       const isModified = e.ctrlKey || e.metaKey || e.altKey;
 
-      // ⌘K / Ctrl+K — command palette
+      // ⌘ K / Ctrl+K — command palette
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
         onOpenPalette?.();
+        return;
+      }
+
+      // ⌘. / Ctrl+. — toggle sidebar
+      if ((e.metaKey || e.ctrlKey) && e.key === ".") {
+        e.preventDefault();
+        onToggleSidebar?.();
         return;
       }
 
@@ -140,5 +148,6 @@ export function useKeyboardShortcuts({
     onOpenShortcuts,
     onCreateTask,
     onOpenFilter,
+    onToggleSidebar,
   ]);
 }

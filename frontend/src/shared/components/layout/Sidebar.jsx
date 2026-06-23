@@ -10,7 +10,7 @@ import { useInboxUnreadCount } from "@/shared/hooks/useInbox";
 import { useBoards } from "@/apps/project-management/hooks/useProjects";
 
 import UserPanel from "@/shared/components/layout/UserPanel";
-import { Tooltip } from "@/shared/components/ui/tooltip";
+import { ShortcutTooltip } from "@/shared/components/ui/ShortcutTooltip";
 import AppSwitcherDropdown from "@/shared/components/layout/AppSwitcherDropdown";
 import { useActiveApp } from "@/shared/hooks/useActiveApp";
 
@@ -38,6 +38,14 @@ export default function Sidebar({
 
   const toggleSection = (key) =>
     setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
+
+  const NAV_SHORTCUTS = {
+    dashboards: "g d",
+    boards: "g p",
+    "my-work": "g m",
+    goals: "g g",
+    analytics: "g a",
+  };
 
   const subItemsMap = {
     boards: boards.map((b) => ({
@@ -108,16 +116,16 @@ export default function Sidebar({
           </button>
 
           {/* Expand button — floats on the right edge, appears on hover */}
-          <button
-            onClick={onToggleCollapse}
-            title="Expand sidebar"
-            className="absolute -right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-background border border-border shadow-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10 hover:bg-accent"
-          >
-            <ChevronsRight className="w-3 h-3 text-muted-foreground" />
-          </button>
+          <ShortcutTooltip label="Expand sidebar" shortcut="Ctrl+." side="right" delayDuration={200}>
+            <button
+              onClick={onToggleCollapse}
+              className="absolute -right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-background border border-border shadow-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10 hover:bg-accent"
+            >
+              <ChevronsRight className="w-3 h-3 text-muted-foreground" />
+            </button>
+          </ShortcutTooltip>
         </div>
       ) : (
-        /* ── Expanded header — name navigates home, chevron collapses ── */
         <div className="border-b border-border/40">
           <div className="flex items-center gap-2 w-full px-3 py-2.5 group">
             <button
@@ -137,13 +145,14 @@ export default function Sidebar({
               </span>
             </button>
 
-            <button
-              onClick={onToggleCollapse}
-              title="Collapse sidebar"
-              className="p-1 rounded hover:bg-accent transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100"
-            >
-              <ChevronsLeft className="w-3.5 h-3.5 text-muted-foreground" />
-            </button>
+            <ShortcutTooltip label="Collapse sidebar" shortcut="Ctrl+." side="bottom" delayDuration={200}>
+              <button
+                onClick={onToggleCollapse}
+                className="p-1 rounded hover:bg-accent transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100"
+              >
+                <ChevronsLeft className="w-3.5 h-3.5 text-muted-foreground" />
+              </button>
+            </ShortcutTooltip>
           </div>
         </div>
       )}
@@ -171,7 +180,7 @@ export default function Sidebar({
           <div className="flex flex-col items-center gap-0.5 py-1">
             {navGroups.flatMap((group) =>
               group.items.map(({ to, icon: Icon, label, key, end }) => (
-                <Tooltip key={to} content={label} side="right" delayDuration={100}>
+                <ShortcutTooltip key={to} label={label} shortcut={NAV_SHORTCUTS[key]} side="right" delayDuration={100}>
                   <NavLink
                     to={to}
                     end={end}
@@ -189,7 +198,7 @@ export default function Sidebar({
                       <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-primary" />
                     )}
                   </NavLink>
-                </Tooltip>
+                </ShortcutTooltip>
               )),
             )}
           </div>
