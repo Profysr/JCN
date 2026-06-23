@@ -22,7 +22,6 @@ function isTypingTarget(e) {
  * @param {() => void} opts.onOpenPalette   — open ⌘K command palette
  * @param {() => void} opts.onOpenShortcuts — open ? shortcut overlay
  * @param {() => void} opts.onCreateTask    — trigger "create task" (context-aware)
- * @param {() => void} opts.onOpenFilter    — focus the filter/search bar
  */
 
 /**
@@ -52,7 +51,6 @@ export function useKeyboardShortcuts({
   onOpenPalette,
   onOpenShortcuts,
   onCreateTask,
-  onOpenFilter,
   onToggleSidebar,
 } = {}) {
   const navigate = useNavigate();
@@ -68,10 +66,12 @@ export function useKeyboardShortcuts({
     const CHORD_MAP = {
       p: () => navigate(ws("boards")),
       d: () => navigate(ws("dashboards")),
-      m: () => navigate(ws("my-work")),
+      w: () => navigate(ws("my-work")),
       i: () => window.dispatchEvent(new CustomEvent("jcn:toggle-notifications")),
       a: () => navigate(ws("analytics")),
       g: () => navigate(ws("goals")),
+      s: () => navigate(ws("settings")),
+      m: () => navigate(ws("members")),
     };
 
     const handler = (e) => {
@@ -126,11 +126,6 @@ export function useKeyboardShortcuts({
           onCreateTask?.();
           break;
 
-        case "/":
-          e.preventDefault();
-          onOpenFilter?.();
-          break;
-
         default:
           break;
       }
@@ -147,7 +142,6 @@ export function useKeyboardShortcuts({
     onOpenPalette,
     onOpenShortcuts,
     onCreateTask,
-    onOpenFilter,
     onToggleSidebar,
   ]);
 }

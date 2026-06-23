@@ -9,8 +9,6 @@ import { PermissionsProvider } from "@/contexts/PermissionsContext";
 import { useWorkspaceSocket } from "@/shared/hooks/useWorkspaceSocket";
 import { useKeyboardShortcuts } from "@/shared/hooks/useKeyboardShortcuts";
 import Sidebar from "@/shared/components/layout/Sidebar";
-
-// Only rendered on interaction — load their bundles on first open, not at app start
 const CommandPalette = lazy(() => import("@/shared/components/CommandPalette"));
 const ShortcutOverlay = lazy(
   () => import("@/shared/components/ShortcutOverlay"),
@@ -24,20 +22,20 @@ export default function AppLayout() {
   const { user, logout } = useAuthStore();
   const hydrateTheme = useThemeStore((s) => s.hydrate);
   const navigate = useNavigate();
-
   const { data: workspace } = useWorkspace(workspaceId);
+  const { data: modulesData, isLoading: modulesLoading } =
+    useModulesQuery(workspaceId);
 
   // Workspace-wide realtime — one connection alive on every page so the inbox
   // badge, goals, and presence stay live without per-query polling. Board/task
-  // events use a separate board-scoped connection (useBoardSocket in KanbanPage).
   useWorkspaceSocket(workspaceId);
 
-  const { data: modulesData, isLoading: modulesLoading } = useModulesQuery(workspaceId);
   const modulesCtx = {
     isLoading: modulesLoading,
     modules: modulesData ?? [],
     isEnabled: (key) =>
-      Array.isArray(modulesData) && modulesData.some((m) => m.key === key && m.is_enabled),
+      Array.isArray(modulesData) &&
+      modulesData.some((m) => m.key === key && m.is_enabled),
   };
 
   useEffect(() => {
@@ -61,6 +59,7 @@ export default function AppLayout() {
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
+  // Focus Mode -------------------------------------
   const [focusModeUntil, setFocusModeUntil] = useState(() => {
     const stored = localStorage.getItem("jcn_focus_until");
     return stored ? parseInt(stored, 10) : null;
@@ -77,6 +76,8 @@ export default function AppLayout() {
     localStorage.removeItem("jcn_focus_until");
   };
 
+  // ----------------------------------------------
+
   useKeyboardShortcuts({
     onOpenPalette: () => setPaletteOpen((o) => !o),
     onOpenShortcuts: () => setShortcutsOpen((o) => !o),
@@ -85,61 +86,58 @@ export default function AppLayout() {
     onCreateTask: () => {
       window.dispatchEvent(new CustomEvent("jcn:create-task"));
     },
-    onOpenFilter: () => {
-      window.dispatchEvent(new CustomEvent("jcn:focus-filter"));
-    },
   });
 
   return (
     <PermissionsProvider workspaceId={workspaceId}>
-    <ModulesContext.Provider value={modulesCtx}>
-    <div className="flex h-screen overflow-hidden bg-background">
-      <Sidebar
-        workspace={workspace}
-        workspaceId={workspaceId}
-        user={user}
-        isFocusMode={isFocusMode}
-        collapsed={sidebarCollapsed}
-        onToggleCollapse={() => setSidebarCollapsed((v) => !v)}
-        onOpenPalette={() => setPaletteOpen(true)}
-        onOpenSettings={(tab) => {
-          setSettingsTab(tab);
-          setSettingsOpen(true);
-        }}
-        onOpenShortcuts={() => setShortcutsOpen(true)}
-        onEnableFocus={enableFocusMode}
-        onDisableFocus={disableFocusMode}
-        onLogout={handleLogout}
-      />
-
-      {/* Main content */}
-      <main className="flex-1 overflow-y-auto">
-        <Outlet />
-      </main>
-
-      {/* v3.9.0 — global overlays owned here (lazy — chunk downloads on first open) */}
-      <Suspense fallback={null}>
-        <CommandPalette
-          open={paletteOpen}
-          onClose={() => setPaletteOpen(false)}
-          workspaceId={workspaceId}
-        />
-      </Suspense>
-      <Suspense fallback={null}>
-        {shortcutsOpen && (
-          <ShortcutOverlay onClose={() => setShortcutsOpen(false)} />
-        )}
-      </Suspense>
-      <Suspense fallback={null}>
-        {settingsOpen && (
-          <UserSettingsModal
-            defaultTab={settingsTab}
-            onClose={() => setSettingsOpen(false)}
+      <ModulesContext.Provider value={modulesCtx}>
+        <div className="flex h-screen overflow-hidden bg-background">
+          <Sidebar
+            workspace={workspace}
+            workspaceId={workspaceId}
+            user={user}
+            isFocusMode={isFocusMode}
+            collapsed={sidebarCollapsed}
+            onToggleCollapse={() => setSidebarCollapsed((v) => !v)}
+            onOpenPalette={() => setPaletteOpen(true)}
+            onOpenSettings={(tab) => {
+              setSettingsTab(tab);
+              setSettingsOpen(true);
+            }}
+            onOpenShortcuts={() => setShortcutsOpen(true)}
+            onEnableFocus={enableFocusMode}
+            onDisableFocus={disableFocusMode}
+            onLogout={handleLogout}
           />
-        )}
-      </Suspense>
-    </div>
-    </ModulesContext.Provider>
+
+          {/* Main content */}
+          <main className="flex-1 overflow-y-auto">
+            <Outlet />
+          </main>
+
+          {/* v3.9.0 — global overlays owned here (lazy — chunk downloads on first open) */}
+          <Suspense fallback={null}>
+            <CommandPalette
+              open={paletteOpen}
+              onClose={() => setPaletteOpen(false)}
+              workspaceId={workspaceId}
+            />
+          </Suspense>
+          <Suspense fallback={null}>
+            {shortcutsOpen && (
+              <ShortcutOverlay onClose={() => setShortcutsOpen(false)} />
+            )}
+          </Suspense>
+          <Suspense fallback={null}>
+            {settingsOpen && (
+              <UserSettingsModal
+                defaultTab={settingsTab}
+                onClose={() => setSettingsOpen(false)}
+              />
+            )}
+          </Suspense>
+        </div>
+      </ModulesContext.Provider>
     </PermissionsProvider>
   );
 }

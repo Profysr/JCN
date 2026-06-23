@@ -8,7 +8,8 @@ export function useModulesQuery(workspaceId) {
     queryFn: () =>
       api.get(`/api/workspaces/${workspaceId}/modules/`).then((r) => r.data),
     enabled: !!workspaceId,
-    staleTime: 5 * 60_000,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false
   });
 }
 
@@ -23,13 +24,12 @@ export function useToggleModule(workspaceId) {
   });
 }
 
-export const ModulesContext = createContext(null);
-
 /**
  * Returns { isEnabled(key: string): boolean, isLoading: boolean, modules: object[] }
  * Must be used inside AppLayout (which provides ModulesContext).
  * `isEnabled("org_structure")` returns true when the module is active.
  */
+export const ModulesContext = createContext(null);
 export function useModules() {
   const ctx = useContext(ModulesContext);
   if (!ctx) {

@@ -211,6 +211,7 @@ export default function NotificationBell() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  // custom event to open toggle notification
   useEffect(() => {
     const handler = () => setOpen((o) => !o);
     window.addEventListener("jcn:toggle-notifications", handler);

@@ -49,8 +49,6 @@ function useScopedWorkspaceSocket(workspaceId, handle) {
 function handleWorkspaceEvent(type, payload, qc, workspaceId) {
   // ── Inbox: keep the bell badge + list fresh from anywhere in the app ──
   if (type === "notification.created") {
-    // Increment the count in place — no extra GET. The full list is invalidated
-    // (cheap: only refetches if the inbox panel is actually mounted/observed).
     qc.setQueryData(
       ["inbox-unread-count", workspaceId],
       (c) => (c ?? 0) + 1,

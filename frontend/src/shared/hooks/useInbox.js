@@ -84,7 +84,7 @@ export function useBulkUpdateInbox(workspaceId) {
 }
 
 /** Snooze presets → ISO strings relative to now. */
-function snoozeUntil(preset) {
+export function snoozeUntil(preset) {
   const d = new Date();
   if (preset === "1h") {
     d.setHours(d.getHours() + 1);

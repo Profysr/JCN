@@ -5,7 +5,6 @@ import { Loader } from "@/shared/components/ui/Loader";
 
 export default function WorkspaceRedirect() {
   const navigate = useNavigate();
-
   const { data, isError } = useWorkspaces();
 
   useEffect(() => {

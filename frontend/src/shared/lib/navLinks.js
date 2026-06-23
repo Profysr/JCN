@@ -187,7 +187,7 @@ export const WORKSPACE_NAV_ITEMS = [
   },
 ];
 
-const WORKSPACE_NAV_GROUPS = [
+export const WORKSPACE_NAV_GROUPS = [
   {
     label: "Workspace",
     items: ["members", "integrations", "api-keys", "webhooks", "settings"],

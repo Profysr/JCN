@@ -1,13 +1,14 @@
 import { useNavigate, useParams } from "react-router-dom";
-import { APP_DEFS, WORKSPACE_NAV_ITEMS, workspaceUrl } from "@/shared/lib/navLinks";
+import {
+  APP_DEFS,
+  WORKSPACE_NAV_ITEMS,
+  workspaceUrl,
+} from "@/shared/lib/navLinks";
 import { useModules } from "@/shared/hooks/useModules";
-import { Lock, ArrowUpRight } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 
 const _appByKey = Object.fromEntries(APP_DEFS.map((a) => [a.key, a]));
-
-const WORKSPACE_PAGES = WORKSPACE_NAV_ITEMS;
-
 export default function AppLauncherPage() {
   const { workspaceId } = useParams();
   const navigate = useNavigate();
@@ -16,6 +17,7 @@ export default function AppLauncherPage() {
   // API returns name/description/tier; APP_DEFS supplies icon, landing, colors.
   // Discard the API's string `icon` field so it doesn't shadow the Lucide component.
   const apps = modules
+    .filter((m) => m.is_enabled)
     .filter((m) => _appByKey[m.key])
     .map(({ icon: _apiIcon, ...m }) => ({ ...m, ..._appByKey[m.key] }));
 
@@ -35,26 +37,16 @@ export default function AppLauncherPage() {
             ? Array.from({ length: 4 }).map((_, i) => (
                 <div
                   key={i}
-                  className="h-36 rounded-xl border border-border/40 bg-muted/20 animate-pulse"
+                  className="h-36 rounded-xl border border-border bg-muted animate-pulse"
                 />
               ))
             : apps.map((app) => {
                 const Icon = app.icon;
-                const locked = !app.is_enabled;
-
                 return (
                   <button
                     key={app.key}
-                    onClick={() =>
-                      !locked && navigate(workspaceUrl(workspaceId, app.landing))
-                    }
-                    disabled={locked}
-                    className={cn(
-                      "relative group text-left p-5 rounded-xl border transition-all duration-150",
-                      locked
-                        ? "opacity-55 cursor-not-allowed border-border/40 bg-muted/20"
-                        : "cursor-pointer border-border/50 bg-card hover:shadow-md hover:-translate-y-0.5 hover:border-border",
-                    )}
+                    onClick={() => navigate(workspaceUrl(workspaceId, app.landing))}
+                    className="relative group text-left p-5 rounded-xl border transition-all duration-150 cursor-pointer border-border/50 bg-card hover:shadow-md hover:-translate-y-0.5 hover:border-border"
                   >
                     <div
                       className={cn(
@@ -66,22 +58,16 @@ export default function AppLauncherPage() {
                     </div>
 
                     <div className="flex items-center gap-1.5 mb-1.5">
-                      <h3 className="font-semibold text-sm leading-none">{app.name}</h3>
-                      {locked && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground bg-muted border border-border/50 px-1.5 py-0.5 rounded-full">
-                          <Lock className="w-2.5 h-2.5" />
-                          Not enabled
-                        </span>
-                      )}
+                      <h3 className="font-semibold text-sm leading-none">
+                        {app.name}
+                      </h3>
                     </div>
 
                     <p className="text-xs text-muted-foreground leading-relaxed">
                       {app.description}
                     </p>
 
-                    {!locked && (
-                      <ArrowUpRight className="absolute top-5 right-5 w-3.5 h-3.5 text-muted-foreground/0 group-hover:text-muted-foreground transition-colors" />
-                    )}
+                    <ArrowUpRight className="absolute top-5 right-5 w-3.5 h-3.5 text-muted-foreground/0 group-hover:text-muted-foreground transition-colors" />
                   </button>
                 );
               })}
@@ -92,7 +78,7 @@ export default function AppLauncherPage() {
           Workspace
         </h2>
         <div className="grid grid-cols-4 gap-2">
-          {WORKSPACE_PAGES.map((page) => {
+          {WORKSPACE_NAV_ITEMS.map((page) => {
             const Icon = page.icon;
             return (
               <button

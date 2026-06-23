@@ -7,8 +7,6 @@ import { resolvedNavGroups, workspaceUrl } from "@/shared/lib/navLinks";
 import { usePermission } from "@/contexts/PermissionsContext";
 import { useModules } from "@/shared/hooks/useModules";
 import { useInboxUnreadCount } from "@/shared/hooks/useInbox";
-import { useBoards } from "@/apps/project-management/hooks/useProjects";
-
 import UserPanel from "@/shared/components/layout/UserPanel";
 import { ShortcutTooltip } from "@/shared/components/ui/ShortcutTooltip";
 import AppSwitcherDropdown from "@/shared/components/layout/AppSwitcherDropdown";
@@ -29,15 +27,15 @@ export default function Sidebar({
   onLogout,
 }) {
   const inboxUnread = useInboxUnreadCount(workspaceId);
-  const { data: boards = [] } = useBoards(workspaceId);
-  const [openSections, setOpenSections] = useState({});
+  // const { data: boards = [] } = useBoards(workspaceId);
+  // const [openSections, setOpenSections] = useState({});
   const { can, isOwner, isLoading: permsLoading } = usePermission();
   const { isEnabled, isLoading: modulesLoading } = useModules();
   const activeApp = useActiveApp();
   const navigate = useNavigate();
 
-  const toggleSection = (key) =>
-    setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  // const toggleSection = (key) =>
+  //   setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
 
   const NAV_SHORTCUTS = {
     dashboards: "g d",
@@ -45,16 +43,17 @@ export default function Sidebar({
     "my-work": "g m",
     goals: "g g",
     analytics: "g a",
+    settings: "g s",
   };
 
-  const subItemsMap = {
-    boards: boards.map((b) => ({
-      key: b.id,
-      to: `/w/${workspaceId}/boards/${b.id}`,
-      label: b.name,
-      board_type: b.board_type,
-    })),
-  };
+  // const subItemsMap = {
+  //   boards: boards.map((b) => ({
+  //     key: b.id,
+  //     to: `/w/${workspaceId}/boards/${b.id}`,
+  //     label: b.name,
+  //     board_type: b.board_type,
+  //   })),
+  // };
 
   // Build filtered nav groups
   const allNavGroups = resolvedNavGroups()
@@ -100,7 +99,7 @@ export default function Sidebar({
     >
       {collapsed ? (
         /* ── Collapsed header — logo navigates home, hover reveals expand button ── */
-        <div className="relative group border-b border-border/40 py-3 flex items-center justify-center">
+        <div className="relative group border-b border-border py-3 flex items-center justify-center">
           <button
             onClick={() => navigate(workspaceUrl(workspaceId, "apps"))}
             title={workspace?.name}
@@ -131,7 +130,7 @@ export default function Sidebar({
             <button
               onClick={() => navigate(workspaceUrl(workspaceId, "apps"))}
               title={`Go to ${workspace?.name ?? "home"}`}
-              className="flex items-center gap-2 flex-1 min-w-0 hover:opacity-80 transition-opacity text-left"
+              className="flex items-center gap-2 flex-1 min-w-0 hover:opacity-95 transition-opacity text-left"
             >
               <div className="w-7 h-7 rounded bg-primary flex items-center justify-center text-primary-foreground font-bold text-[10px] flex-shrink-0 overflow-hidden">
                 {workspace?.logo ? (
@@ -213,100 +212,102 @@ export default function Sidebar({
               )}
               <div className="space-y-1">
                 {group.items.map(({ to, icon: Icon, label, key, end, collapsible }) => {
-                  const subItems = collapsible ? subItemsMap[key] : null;
-                  const isOpen = openSections[key] ?? false;
+                  // const subItems = collapsible ? subItemsMap[key] : null;
+                  // const isOpen = openSections[key] ?? false;
 
-                  if (subItems !== null && subItems !== undefined) {
-                    return (
-                      <div key={to}>
-                        <NavLink
-                          to={to}
-                          end={end}
-                          className={({ isActive }) =>
-                            cn(
-                              "flex items-center gap-3 rounded px-3 py-2 text-sm transition-colors active:scale-[0.98]",
-                              isActive
-                                ? "text-primary font-semibold"
-                                : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                            )
-                          }
-                        >
-                          <Icon className="w-4 h-4 flex-shrink-0" />
-                          <span className="flex-1">{label}</span>
-                          <button
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              toggleSection(key);
-                            }}
-                            className="p-1 rounded-md hover:bg-primary/15 hover:text-primary transition-colors"
-                            title={isOpen ? "Collapse" : `Expand ${label.toLowerCase()}`}
-                          >
-                            <ChevronDown
-                              className={cn(
-                                "w-3.5 h-3.5 transition-transform duration-150",
-                                isOpen && "rotate-180",
-                              )}
-                            />
-                          </button>
-                        </NavLink>
+                  // if (subItems !== null && subItems !== undefined) {
+                  //   return (
+                  //     <div key={to}>
+                  //       <NavLink
+                  //         to={to}
+                  //         end={end}
+                  //         className={({ isActive }) =>
+                  //           cn(
+                  //             "flex items-center gap-3 rounded px-3 py-2 text-sm transition-colors active:scale-[0.98]",
+                  //             isActive
+                  //               ? "text-primary font-semibold"
+                  //               : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                  //           )
+                  //         }
+                  //       >
+                  //         <Icon className="w-4 h-4 flex-shrink-0" />
+                  //         <span className="flex-1">{label}</span>
+                  //         <button
+                  //           onClick={(e) => {
+                  //             e.preventDefault();
+                  //             e.stopPropagation();
+                  //             toggleSection(key);
+                  //           }}
+                  //           className="p-1 rounded-md hover:bg-primary/15 hover:text-primary transition-colors"
+                  //           title={isOpen ? "Collapse" : `Expand ${label.toLowerCase()}`}
+                  //         >
+                  //           <ChevronDown
+                  //             className={cn(
+                  //               "w-3.5 h-3.5 transition-transform duration-150",
+                  //               isOpen && "rotate-180",
+                  //             )}
+                  //           />
+                  //         </button>
+                  //       </NavLink>
 
-                        {isOpen && (
-                          <div className="mt-0.5 space-y-1">
-                            {subItems.length === 0 ? (
-                              <p className="px-3 py-1.5 text-xs text-muted-foreground/50 select-none">
-                                No {label.toLowerCase()} yet
-                              </p>
-                            ) : (
-                              subItems.map((item) => (
-                                <NavLink
-                                  key={item.key}
-                                  to={item.to}
-                                  className={({ isActive }) =>
-                                    cn(
-                                      "flex items-center gap-2 rounded px-3 py-1.5 text-xs transition-colors",
-                                      isActive
-                                        ? "bg-primary/10 text-primary font-medium"
-                                        : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                                    )
-                                  }
-                                >
-                                  <BoardTypeIcon
-                                    board_type={item.board_type}
-                                    size="xs"
-                                  />
-                                  <span className="flex-1 truncate">{item.label}</span>
-                                </NavLink>
-                              ))
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  }
+                  //       {isOpen && (
+                  //         <div className="mt-0.5 space-y-1">
+                  //           {subItems.length === 0 ? (
+                  //             <p className="px-3 py-1.5 text-xs text-muted-foreground/50 select-none">
+                  //               No {label.toLowerCase()} yet
+                  //             </p>
+                  //           ) : (
+                  //             subItems.map((item) => (
+                  //               <NavLink
+                  //                 key={item.key}
+                  //                 to={item.to}
+                  //                 className={({ isActive }) =>
+                  //                   cn(
+                  //                     "flex items-center gap-2 rounded px-3 py-1.5 text-xs transition-colors",
+                  //                     isActive
+                  //                       ? "bg-primary/10 text-primary font-medium"
+                  //                       : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                  //                   )
+                  //                 }
+                  //               >
+                  //                 <BoardTypeIcon
+                  //                   board_type={item.board_type}
+                  //                   size="xs"
+                  //                 />
+                  //                 <span className="flex-1 truncate">{item.label}</span>
+                  //               </NavLink>
+                  //             ))
+                  //           )}
+                  //         </div>
+                  //       )}
+                  //     </div>
+                  //   );
+                  // }
 
+                  const shortcut = NAV_SHORTCUTS[key];
                   return (
-                    <NavLink
-                      key={to}
-                      to={to}
-                      end={end}
-                      className={({ isActive }) =>
-                        cn(
-                          "flex items-center gap-3 rounded px-3 py-2 text-sm transition-colors active:scale-[0.98]",
-                          isActive
-                            ? "bg-primary/10 text-primary font-semibold"
-                            : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                        )
-                      }
-                    >
-                      <Icon className="w-4 h-4 flex-shrink-0" />
-                      <span className="flex-1">{label}</span>
-                      {key === "inbox" && inboxUnread > 0 && !isFocusMode && (
-                        <span className="min-w-[18px] h-[18px] rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center px-1">
-                          {inboxUnread > 9 ? "9+" : inboxUnread}
-                        </span>
-                      )}
-                    </NavLink>
+                    <ShortcutTooltip key={to} label={label} shortcut={shortcut} side="right" delayDuration={400}>
+                      <NavLink
+                        to={to}
+                        end={end}
+                        className={({ isActive }) =>
+                          cn(
+                            "flex items-center gap-3 rounded px-3 py-2 text-sm transition-colors active:scale-[0.98]",
+                            isActive
+                              ? "bg-primary/10 text-primary font-semibold"
+                              : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                          )
+                        }
+                      >
+                        <Icon className="w-4 h-4 flex-shrink-0" />
+                        <span className="flex-1">{label}</span>
+                        {key === "inbox" && inboxUnread > 0 && !isFocusMode && (
+                          <span className="min-w-[18px] h-[18px] rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center px-1">
+                            {inboxUnread > 9 ? "9+" : inboxUnread}
+                          </span>
+                        )}
+                      </NavLink>
+                    </ShortcutTooltip>
                   );
                 })}
               </div>

@@ -22,8 +22,8 @@ export const SHORTCUT_GROUPS = [
         description: "Go to Dashboards",
       },
       {
-        keys: ["g", "then", "m"],
-        display: ["g", "m"],
+        keys: ["g", "then", "w"],
+        display: ["g", "w"],
         description: "Go to My Work",
       },
       {
@@ -41,8 +41,22 @@ export const SHORTCUT_GROUPS = [
         display: ["g", "g"],
         description: "Go to Goals",
       },
+      {
+        keys: ["g", "then", "m"],
+        display: ["g", "m"],
+        description: "Go to Members",
+      },
+      {
+        keys: ["g", "then", "s"],
+        display: ["g", "s"],
+        description: "Go to Settings",
+      },
       { keys: ["⌘K"], display: ["⌘K"], description: "Open command palette" },
-      { keys: ["Ctrl+."], display: ["Ctrl", "."], description: "Toggle sidebar" },
+      {
+        keys: ["Ctrl+."],
+        display: ["Ctrl", "."],
+        description: "Toggle sidebar",
+      },
     ],
   },
   {
