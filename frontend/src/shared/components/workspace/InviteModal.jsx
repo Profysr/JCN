@@ -3,14 +3,9 @@ import { X, Send, CheckCircle2, UserPlus } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { cn } from "@/shared/lib/utils";
 import { useInviteMember } from "@/shared/hooks/useMembers";
+import { useRoles } from "@/shared/hooks/useRoles";
 import { useQueryClient } from "@tanstack/react-query";
 import Modal from "@/shared/components/ui/Modal";
-
-const ROLES = [
-  { key: "Member", label: "Member", desc: "Can create and edit tasks" },
-  { key: "Viewer", label: "Viewer", desc: "Read-only access" },
-  { key: "Admin", label: "Admin", desc: "Full workspace access" },
-];
 
 function EmailChipInput({ emails, onChange }) {
   const [input, setInput] = useState("");
@@ -88,6 +83,9 @@ export default function InviteModal({
   const [successCount, setSuccessCount] = useState(0);
   const qc = useQueryClient();
   const inviteMember = useInviteMember(workspaceId);
+  const { data: allRoles = [], isLoading: rolesLoading } = useRoles(workspaceId);
+  // Only system roles are valid invite targets — custom roles can be assigned after joining
+  const roles = allRoles.filter((r) => r.is_system);
 
   const handleSend = async () => {
     if (!emails.length) return;
@@ -156,33 +154,49 @@ export default function InviteModal({
               <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                 Role
               </label>
-              <div className="grid grid-cols-3 gap-2">
-                {ROLES.map(({ key, label, desc }) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setRole(key)}
-                    className={cn(
-                      "p-3 rounded-lg border text-left transition-all",
-                      role === key
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:border-primary/40 hover:bg-muted/40",
-                    )}
-                  >
-                    <p
+              {rolesLoading ? (
+                <div className="space-y-2">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-14 rounded-lg border border-border bg-muted animate-pulse" />
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {roles.map((r) => (
+                    <button
+                      key={r.id}
+                      type="button"
+                      onClick={() => setRole(r.name)}
                       className={cn(
-                        "text-xs font-semibold",
-                        role === key ? "text-primary" : "text-foreground",
+                        "w-full p-3 rounded-lg border text-left transition-all",
+                        role === r.name
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:border-primary/40 hover:bg-muted/40",
                       )}
                     >
-                      {label}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-0.5 leading-tight">
-                      {desc}
-                    </p>
-                  </button>
-                ))}
-              </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className={cn(
+                          "text-xs font-semibold",
+                          role === r.name ? "text-primary" : "text-foreground",
+                        )}>
+                          {r.name}
+                          {r.is_system && (
+                            <span className="ml-1.5 text-[10px] font-normal text-muted-foreground/60">🔒</span>
+                          )}
+                        </p>
+                        <span className="text-[10px] text-muted-foreground shrink-0">
+                          {Object.values(r.permissions ?? {}).filter(Boolean).length} permissions
+                        </span>
+                      </div>
+                      {r.description && (
+                        <p className="text-xs text-muted-foreground mt-0.5 leading-tight">
+                          {r.description}
+                        </p>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {error && <p className="text-xs text-destructive">{error}</p>}

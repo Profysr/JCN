@@ -1,9 +1,7 @@
-import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { cn } from "@/shared/lib/utils";
-import { ChevronDown, Search, ChevronsLeft, ChevronsRight } from "lucide-react";
-import BoardTypeIcon from "@/shared/components/ui/BoardTypeIcon";
-import { resolvedNavGroups, workspaceUrl } from "@/shared/lib/navLinks";
+import { Search, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { resolvedNavGroups, workspaceUrl, APP_DEFS } from "@/shared/lib/navLinks";
 import { usePermission } from "@/contexts/PermissionsContext";
 import { useModules } from "@/shared/hooks/useModules";
 import { useInboxUnreadCount } from "@/shared/hooks/useInbox";
@@ -27,33 +25,20 @@ export default function Sidebar({
   onLogout,
 }) {
   const inboxUnread = useInboxUnreadCount(workspaceId);
-  // const { data: boards = [] } = useBoards(workspaceId);
-  // const [openSections, setOpenSections] = useState({});
   const { can, isOwner, isLoading: permsLoading } = usePermission();
   const { isEnabled, isLoading: modulesLoading } = useModules();
   const activeApp = useActiveApp();
   const navigate = useNavigate();
 
-  // const toggleSection = (key) =>
-  //   setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
-
   const NAV_SHORTCUTS = {
     dashboards: "g d",
     boards: "g p",
-    "my-work": "g m",
+    "my-work": "g w",
     goals: "g g",
     analytics: "g a",
     settings: "g s",
+    members: "g m"
   };
-
-  // const subItemsMap = {
-  //   boards: boards.map((b) => ({
-  //     key: b.id,
-  //     to: `/w/${workspaceId}/boards/${b.id}`,
-  //     label: b.name,
-  //     board_type: b.board_type,
-  //   })),
-  // };
 
   // Build filtered nav groups
   const allNavGroups = resolvedNavGroups()
@@ -83,11 +68,22 @@ export default function Sidebar({
     }))
     .filter((group) => group.items.length > 0);
 
-  // Always show only the current app's groups — collapsed or not.
-  // Launcher maps to workspace-level links; all other apps show their own groups.
-  const navGroups = allNavGroups.filter(
-    (g) => g.app === (activeApp === "launcher" ? "workspace" : activeApp)
+  // App-level gate lookup — moduleKey + permKey from APP_DEFS
+  const _appGates = Object.fromEntries(
+    APP_DEFS.map((a) => [a.key, { moduleKey: a.moduleKey, permKey: a.permKey }])
   );
+
+  // Show only the current app's groups; also gate the whole app by module + permission.
+  // Launcher maps to workspace-level links; all other apps show their own groups.
+  const targetApp = activeApp === "launcher" ? "workspace" : activeApp;
+  const navGroups = allNavGroups.filter((g) => {
+    if (g.app !== targetApp) return false;
+    const gate = _appGates[g.app];
+    if (!gate) return true;
+    if (gate.moduleKey && !modulesLoading && !isEnabled(gate.moduleKey)) return false;
+    if (gate.permKey && !permsLoading && !isOwner && !can(gate.permKey)) return false;
+    return true;
+  });
 
   return (
     <aside
@@ -99,7 +95,7 @@ export default function Sidebar({
     >
       {collapsed ? (
         /* ── Collapsed header — logo navigates home, hover reveals expand button ── */
-        <div className="relative group border-b border-border py-3 flex items-center justify-center">
+        <div className="relative group border-b border-border/40 py-3 flex items-center justify-center">
           <button
             onClick={() => navigate(workspaceUrl(workspaceId, "apps"))}
             title={workspace?.name}
@@ -177,6 +173,12 @@ export default function Sidebar({
         {collapsed ? (
           /* Collapsed: icon-only, all modules visible */
           <div className="flex flex-col items-center gap-0.5 py-1">
+            {navGroups.length === 0 && (
+              <span className="text-[10px] text-muted-foreground/50 select-none tracking-widest uppercase mt-3"
+                style={{ writingMode: "vertical-rl" }}>
+                No access
+              </span>
+            )}
             {navGroups.flatMap((group) =>
               group.items.map(({ to, icon: Icon, label, key, end }) => (
                 <ShortcutTooltip key={to} label={label} shortcut={NAV_SHORTCUTS[key]} side="right" delayDuration={100}>
@@ -203,6 +205,14 @@ export default function Sidebar({
           </div>
         ) : (
           /* Expanded: active app's groups only */
+          navGroups.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full gap-1.5 py-8 select-none">
+              <span className="text-xs font-medium text-muted-foreground">No access</span>
+              <span className="text-[11px] text-muted-foreground/50 text-center px-4 leading-relaxed">
+                You don't have access to any section in this app.
+              </span>
+            </div>
+          ) :
           navGroups.map((group, gi) => (
             <div key={gi} className={gi > 0 ? "mt-3" : ""}>
               {group.label && (
@@ -211,103 +221,36 @@ export default function Sidebar({
                 </p>
               )}
               <div className="space-y-1">
-                {group.items.map(({ to, icon: Icon, label, key, end, collapsible }) => {
-                  // const subItems = collapsible ? subItemsMap[key] : null;
-                  // const isOpen = openSections[key] ?? false;
-
-                  // if (subItems !== null && subItems !== undefined) {
-                  //   return (
-                  //     <div key={to}>
-                  //       <NavLink
-                  //         to={to}
-                  //         end={end}
-                  //         className={({ isActive }) =>
-                  //           cn(
-                  //             "flex items-center gap-3 rounded px-3 py-2 text-sm transition-colors active:scale-[0.98]",
-                  //             isActive
-                  //               ? "text-primary font-semibold"
-                  //               : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                  //           )
-                  //         }
-                  //       >
-                  //         <Icon className="w-4 h-4 flex-shrink-0" />
-                  //         <span className="flex-1">{label}</span>
-                  //         <button
-                  //           onClick={(e) => {
-                  //             e.preventDefault();
-                  //             e.stopPropagation();
-                  //             toggleSection(key);
-                  //           }}
-                  //           className="p-1 rounded-md hover:bg-primary/15 hover:text-primary transition-colors"
-                  //           title={isOpen ? "Collapse" : `Expand ${label.toLowerCase()}`}
-                  //         >
-                  //           <ChevronDown
-                  //             className={cn(
-                  //               "w-3.5 h-3.5 transition-transform duration-150",
-                  //               isOpen && "rotate-180",
-                  //             )}
-                  //           />
-                  //         </button>
-                  //       </NavLink>
-
-                  //       {isOpen && (
-                  //         <div className="mt-0.5 space-y-1">
-                  //           {subItems.length === 0 ? (
-                  //             <p className="px-3 py-1.5 text-xs text-muted-foreground/50 select-none">
-                  //               No {label.toLowerCase()} yet
-                  //             </p>
-                  //           ) : (
-                  //             subItems.map((item) => (
-                  //               <NavLink
-                  //                 key={item.key}
-                  //                 to={item.to}
-                  //                 className={({ isActive }) =>
-                  //                   cn(
-                  //                     "flex items-center gap-2 rounded px-3 py-1.5 text-xs transition-colors",
-                  //                     isActive
-                  //                       ? "bg-primary/10 text-primary font-medium"
-                  //                       : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                  //                   )
-                  //                 }
-                  //               >
-                  //                 <BoardTypeIcon
-                  //                   board_type={item.board_type}
-                  //                   size="xs"
-                  //                 />
-                  //                 <span className="flex-1 truncate">{item.label}</span>
-                  //               </NavLink>
-                  //             ))
-                  //           )}
-                  //         </div>
-                  //       )}
-                  //     </div>
-                  //   );
-                  // }
-
+                {group.items.map(({ to, icon: Icon, label, key, end }) => {
+                  // TODO: collapsible sub-items (boards list) — restore when nav sub-items are re-enabled
                   const shortcut = NAV_SHORTCUTS[key];
                   return (
-                    <ShortcutTooltip key={to} label={label} shortcut={shortcut} side="right" delayDuration={400}>
-                      <NavLink
-                        to={to}
-                        end={end}
-                        className={({ isActive }) =>
-                          cn(
-                            "flex items-center gap-3 rounded px-3 py-2 text-sm transition-colors active:scale-[0.98]",
-                            isActive
-                              ? "bg-primary/10 text-primary font-semibold"
-                              : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                          )
-                        }
-                      >
-                        <Icon className="w-4 h-4 flex-shrink-0" />
-                        <span className="flex-1">{label}</span>
-                        {key === "inbox" && inboxUnread > 0 && !isFocusMode && (
-                          <span className="min-w-[18px] h-[18px] rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center px-1">
-                            {inboxUnread > 9 ? "9+" : inboxUnread}
-                          </span>
-                        )}
-                      </NavLink>
-                    </ShortcutTooltip>
+                    <NavLink
+                      key={to}
+                      to={to}
+                      end={end}
+                      className={({ isActive }) =>
+                        cn(
+                          "group/nav flex items-center gap-3 rounded px-3 py-2 text-sm transition-colors active:scale-[0.98]",
+                          isActive
+                            ? "bg-primary/10 text-primary font-semibold"
+                            : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                        )
+                      }
+                    >
+                      <Icon className="w-4 h-4 flex-shrink-0" />
+                      <span className="flex-1">{label}</span>
+                      {key === "inbox" && inboxUnread > 0 && !isFocusMode && (
+                        <span className="min-w-[18px] h-[18px] rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center px-1">
+                          {inboxUnread > 9 ? "9+" : inboxUnread}
+                        </span>
+                      )}
+                      {shortcut && (
+                        <kbd className="hidden group-hover/nav:inline-flex text-xs font-mono bg-muted border border-border rounded px-1 py-0.5 leading-none text-muted-foreground">
+                          {shortcut}
+                        </kbd>
+                      )}
+                    </NavLink>
                   );
                 })}
               </div>

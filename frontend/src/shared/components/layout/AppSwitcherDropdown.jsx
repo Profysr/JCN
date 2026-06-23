@@ -4,6 +4,7 @@ import { cn } from "@/shared/lib/utils";
 import { LayoutGrid } from "lucide-react";
 import { APP_DEFS, workspaceUrl } from "@/shared/lib/navLinks";
 import { useModules } from "@/shared/hooks/useModules";
+import { usePermission } from "@/contexts/PermissionsContext";
 import { useActiveApp } from "@/shared/hooks/useActiveApp";
 import { Tooltip } from "@/shared/components/ui/tooltip";
 
@@ -51,12 +52,15 @@ export default function AppSwitcherDropdown({ workspaceId, collapsed }) {
   const navigate = useNavigate();
   const activeApp = useActiveApp();
   const { isEnabled, isLoading: modulesLoading } = useModules();
+  const { can, isOwner, isLoading: permsLoading } = usePermission();
 
-  const visibleApps = APP_DEFS.filter(
-    (app) =>
-      app.key !== "workspace" &&
-      (!app.moduleKey || modulesLoading || isEnabled(app.moduleKey)),
-  );
+  const visibleApps = APP_DEFS.filter((app) => {
+    if (app.key === "workspace") return false;
+    if (modulesLoading || permsLoading) return true;
+    if (app.moduleKey && !isEnabled(app.moduleKey)) return false;
+    if (app.permKey && !isOwner && !can(app.permKey)) return false;
+    return true;
+  });
 
   const currentApp = APP_DEFS.find((a) => a.key === activeApp);
   const colors = currentApp?.colors ?? APP_DEFS[0].colors;

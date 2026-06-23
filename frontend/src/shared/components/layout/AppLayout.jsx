@@ -57,7 +57,7 @@ export default function AppLayout() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState("me");
 
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
 
   // Focus Mode -------------------------------------
   const [focusModeUntil, setFocusModeUntil] = useState(() => {

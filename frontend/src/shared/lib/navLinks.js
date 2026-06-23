@@ -155,6 +155,7 @@ export const WORKSPACE_NAV_ITEMS = [
     label: "Members",
     desc: "Manage team members",
     path: "members",
+    permission: "settings.manage",
   },
   {
     key: "integrations",
@@ -162,6 +163,7 @@ export const WORKSPACE_NAV_ITEMS = [
     label: "Integrations",
     desc: "Teams, Google Chat webhooks",
     path: "settings/integrations",
+    permission: "settings.manage",
   },
   {
     key: "api-keys",
@@ -169,6 +171,7 @@ export const WORKSPACE_NAV_ITEMS = [
     label: "API Keys",
     desc: "Programmatic API access",
     path: "settings/api",
+    permission: "settings.manage",
   },
   {
     key: "webhooks",
@@ -176,6 +179,7 @@ export const WORKSPACE_NAV_ITEMS = [
     label: "Webhooks",
     desc: "Outbound event webhooks",
     path: "settings/webhooks",
+    permission: "settings.manage",
   },
   {
     key: "settings",
@@ -184,6 +188,7 @@ export const WORKSPACE_NAV_ITEMS = [
     desc: "Workspace settings",
     path: "settings",
     end: true,
+    permission: "settings.manage",
   },
 ];
 

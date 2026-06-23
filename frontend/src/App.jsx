@@ -261,9 +261,9 @@ export default function App() {
                 handle={{ app: "workspace" }}
               />
               <Route
-                path="settings/import"
+                path="import"
                 element={<ImportPage />}
-                handle={{ app: "workspace" }}
+                handle={{ app: "projects" }}
               />
             </Route>
           </Route>

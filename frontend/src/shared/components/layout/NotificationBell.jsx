@@ -14,6 +14,7 @@ import { Bell, CheckCheck, Activity } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Avatar } from "@/shared/components/ui/avatar";
 import { cn } from "@/shared/lib/utils";
+import { Loader } from "../ui/Loader";
 
 // Meta dictionaries used for building out notification templates
 const VERB_META = {

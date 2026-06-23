@@ -5,6 +5,7 @@ import {
   workspaceUrl,
 } from "@/shared/lib/navLinks";
 import { useModules } from "@/shared/hooks/useModules";
+import { usePermission } from "@/contexts/PermissionsContext";
 import { ArrowUpRight } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 
@@ -13,13 +14,26 @@ export default function AppLauncherPage() {
   const { workspaceId } = useParams();
   const navigate = useNavigate();
   const { modules, isLoading: modulesLoading } = useModules();
+  const { can, isOwner, isLoading: permsLoading } = usePermission();
 
   // API returns name/description/tier; APP_DEFS supplies icon, landing, colors.
   // Discard the API's string `icon` field so it doesn't shadow the Lucide component.
   const apps = modules
     .filter((m) => m.is_enabled)
     .filter((m) => _appByKey[m.key])
+    .filter((m) => {
+      const def = _appByKey[m.key];
+      if (permsLoading) return true;
+      if (def.permKey && !isOwner && !can(def.permKey)) return false;
+      return true;
+    })
     .map(({ icon: _apiIcon, ...m }) => ({ ...m, ..._appByKey[m.key] }));
+
+  const visibleWorkspaceItems = WORKSPACE_NAV_ITEMS.filter((item) => {
+    if (permsLoading) return true;
+    if (item.permission && !isOwner && !can(item.permission)) return false;
+    return true;
+  });
 
   return (
     <div className="flex-1 overflow-auto">
@@ -78,7 +92,7 @@ export default function AppLauncherPage() {
           Workspace
         </h2>
         <div className="grid grid-cols-4 gap-2">
-          {WORKSPACE_NAV_ITEMS.map((page) => {
+          {visibleWorkspaceItems.map((page) => {
             const Icon = page.icon;
             return (
               <button

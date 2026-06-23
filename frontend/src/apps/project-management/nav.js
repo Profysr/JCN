@@ -50,7 +50,7 @@ export const PM_NAV_ITEMS = [
     icon: Upload,
     label: "Import",
     desc: "Migrate from Jira, Trello, ClickUp…",
-    path: "settings/import",
+    path: "import",
   },
 ];
 
