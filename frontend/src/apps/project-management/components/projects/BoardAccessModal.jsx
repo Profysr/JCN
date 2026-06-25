@@ -26,7 +26,7 @@ import {
   useRemoveBoardMember,
   useBulkAddBoardMembers,
 } from "../../hooks/useBoardMembers";
-import { useUpdateBoard } from "../../hooks/useProjects";
+import { useUpdateBoard } from "../../hooks/useBoards";
 
 const TABS = ["members", "permissions"];
 
@@ -118,8 +118,8 @@ export default function BoardAccessModal({
 
               {boardMembers.length === 0 && !pickerOpen && (
                 <p className="text-sm text-muted-foreground text-center py-6">
-                  No board-specific members set — all workspace members
-                  inherit their workspace role.
+                  No board-specific members set — all workspace members inherit
+                  their workspace role.
                 </p>
               )}
             </div>
@@ -426,7 +426,10 @@ function BulkMemberPicker({
 }
 
 function PermissionsTab({ workspaceId, boardId }) {
-  const { data: roleDefs, isLoading } = useBoardRoleDefinitions(workspaceId, boardId);
+  const { data: roleDefs, isLoading } = useBoardRoleDefinitions(
+    workspaceId,
+    boardId,
+  );
 
   // Derive column headers from the first role's keys — no hardcoding needed.
   const actions = roleDefs ? Object.keys(Object.values(roleDefs)[0]) : [];
@@ -434,55 +437,57 @@ function PermissionsTab({ workspaceId, boardId }) {
   return (
     <div>
       <p className="text-xs text-muted-foreground mb-4">
-        Effective permissions per role. The workspace role always caps the
-        board role — the most restrictive wins.
+        Effective permissions per role. The workspace role always caps the board
+        role — the most restrictive wins.
       </p>
       <div className="overflow-x-auto">
         {isLoading ? (
-          <div className="py-8 text-center text-xs text-muted-foreground">Loading…</div>
+          <div className="py-8 text-center text-xs text-muted-foreground">
+            Loading…
+          </div>
         ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b">
-              <th className="text-left py-2 pr-4 font-medium text-muted-foreground text-xs uppercase tracking-wide w-28">
-                Role
-              </th>
-              {actions.map((action) => (
-                <th
-                  key={action}
-                  className="text-center py-2 px-3 font-medium text-muted-foreground text-xs uppercase tracking-wide"
-                >
-                  {action}
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left py-2 pr-4 font-medium text-muted-foreground text-xs uppercase tracking-wide w-28">
+                  Role
                 </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {Object.entries(roleDefs).map(([role, perms]) => (
-              <tr
-                key={role}
-                className="border-b last:border-0 hover:bg-accent/20 transition-colors"
-              >
-                <td className="py-3 pr-4">
-                  <Badge variant={ROLE_BADGE_VARIANT[role]} size="sm">
-                    {role}
-                  </Badge>
-                </td>
                 {actions.map((action) => (
-                  <td key={action} className="text-center py-3 px-3">
-                    {perms[action] ? (
-                      <Check className="w-4 h-4 text-emerald-500 mx-auto" />
-                    ) : (
-                      <span className="text-muted-foreground/30 text-lg leading-none">
-                        —
-                      </span>
-                    )}
-                  </td>
+                  <th
+                    key={action}
+                    className="text-center py-2 px-3 font-medium text-muted-foreground text-xs uppercase tracking-wide"
+                  >
+                    {action}
+                  </th>
                 ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {Object.entries(roleDefs).map(([role, perms]) => (
+                <tr
+                  key={role}
+                  className="border-b last:border-0 hover:bg-accent/20 transition-colors"
+                >
+                  <td className="py-3 pr-4">
+                    <Badge variant={ROLE_BADGE_VARIANT[role]} size="sm">
+                      {role}
+                    </Badge>
+                  </td>
+                  {actions.map((action) => (
+                    <td key={action} className="text-center py-3 px-3">
+                      {perms[action] ? (
+                        <Check className="w-4 h-4 text-emerald-500 mx-auto" />
+                      ) : (
+                        <span className="text-muted-foreground/30 text-lg leading-none">
+                          —
+                        </span>
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
       <div className="mt-4 p-3 rounded-lg bg-muted/40 text-xs text-muted-foreground space-y-1">

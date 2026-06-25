@@ -14,5 +14,5 @@ export const usePortfolio = (workspaceId) =>
     queryFn: () =>
       api.get(`/api/workspaces/${workspaceId}/portfolio/`).then((r) => r.data),
     enabled: !!workspaceId,
-    staleTime: 60_000,
+    staleTime: 90_000,
   });

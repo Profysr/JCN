@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ConfirmModal } from "@/shared/components/ui/ConfirmModal";
+import { DeleteWorkspaceModal } from "@/shared/components/ui/ConfirmModal";
 import { useToast } from "@/shared/components/ui/toast";
 import {
   useDeleteWorkspace,
@@ -35,7 +35,6 @@ export default function SettingsPage() {
 
   const [form, setForm] = useState({ name: "", description: "" });
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
@@ -203,42 +202,21 @@ export default function SettingsPage() {
             Deleting the workspace is permanent. All projects, tasks, and
             members will be removed immediately.
           </p>
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="delete-confirm">
-                Type{" "}
-                <span className="font-semibold text-foreground">
-                  {workspace?.name}
-                </span>{" "}
-                to confirm
-              </Label>
-              <Input
-                id="delete-confirm"
-                placeholder={workspace?.name}
-                value={deleteConfirm}
-                onChange={(e) => setDeleteConfirm(e.target.value)}
-              />
-            </div>
-            <Button
-              variant="destructive"
-              disabled={
-                deleteConfirm !== workspace?.name || deleteWorkspace.isPending
-              }
-              onClick={() => setShowDeleteConfirm(true)}
-            >
-              Delete this workspace
-            </Button>
-          </div>
+          <Button
+            variant="destructive"
+            onClick={() => setShowDeleteConfirm(true)}
+          >
+            Delete this workspace
+          </Button>
         </section>
       )}
 
       {showDeleteConfirm && (
-        <ConfirmModal
-          title="Delete workspace?"
-          message={`This will permanently delete "${workspace?.name}" and all its projects, tasks, and members. This cannot be undone.`}
-          confirmLabel={deleteWorkspace.isPending ? "Deleting…" : "Delete workspace"}
+        <DeleteWorkspaceModal
+          workspace={workspace}
+          isPending={deleteWorkspace.isPending}
           onConfirm={handleDelete}
-          onCancel={() => setShowDeleteConfirm(false)}
+          onClose={() => setShowDeleteConfirm(false)}
         />
       )}
     </div>

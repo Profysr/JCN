@@ -31,7 +31,7 @@ const OnboardingPage = lazy(() => import("@/pages/onboarding/OnboardingPage"));
 const SetupWizard = lazy(() => import("@/pages/workspace/SetupWizard"));
 
 // ── Project pages ─────────────────────────────────────────────────────────────
-const ProjectsPage = lazy(
+const BoardsPage = lazy(
   () => import("@/apps/project-management/pages/BoardsPage"),
 );
 const KanbanPage = lazy(
@@ -151,7 +151,7 @@ export default function App() {
               {/* Boards */}
               <Route
                 path="boards"
-                element={<ProjectsPage />}
+                element={<BoardsPage />}
                 handle={{ app: "projects" }}
               />
               <Route
@@ -176,15 +176,43 @@ export default function App() {
               />
 
               {/* Org Structure */}
-              <Route path="departments" element={<DepartmentsPage />} handle={{ app: "org" }} />
-              <Route path="teams" element={<TeamsPage />} handle={{ app: "org" }} />
-              <Route path="org-chart" element={<OrgChartPage />} handle={{ app: "org" }} />
+              <Route
+                path="departments"
+                element={<DepartmentsPage />}
+                handle={{ app: "org" }}
+              />
+              <Route
+                path="teams"
+                element={<TeamsPage />}
+                handle={{ app: "org" }}
+              />
+              <Route
+                path="org-chart"
+                element={<OrgChartPage />}
+                handle={{ app: "org" }}
+              />
 
               {/* HR Management */}
-              <Route path="hr" element={<HRDashboardPage />} handle={{ app: "hr" }} />
-              <Route path="hr/leave" element={<LeavePage />} handle={{ app: "hr" }} />
-              <Route path="hr/attendance" element={<AttendancePage />} handle={{ app: "hr" }} />
-              <Route path="members/:memberId" element={<MemberDetailPage />} handle={{ app: "hr" }} />
+              <Route
+                path="hr"
+                element={<HRDashboardPage />}
+                handle={{ app: "hr" }}
+              />
+              <Route
+                path="hr/leave"
+                element={<LeavePage />}
+                handle={{ app: "hr" }}
+              />
+              <Route
+                path="hr/attendance"
+                element={<AttendancePage />}
+                handle={{ app: "hr" }}
+              />
+              <Route
+                path="members/:memberId"
+                element={<MemberDetailPage />}
+                handle={{ app: "hr" }}
+              />
 
               {/* Workspace */}
               <Route

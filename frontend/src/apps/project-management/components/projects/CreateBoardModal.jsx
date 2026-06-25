@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useCreateBoard } from "@/apps/project-management/hooks/useProjects";
+import { useCreateBoard } from "@/apps/project-management/hooks/useBoards";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
@@ -101,7 +101,10 @@ export default function CreateBoardModal({ workspaceId, open, onClose }) {
           </p>
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-y-auto">
+        <form
+          onSubmit={handleSubmit}
+          className="flex flex-col flex-1 min-h-0 overflow-y-auto"
+        >
           {/* Gradient preview banner */}
           <div
             className={`relative h-32 bg-gradient-to-br ${meta.gradient} flex flex-col items-center justify-center gap-2 overflow-hidden transition-all duration-300`}

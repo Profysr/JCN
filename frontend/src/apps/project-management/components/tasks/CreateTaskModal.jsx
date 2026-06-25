@@ -90,7 +90,7 @@ export default function CreateTaskModal({
       showFooter={false}
       padding="p-0"
       flexBody
-      maxWidth="512px"
+      // maxWidth="512px"
     >
       <div className="overflow-y-auto">
         <form onSubmit={handleSubmit} className="p-5 space-y-4">

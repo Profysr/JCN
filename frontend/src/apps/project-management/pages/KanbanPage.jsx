@@ -3,7 +3,7 @@ import { Loader } from "@/shared/components/ui/Loader";
 import { ModalSkeleton } from "@/shared/components/ui/Modal";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { DragDropContext } from "@hello-pangea/dnd";
-import { useBoard } from "@/apps/project-management/hooks/useProjects";
+import { useBoard } from "@/apps/project-management/hooks/useBoards";
 import {
   useTasks,
   useMoveTask,
@@ -190,7 +190,7 @@ export default function KanbanPage() {
   const perms = useBoardPermissions(workspaceId, boardId);
   const { can, isOwner: isWsOwner } = usePermission();
 
-  const canEdit  = perms.canEdit  || isWsOwner;
+  const canEdit = perms.canEdit || isWsOwner;
   const canAdmin = perms.canAdmin || isWsOwner || can("board.admin");
 
   const moveTask = useMoveTask(workspaceId, boardId);
@@ -525,7 +525,7 @@ export default function KanbanPage() {
             onDragEnd={handleDragEnd}
           >
             <div className="flex-1 overflow-x-auto p-6">
-              <div className="flex gap-5 h-full items-start">
+              <div className="flex gap-2 h-full items-start">
                 {statuses?.map((col) => {
                   const srcCol = dragSourceColumnId
                     ? statuses.find((s) => s.id === dragSourceColumnId)

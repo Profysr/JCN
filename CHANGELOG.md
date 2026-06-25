@@ -79,7 +79,7 @@
 - `TaskCard` — draggable, shows priority icon, due date, subtask progress bar, comment count, assignee avatar
 - `CreateTaskModal` — title, description, priority, due date, assignee, default status pre-selected
 - `CreateProjectModal` — name + description, navigates to new project's board on create
-- `ProjectsPage` — project grid with empty state
+- `BoardsPage` — project grid with empty state
 - `DashboardPage` — real stats (project count, total tasks, member count) + recent projects grid
 - Routes added: `/w/:workspaceSlug/projects` and `/w/:workspaceSlug/projects/:projectId`
 
@@ -267,7 +267,7 @@
 - **TaskCard**: `rounded-md`, `shadow-card` + `shadow-card-hover`, subtask progress bar replaces text counter, `rotate-[0.8deg]` on drag
 - **KanbanPage header**: Segmented control view toggle (Board / List / Sprint) with `bg-muted` pill container
 - **DashboardPage**: Stat cards with colored icon containers (indigo/violet/emerald), project cards with colored avatars + progress bars + task completion %
-- **ProjectsPage**: Project cards with colored avatars, progress bars, `shadow-card` + `shadow-card-hover`
+- **BoardsPage**: Project cards with colored avatars, progress bars, `shadow-card` + `shadow-card-hover`
 
 ---
 
@@ -484,7 +484,7 @@ Project-level overrides (via `ProjectMember`) **can only restrict** Members/View
 - `KanbanPage` gates: Add Task button, board settings gear, column add/rename/delete — all hidden for Viewers
 - `TaskDetailPanel` — read-only for Viewers: selects disabled, title not clickable, subtask form hidden, label picker hidden, delete button hidden; drag-and-drop disabled via `isDragDisabled`
 - `AccessDeniedPage` — 403 page with "Request access" button
-- `ProjectsPage` — private projects invisible to non-members
+- `BoardsPage` — private projects invisible to non-members
 
 ### Bugs found + fixed during testing
 

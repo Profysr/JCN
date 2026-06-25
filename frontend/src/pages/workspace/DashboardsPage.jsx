@@ -23,7 +23,7 @@ import {
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/shared/lib/utils";
 import { useMyWork } from "@/shared/hooks/useMyWork";
-import { useBoards } from "@/apps/project-management/hooks/useProjects";
+import { useBoards } from "@/apps/project-management/hooks/useBoards";
 import { useObjectives, CONFIDENCE_CONFIG } from "@/shared/hooks/useGoals";
 import {
   useInbox,

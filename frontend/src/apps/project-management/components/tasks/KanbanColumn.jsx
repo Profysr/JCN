@@ -68,7 +68,7 @@ export default function KanbanColumn({
   }
 
   return (
-    <div className="flex flex-col w-[272px] flex-shrink-0 animate-column-expand">
+    <div className="flex flex-col w-72 flex-shrink-0 animate-column-expand">
       <Droppable droppableId={column.id}>
         {(provided, snapshot) => {
           const isReceiving = snapshot.isDraggingOver && !!dragSourceName;
@@ -159,10 +159,8 @@ export default function KanbanColumn({
 
               {/* Droppable task list */}
               <div
-                ref={provided.innerRef}
-                {...provided.droppableProps}
                 className={cn(
-                  "flex flex-col gap-1.5 min-h-[200px] rounded-b-md border border-t-0 border-border px-1.5 py-1.5 transition-colors duration-200",
+                  "max-h-[480px] overflow-y-auto rounded-b-md border border-t-0 border-border transition-colors duration-200",
                   isReceiving
                     ? "border-transparent"
                     : snapshot.isDraggingOver
@@ -170,6 +168,11 @@ export default function KanbanColumn({
                       : "bg-card/40",
                 )}
               >
+                <div
+                  ref={provided.innerRef}
+                  {...provided.droppableProps}
+                  className="flex flex-col gap-1.5 min-h-[200px] px-1.5 py-1.5"
+                >
                 {tasks.map((task, index) => (
                   <TaskCard
                     key={task.id}
@@ -197,6 +200,7 @@ export default function KanbanColumn({
                     Drop here
                   </div>
                 )}
+                </div>
               </div>
             </div>
           );

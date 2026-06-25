@@ -25,7 +25,7 @@ Since **vB.0** the frontend is feature-sliced. Each product module is a self-con
 
 ```
 src/apps/project-management/   — PM: boards, tasks, sprints, kanban, gantt, wiki, forms, time
-   ├── pages/        KanbanPage, ProjectsPage, WikiPage, FormsPage, …
+   ├── pages/        KanbanPage, BoardsPage, WikiPage, FormsPage, …
    ├── components/   tasks/*, projects/*, GettingStartedChecklist
    └── hooks/        useTasks, useProjects, useSprints, … (see Hooks reference)
 src/apps/org-structure/        — Org: departments, teams, org chart, job titles, profiles
@@ -505,7 +505,7 @@ Board mutations also invalidate `["portfolio", ws]` since the portfolio shows bo
 - **`src/lib/boardTypes.js`** — single source of truth. Exports `BOARD_TYPES` (array with `value`, `label`, `icon`) and `getBoardIcon(board_type)` (returns the Lucide component, falls back to `LayoutGrid`).
 - **`src/components/ui/BoardTypeIcon.jsx`** — reusable display component. Renders the icon inside a `bg-primary/10` rounded container. Props: `board_type` (string), `size` (`xs` | `sm` | `md` | `lg` | `xl` | `2xl`, default `sm`), `className`.
 
-Used in 6 locations: `CreateProjectModal` (2xl, icon picker preview), `ProjectsPage` (lg, board card), `DashboardsPage` (md, recent boards), `KanbanPage` header (sm), `CommandPalette` board results (sm), `Sidebar` board nav items (xs).
+Used in 6 locations: `CreateProjectModal` (2xl, icon picker preview), `BoardsPage` (lg, board card), `DashboardsPage` (md, recent boards), `KanbanPage` header (sm), `CommandPalette` board results (sm), `Sidebar` board nav items (xs).
 
 Never render a board avatar as a letter or generic icon — always use `<BoardTypeIcon board_type={board.board_type} size={...} />`.
 
