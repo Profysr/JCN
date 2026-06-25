@@ -53,6 +53,7 @@ export function useKeyboardShortcuts({
   onToggleSidebar,
   onCreateTask,
   onOpenPermissions,
+  onOpenFilters,
 } = {}) {
   const navigate = useNavigate();
   const { workspaceId } = useParams();
@@ -95,6 +96,13 @@ export function useKeyboardShortcuts({
       }
 
       if (isTypingTarget(e) || isModified) return;
+
+      // Shift+F — open/close filter panel
+      if (e.shiftKey && e.key === "F") {
+        e.preventDefault();
+        onOpenFilters?.();
+        return;
+      }
 
       // Chord: pending "g ..."
       if (chordRef.current === "g") {
@@ -150,5 +158,6 @@ export function useKeyboardShortcuts({
     onOpenShortcuts,
     onCreateTask,
     onToggleSidebar,
+    onOpenFilters,
   ]);
 }

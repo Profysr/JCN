@@ -70,6 +70,9 @@ export default function AppLayout() {
     onOpenPermissions: () => {
       window.dispatchEvent(new CustomEvent("jcn:open-permissions"));
     },
+    onOpenFilters: () => {
+      window.dispatchEvent(new CustomEvent("jcn:open-filters"));
+    },
   });
 
   return (

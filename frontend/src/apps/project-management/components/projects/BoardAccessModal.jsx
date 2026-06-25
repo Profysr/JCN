@@ -18,12 +18,8 @@ import { Avatar } from "@/shared/components/ui/avatar";
 import { Badge } from "@/shared/components/ui/badge";
 import Modal from "@/shared/components/ui/Modal";
 import { cn } from "@/shared/lib/utils";
-import {
-  PROJECT_ROLES,
-  ROLE_BADGE_VARIANT,
-  ROLE_PERMS,
-  PERMISSION_MATRIX_ACTIONS,
-} from "@/shared/lib/constants";
+import { PROJECT_ROLES, ROLE_BADGE_VARIANT } from "@/shared/lib/constants";
+import { useBoardRoleDefinitions } from "../../hooks/useBoardPermissions";
 import {
   useBoardMembers,
   useUpdateBoardMember,
@@ -140,7 +136,9 @@ export default function BoardAccessModal({
           </div>
         )}
 
-        {tab === "permissions" && <PermissionsTab />}
+        {tab === "permissions" && (
+          <PermissionsTab workspaceId={workspaceId} boardId={boardId} />
+        )}
       </div>
     </Modal>
   );
@@ -427,7 +425,12 @@ function BulkMemberPicker({
   );
 }
 
-function PermissionsTab() {
+function PermissionsTab({ workspaceId, boardId }) {
+  const { data: roleDefs, isLoading } = useBoardRoleDefinitions(workspaceId, boardId);
+
+  // Derive column headers from the first role's keys — no hardcoding needed.
+  const actions = roleDefs ? Object.keys(Object.values(roleDefs)[0]) : [];
+
   return (
     <div>
       <p className="text-xs text-muted-foreground mb-4">
@@ -435,24 +438,27 @@ function PermissionsTab() {
         board role — the most restrictive wins.
       </p>
       <div className="overflow-x-auto">
+        {isLoading ? (
+          <div className="py-8 text-center text-xs text-muted-foreground">Loading…</div>
+        ) : (
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b">
               <th className="text-left py-2 pr-4 font-medium text-muted-foreground text-xs uppercase tracking-wide w-28">
                 Role
               </th>
-              {PERMISSION_MATRIX_ACTIONS.map((a) => (
+              {actions.map((action) => (
                 <th
-                  key={a.label}
+                  key={action}
                   className="text-center py-2 px-3 font-medium text-muted-foreground text-xs uppercase tracking-wide"
                 >
-                  {a.label}
+                  {action}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {Object.entries(ROLE_PERMS).map(([role, perms]) => (
+            {Object.entries(roleDefs).map(([role, perms]) => (
               <tr
                 key={role}
                 className="border-b last:border-0 hover:bg-accent/20 transition-colors"
@@ -462,9 +468,9 @@ function PermissionsTab() {
                     {role}
                   </Badge>
                 </td>
-                {perms.map((allowed, i) => (
-                  <td key={i} className="text-center py-3 px-3">
-                    {allowed ? (
+                {actions.map((action) => (
+                  <td key={action} className="text-center py-3 px-3">
+                    {perms[action] ? (
                       <Check className="w-4 h-4 text-emerald-500 mx-auto" />
                     ) : (
                       <span className="text-muted-foreground/30 text-lg leading-none">
@@ -477,6 +483,7 @@ function PermissionsTab() {
             ))}
           </tbody>
         </table>
+        )}
       </div>
       <div className="mt-4 p-3 rounded-lg bg-muted/40 text-xs text-muted-foreground space-y-1">
         <p>

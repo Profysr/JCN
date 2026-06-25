@@ -7,6 +7,7 @@ from .board import (
     BoardMemberListCreateView,
     BoardMemberDetailView,
     BoardMemberBulkCreateView,
+    BoardPermissionsView,
     UserPresenceView,
 )
 

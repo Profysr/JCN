@@ -14,7 +14,7 @@ from ..serializers import (
     BoardMemberBulkSerializer,
     UserPresenceSerializer,
 )
-from ..permissions import has_project_permission, log_audit, bulk_log_audit
+from ..permissions import has_project_permission, BOARD_ROLE_PERMISSIONS, log_audit, bulk_log_audit
 
 from workspaces.permissions import has_app_access
 
@@ -240,6 +240,19 @@ class BoardMemberBulkCreateView(APIView):
             {"created": BoardMemberSerializer(qs, many=True).data, "skipped": skipped},
             status=status.HTTP_201_CREATED,
         )
+
+
+# ── Board role definitions ✅──────────────────────────────────────────────────
+# GET /workspaces/:ws/boards/:board/role-permissions/
+# Returns the full BOARD_ROLE_PERMISSIONS table — what each board role can do.
+# The frontend consumes this instead of hardcoding role capability tables.
+class BoardPermissionsView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, workspace_id, board_id):
+        workspace = get_workspace_for_user(workspace_id, request.user)
+        get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
+        return Response(BOARD_ROLE_PERMISSIONS)
 
 
 # ── v3.5.0 — Real-Time Collaboration v2 ✅─────────────────────────────────────

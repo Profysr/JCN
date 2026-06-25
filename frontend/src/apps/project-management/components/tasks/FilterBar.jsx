@@ -8,20 +8,15 @@ import {
   ChevronDown,
   Check,
   ShieldCheck,
+  Plus,
+  Layers,
+  Calendar,
+  TrendingUp,
+  Tag,
 } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { Avatar } from "@/shared/components/ui/avatar";
 import { PRIORITIES, TASK_TYPES } from "@/shared/lib/constants";
-
-// FilterBar needs active/idle chip classes — derive from PRIORITIES
-const PRIORITY_OPTIONS = PRIORITIES.filter(
-  (p) => p.value !== "no_priority",
-).map((p) => ({
-  value: p.value,
-  label: p.label,
-  active: p.filterActiveCls,
-  idle: "border-border text-muted-foreground",
-}));
 
 const DUE_OPTIONS = [
   { value: "overdue", label: "Overdue" },
@@ -40,89 +35,132 @@ function useClickOutside(ref, handler) {
   }, [ref, handler]);
 }
 
-/* ── Assignee stacker + picker ───────────────────────────────────────────── */
+/* ── Interactive Assignee Avatar Stack ───────────────────────────────────── */
+const MAX_VISIBLE = 5;
+
 function AssigneeFilter({ members, selected, onChange }) {
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
   const ref = useRef(null);
-  useClickOutside(ref, () => setOpen(false));
+  useClickOutside(ref, () => { setOpen(false); setSearch(""); });
 
   const toggle = (id) =>
-    onChange(
-      selected.includes(id)
-        ? selected.filter((v) => v !== id)
-        : [...selected, id],
-    );
+    onChange(selected.includes(id) ? selected.filter((v) => v !== id) : [...selected, id]);
 
-  const visibleAvatars = members.filter((m) => selected.includes(m.user?.id));
-  const unselected = members.filter((m) => !selected.includes(m.user?.id));
+  const visibleMembers = members.slice(0, MAX_VISIBLE);
+  const overflowCount = members.length - MAX_VISIBLE;
+  const hasSelection = selected.length > 0;
+
+  const filtered = search
+    ? members.filter((m) =>
+        (m.user?.full_name || m.user?.email || "").toLowerCase().includes(search.toLowerCase()),
+      )
+    : members;
 
   return (
-    <div ref={ref} className="relative flex items-center gap-1.5">
-      {/* Selected avatars — stacked */}
-      {visibleAvatars.length > 0 && (
-        <div className="flex -space-x-1.5">
-          {visibleAvatars.map((m) => (
+    <div ref={ref} className="relative flex items-center gap-1">
+      {/* Clickable avatar stack */}
+      <div className="flex -space-x-1.5">
+        {visibleMembers.map((m) => {
+          const isSelected = selected.includes(m.user?.id);
+          const isDimmed = hasSelection && !isSelected;
+          return (
             <button
               key={m.user?.id}
               onClick={() => toggle(m.user?.id)}
-              title={`Remove ${m.user?.full_name || m.user?.email}`}
-              className="ring-2 ring-background rounded-full hover:ring-destructive/50 transition-all"
+              title={m.user?.full_name || m.user?.email}
+              className={cn(
+                "relative rounded-full ring-2 transition-all hover:scale-110 hover:z-10 focus:outline-none focus:z-10",
+                isDimmed ? "opacity-30 ring-background" : "opacity-100 ring-background",
+                isSelected && "ring-primary",
+              )}
             >
               <Avatar
                 name={m.user?.full_name || m.user?.email}
                 src={m.user?.avatar}
                 size="sm"
               />
+              {isSelected && (
+                <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-primary flex items-center justify-center ring-1 ring-background">
+                  <Check className="w-1.5 h-1.5 text-white" />
+                </span>
+              )}
             </button>
-          ))}
-        </div>
-      )}
+          );
+        })}
+      </div>
 
-      {/* Picker trigger */}
+      {/* Overflow badge / add button */}
       <button
         onClick={() => setOpen((v) => !v)}
+        title={overflowCount > 0 ? `${overflowCount} more members` : "Filter by assignee"}
         className={cn(
-          "flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md border transition-colors",
-          selected.length > 0
-            ? "border-primary/40 bg-primary/5 text-primary"
-            : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground",
+          "flex items-center justify-center transition-all rounded-full focus:outline-none",
+          overflowCount > 0
+            ? "w-6 h-6 bg-muted ring-2 ring-background text-muted-foreground text-[10px] font-bold hover:bg-accent"
+            : "w-6 h-6 border-2 border-dashed border-border bg-muted/60 text-muted-foreground hover:border-primary/50 hover:text-primary hover:bg-primary/5",
         )}
       >
-        <span>Assignee</span>
-        <ChevronDown className="w-3 h-3" />
+        {overflowCount > 0 ? `+${overflowCount}` : <Plus className="w-3 h-3" />}
       </button>
 
+      {/* Member dropdown */}
       {open && (
-        <div className="absolute top-full left-0 mt-1.5 z-50 bg-popover border rounded-md shadow-popover py-1 min-w-[180px]">
-          <p className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-            Filter by assignee
-          </p>
-          {members.map((m) => {
-            const active = selected.includes(m.user?.id);
-            return (
+        <div className="absolute top-full left-0 mt-2 z-50 bg-popover border rounded-lg shadow-lg overflow-hidden w-56">
+          <div className="px-3 pt-3 pb-2">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
+              <input
+                autoFocus
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search members…"
+                className="w-full pl-7 pr-2.5 py-1.5 text-xs bg-muted/50 border border-border rounded-md outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/60"
+              />
+            </div>
+          </div>
+
+          <div className="max-h-52 overflow-y-auto py-1">
+            {filtered.map((m) => {
+              const isActive = selected.includes(m.user?.id);
+              const name = m.user?.full_name || m.user?.email;
+              return (
+                <button
+                  key={m.user?.id}
+                  onClick={() => toggle(m.user?.id)}
+                  className={cn(
+                    "w-full flex items-center gap-2.5 px-3 py-1.5 transition-colors text-left",
+                    isActive ? "bg-primary/5" : "hover:bg-accent",
+                  )}
+                >
+                  <div className="relative flex-shrink-0">
+                    <Avatar name={name} src={m.user?.avatar} size="sm" />
+                    {isActive && (
+                      <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-primary flex items-center justify-center ring-1 ring-background">
+                        <Check className="w-1.5 h-1.5 text-white" />
+                      </span>
+                    )}
+                  </div>
+                  <span className={cn("text-sm flex-1 truncate", isActive && "font-medium text-primary")}>
+                    {name}
+                  </span>
+                </button>
+              );
+            })}
+            {filtered.length === 0 && (
+              <p className="px-3 py-3 text-xs text-muted-foreground text-center">No members found</p>
+            )}
+          </div>
+
+          {selected.length > 0 && (
+            <div className="border-t px-3 py-2">
               <button
-                key={m.user?.id}
-                onClick={() => toggle(m.user?.id)}
-                className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-accent transition-colors text-left"
+                onClick={() => { onChange([]); setOpen(false); }}
+                className="text-xs text-muted-foreground hover:text-destructive transition-colors w-full text-center"
               >
-                <Avatar
-                  name={m.user?.full_name || m.user?.email}
-                  src={m.user?.avatar}
-                  size="sm"
-                />
-                <span className="text-sm flex-1 truncate">
-                  {m.user?.full_name || m.user?.email}
-                </span>
-                {active && (
-                  <Check className="w-3.5 h-3.5 text-primary flex-shrink-0" />
-                )}
+                Clear selection
               </button>
-            );
-          })}
-          {members.length === 0 && (
-            <p className="px-3 py-2 text-sm text-muted-foreground">
-              No members
-            </p>
+            </div>
           )}
         </div>
       )}
@@ -130,132 +168,265 @@ function AssigneeFilter({ members, selected, onChange }) {
   );
 }
 
-/* ── Advanced filters dropdown ───────────────────────────────────────────── */
-const FILTER_SECTIONS = [
-  { key: "types", title: "Task type", options: TASK_TYPES },
-  { key: "due", title: "Due date", options: DUE_OPTIONS },
+/* ── Jira-style Two-panel Advanced Filters ───────────────────────────────── */
+const FILTER_FIELDS = [
+  { key: "priorities", label: "Priority", Icon: TrendingUp },
+  { key: "types",      label: "Work type", Icon: Layers },
+  { key: "due",        label: "Due date",  Icon: Calendar },
+  { key: "labels",     label: "Labels",    Icon: Tag },
 ];
 
-function AdvancedFilters({ filters = {}, onChange, labels = [] }) {
+function AdvancedFilters({ filters = {}, onChange, labels = [], currentUserId }) {
   const [open, setOpen] = useState(false);
+  const [activeKey, setActiveKey] = useState(null);
   const ref = useRef(null);
 
-  useClickOutside(ref, () => setOpen(false));
+  useClickOutside(ref, () => { setOpen(false); setActiveKey(null); });
 
-  const { types = [], due = [], labels: activeLabels = [] } = filters;
-  const advancedActive = types.length + due.length + activeLabels.length;
+  // Listen for the global Shift+F shortcut dispatched by AppLayout
+  useEffect(() => {
+    const handler = () => setOpen((v) => { if (v) setActiveKey(null); return !v; });
+    window.addEventListener("jcn:open-filters", handler);
+    return () => window.removeEventListener("jcn:open-filters", handler);
+  }, []);
+
+  const activeCount =
+    (filters.priorities?.length || 0) +
+    (filters.types?.length || 0) +
+    (filters.due?.length || 0) +
+    (filters.labels?.length || 0) +
+    (filters.pendingMyApproval ? 1 : 0);
+
+  // Returns full constant objects so chips get icon + color metadata
+  const getOptions = (key) => {
+    if (key === "priorities") return PRIORITIES.filter((p) => p.value !== "no_priority");
+    if (key === "types") return TASK_TYPES;
+    if (key === "due") return DUE_OPTIONS;
+    if (key === "labels") return labels.map((l) => ({ value: l.id, label: l.name, color: l.color }));
+    return [];
+  };
 
   const toggleArr = (key, val) => {
-    const currentArr = filters[key] || [];
-    const updatedArr = currentArr.includes(val)
-      ? currentArr.filter((v) => v !== val)
-      : [...currentArr, val];
-
-    onChange({ ...filters, [key]: updatedArr });
+    const arr = filters[key] || [];
+    onChange({ ...filters, [key]: arr.includes(val) ? arr.filter((v) => v !== val) : [...arr, val] });
   };
 
   const handleClearAll = () => {
-    onChange({ ...filters, types: [], labels: [], due: [] });
+    onChange({ ...filters, priorities: [], types: [], due: [], labels: [], pendingMyApproval: false });
     setOpen(false);
+    setActiveKey(null);
+  };
+
+  const renderChip = (opt) => {
+    const isSelected = (filters[activeKey] || []).includes(opt.value);
+
+    if (activeKey === "priorities") {
+      const Icon = opt.icon;
+      return (
+        <button
+          key={opt.value}
+          onClick={() => toggleArr(activeKey, opt.value)}
+          className={cn(
+            "flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-medium border transition-all",
+            isSelected
+              ? opt.filterActiveCls
+              : "border-border text-muted-foreground hover:bg-accent hover:text-foreground",
+          )}
+        >
+          <Icon className={cn("w-3 h-3 flex-shrink-0", opt.textCls)} />
+          {opt.label}
+        </button>
+      );
+    }
+
+    if (activeKey === "types") {
+      const Icon = opt.icon;
+      return (
+        <button
+          key={opt.value}
+          onClick={() => toggleArr(activeKey, opt.value)}
+          className={cn(
+            "flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-medium border transition-all",
+            isSelected
+              ? cn(opt.bg, opt.color, "border-transparent")
+              : "border-border text-muted-foreground hover:bg-accent hover:text-foreground",
+          )}
+        >
+          <Icon className={cn("w-3 h-3 flex-shrink-0", opt.color)} />
+          {opt.label}
+        </button>
+      );
+    }
+
+    if (activeKey === "labels") {
+      return (
+        <button
+          key={opt.value}
+          onClick={() => toggleArr(activeKey, opt.value)}
+          className={cn(
+            "px-2 py-1 rounded-full text-[10px] font-medium border transition-all",
+            !isSelected && "opacity-55 hover:opacity-80",
+          )}
+          style={{
+            borderColor: opt.color,
+            color: isSelected ? opt.color : undefined,
+            backgroundColor: isSelected ? `${opt.color}22` : "transparent",
+            opacity: isSelected ? 1 : undefined,
+          }}
+        >
+          {opt.label}
+        </button>
+      );
+    }
+
+    // Due date — plain chips
+    return (
+      <button
+        key={opt.value}
+        onClick={() => toggleArr(activeKey, opt.value)}
+        className={cn(
+          "flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-medium border transition-all",
+          isSelected
+            ? "border-primary/40 bg-primary/10 text-primary"
+            : "border-border text-muted-foreground hover:bg-accent hover:text-foreground",
+        )}
+      >
+        {isSelected && <Check className="w-3 h-3" />}
+        {opt.label}
+      </button>
+    );
   };
 
   return (
     <div ref={ref} className="relative">
-      {/* Trigger Button */}
       <button
-        onClick={() => setOpen((prev) => !prev)}
+        onClick={() => { setOpen((v) => !v); if (open) setActiveKey(null); }}
         className={cn(
           "flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border transition-colors",
-          advancedActive > 0
+          activeCount > 0 || open
             ? "border-primary/40 bg-primary/5 text-primary"
             : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground",
         )}
       >
         <SlidersHorizontal className="w-3.5 h-3.5" />
         <span>Filters</span>
-        {advancedActive > 0 && (
+        {activeCount > 0 && (
           <span className="w-4 h-4 rounded-full bg-primary text-white text-[9px] font-bold flex items-center justify-center">
-            {advancedActive}
+            {activeCount}
           </span>
         )}
-        <ChevronDown className="w-3 h-3" />
+        <ChevronDown className={cn("w-3 h-3 transition-transform duration-150", open && "rotate-180")} />
       </button>
 
-      {/* Dropdown Menu */}
       {open && (
-        <div className="absolute top-full right-0 mt-1.5 z-50 bg-popover border rounded-md shadow-popover p-3 w-64 space-y-4">
-          {/* Standard Standard Sections (Task Type & Due Date) */}
-          {FILTER_SECTIONS.map(({ key, title, options }) => (
-            <div key={key}>
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                {title}
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {options.map((opt) => {
-                  const isActive = (filters[key] || []).includes(opt.value);
-                  return (
-                    <button
-                      key={opt.value}
-                      onClick={() => toggleArr(key, opt.value)}
-                      className={cn(
-                        "px-2 py-1 rounded text-xs font-medium border transition-colors",
-                        isActive
-                          ? "border-primary/40 bg-primary/10 text-primary"
-                          : "border-border text-muted-foreground hover:bg-accent",
-                      )}
-                    >
-                      {opt.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+        <div
+          className="absolute top-full right-0 mt-1.5 z-50 bg-popover border rounded-lg shadow-lg flex overflow-hidden"
+          style={{ minWidth: 460 }}
+        >
+          {/* Left panel — field list */}
+          <div className="w-48 border-r flex flex-col shrink-0">
+            <p className="px-3 pt-3 pb-1.5 text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">
+              Filter by
+            </p>
+            <div className="flex-1 py-1">
+              {FILTER_FIELDS.map(({ key, label, Icon }) => {
+                const count = (filters[key] || []).length;
+                const isActive = activeKey === key;
+                return (
+                  <button
+                    key={key}
+                    onClick={() => setActiveKey(isActive ? null : key)}
+                    className={cn(
+                      "w-full flex items-center gap-2.5 px-3 py-1.5 text-xs transition-colors text-left",
+                      isActive
+                        ? "bg-accent text-foreground"
+                        : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                    )}
+                  >
+                    <Icon className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span className="flex-1">{label}</span>
+                    {count > 0 && (
+                      <span className="w-4 h-4 rounded-full bg-primary text-white text-[9px] font-bold flex items-center justify-center">
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
 
-          {/* Dynamic Labels Section */}
-          {labels.length > 0 && (
-            <div>
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                Labels
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {labels.map((l) => {
-                  const isActive = activeLabels.includes(l.id);
-                  return (
-                    <button
-                      key={l.id}
-                      onClick={() => toggleArr("labels", l.id)}
-                      className={cn(
-                        "px-2 py-0.5 rounded-full text-xs font-medium border transition-colors",
-                        isActive
-                          ? "opacity-100"
-                          : "opacity-50 hover:opacity-75",
-                      )}
-                      style={{
-                        borderColor: l.color,
-                        color: l.color,
-                        backgroundColor: isActive
-                          ? `${l.color}22`
-                          : "transparent",
-                      }}
-                    >
-                      {l.name}
-                    </button>
-                  );
-                })}
-              </div>
+              {/* Pending my approval — inline toggle, no right-panel */}
+              {currentUserId && (
+                <button
+                  onClick={() =>
+                    onChange({ ...filters, pendingMyApproval: !filters.pendingMyApproval })
+                  }
+                  className={cn(
+                    "w-full flex items-center gap-2.5 px-3 py-1.5 text-xs transition-colors text-left",
+                    filters.pendingMyApproval
+                      ? "bg-amber-500/10 text-amber-700"
+                      : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                  )}
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span className="flex-1 leading-tight">Pending my approval</span>
+                  {filters.pendingMyApproval && (
+                    <span className="w-4 h-4 rounded-full bg-amber-500 text-white flex items-center justify-center">
+                      <Check className="w-2.5 h-2.5" />
+                    </span>
+                  )}
+                </button>
+              )}
             </div>
-          )}
 
-          {/* Clear Action Button */}
-          {advancedActive > 0 && (
-            <button
-              onClick={handleClearAll}
-              className="w-full text-center text-xs text-muted-foreground hover:text-destructive transition-colors pt-1 border-t"
-            >
-              Clear advanced filters
-            </button>
-          )}
+            <div className="border-t px-3 py-2.5 space-y-1.5">
+              {activeCount > 0 && (
+                <button
+                  onClick={handleClearAll}
+                  className="w-full text-left text-[10px] text-muted-foreground hover:text-destructive transition-colors"
+                >
+                  Clear all
+                </button>
+              )}
+              <p className="text-[9px] text-muted-foreground/40 leading-tight">
+                Press{" "}
+                <kbd className="font-mono bg-muted px-0.5 rounded text-[9px]">Shift+F</kbd>{" "}
+                to open and close
+              </p>
+            </div>
+          </div>
+
+          {/* Right panel — options */}
+          <div className="flex-1 p-4 min-w-[240px]">
+            {!activeKey ? (
+              <div className="flex flex-col items-center justify-center h-full text-center py-8 gap-2">
+                <SlidersHorizontal className="w-7 h-7 text-muted-foreground/20" />
+                <p className="text-[10px] text-muted-foreground">Select a field to start creating a filter.</p>
+              </div>
+            ) : activeKey === "labels" && labels.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-center py-8 gap-2">
+                <Tag className="w-7 h-7 text-muted-foreground/20" />
+                <p className="text-[10px] text-muted-foreground">No labels have been created for this board yet.</p>
+              </div>
+            ) : (
+              <div>
+                <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+                  {FILTER_FIELDS.find((f) => f.key === activeKey)?.label}
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {getOptions(activeKey).map((opt) => renderChip(opt))}
+                </div>
+
+                {(filters[activeKey] || []).length > 0 && (
+                  <button
+                    onClick={() => onChange({ ...filters, [activeKey]: [] })}
+                    className="mt-3 text-[10px] text-muted-foreground hover:text-destructive transition-colors"
+                  >
+                    Clear {FILTER_FIELDS.find((f) => f.key === activeKey)?.label.toLowerCase()}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -283,15 +454,8 @@ export default function FilterBar({
     filters.assignees?.length > 0 ||
     filters.labels?.length > 0 ||
     filters.types?.length > 0 ||
-    filters.due?.length > 0;
-
-  const toggleArr = (key, val) => {
-    const arr = filters[key] || [];
-    onChange({
-      ...filters,
-      [key]: arr.includes(val) ? arr.filter((v) => v !== val) : [...arr, val],
-    });
-  };
+    filters.due?.length > 0 ||
+    filters.pendingMyApproval;
 
   const handleSave = (e) => {
     e.preventDefault();
@@ -309,6 +473,7 @@ export default function FilterBar({
       labels: [],
       types: [],
       due: [],
+      pendingMyApproval: false,
     });
 
   return (
@@ -329,31 +494,9 @@ export default function FilterBar({
         />
       </div>
 
-      {/* Divider */}
       <div className="w-px h-4 bg-border" />
 
-      {/* Priority chips */}
-      <div className="flex items-center gap-1">
-        {PRIORITY_OPTIONS.map((p) => (
-          <button
-            key={p.value}
-            onClick={() => toggleArr("priorities", p.value)}
-            className={cn(
-              "px-2.5 py-1 rounded-md text-xs font-medium border transition-colors",
-              (filters.priorities || []).includes(p.value)
-                ? p.active
-                : `${p.idle} hover:bg-accent`,
-            )}
-          >
-            {p.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Divider */}
-      <div className="w-px h-4 bg-border" />
-
-      {/* Assignee stacker */}
+      {/* Assignee avatar stack */}
       {members.length > 0 && (
         <AssigneeFilter
           members={members}
@@ -362,29 +505,15 @@ export default function FilterBar({
         />
       )}
 
-      {/* Advanced filters */}
-      <AdvancedFilters filters={filters} onChange={onChange} labels={labels} />
+      <div className="w-px h-4 bg-border" />
 
-      {/* Pending my approval chip — v3.6.0 */}
-      {currentUserId && (
-        <button
-          onClick={() =>
-            onChange({
-              ...filters,
-              pendingMyApproval: !filters.pendingMyApproval,
-            })
-          }
-          className={cn(
-            "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border transition-colors",
-            filters.pendingMyApproval
-              ? "bg-amber-500/15 border-amber-500/30 text-amber-700"
-              : "border-border text-muted-foreground hover:bg-accent",
-          )}
-        >
-          <ShieldCheck className="w-3 h-3" />
-          Pending my approval
-        </button>
-      )}
+      {/* Jira-style filter dropdown */}
+      <AdvancedFilters
+        filters={filters}
+        onChange={onChange}
+        labels={labels}
+        currentUserId={currentUserId}
+      />
 
       {/* Save view */}
       {hasFilters &&
@@ -397,9 +526,7 @@ export default function FilterBar({
               placeholder="View name…"
               value={savingName}
               onChange={(e) => setSavingName(e.target.value)}
-              onBlur={() => {
-                if (!savingName) setShowSaveInput(false);
-              }}
+              onBlur={() => { if (!savingName) setShowSaveInput(false); }}
             />
             <button type="submit" className="text-xs text-primary font-medium">
               Save

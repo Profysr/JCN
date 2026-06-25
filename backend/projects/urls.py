@@ -5,6 +5,7 @@ from .views import (
     BoardMemberListCreateView,
     BoardMemberDetailView,
     BoardMemberBulkCreateView,
+    BoardPermissionsView,
     UserPresenceView,
     CommentReactionToggleView,
     ApprovalListCreateView,
@@ -77,7 +78,8 @@ urlpatterns = [
     # Boards
     path(f"{_ws}/boards/", BoardListCreateView.as_view()),
     path(f"{_pr}/", BoardDetailView.as_view()),
-    # Board members & permissions
+    # Board members & role permissions
+    path(f"{_pr}/role-permissions/", BoardPermissionsView.as_view()),
     path(f"{_pr}/members/", BoardMemberListCreateView.as_view()),
     path(f"{_pr}/members/bulk/", BoardMemberBulkCreateView.as_view()),
     path(f"{_pr}/members/<str:member_id>/", BoardMemberDetailView.as_view()),

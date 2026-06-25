@@ -69,6 +69,11 @@ export const SHORTCUT_GROUPS = [
         description: "Create task (context-aware)",
       },
       {
+        keys: ["Shift+F"],
+        display: ["⇧", "F"],
+        description: "Open / close filter panel",
+      },
+      {
         keys: ["ArrowUp", "ArrowDown"],
         display: ["↑", "↓"],
         description: "Navigate task list",

@@ -7,7 +7,6 @@ import {
   Plug,
   Key,
   Webhook,
-  BarChart2,
 } from "lucide-react";
 
 import { PM_NAV_ITEMS, PM_NAV_GROUPS } from "@/apps/project-management/nav";
@@ -58,18 +57,6 @@ export const APP_DEFS = [
       bg: "bg-purple-500/15",
       text: "text-purple-500",
       solid: "bg-purple-500",
-    },
-  },
-  {
-    key: "analytics",
-    label: "Advanced Analytics",
-    shortLabel: "Analytics",
-    icon: BarChart2,
-    landing: "analytics",
-    colors: {
-      bg: "bg-amber-500/15",
-      text: "text-amber-500",
-      solid: "bg-amber-500",
     },
   },
   {
