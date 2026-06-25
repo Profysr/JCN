@@ -32,7 +32,7 @@ const SetupWizard = lazy(() => import("@/pages/workspace/SetupWizard"));
 
 // ── Project pages ─────────────────────────────────────────────────────────────
 const ProjectsPage = lazy(
-  () => import("@/apps/project-management/pages/ProjectsPage"),
+  () => import("@/apps/project-management/pages/BoardsPage"),
 );
 const KanbanPage = lazy(
   () => import("@/apps/project-management/pages/KanbanPage"),

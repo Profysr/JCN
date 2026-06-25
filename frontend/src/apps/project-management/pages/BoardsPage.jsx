@@ -80,11 +80,6 @@ export default function ProjectsPage() {
           illustration="projects"
           title="No boards yet"
           description="Create a board to start tracking work."
-          action={
-            <Button onClick={() => setShowCreate(true)}>
-              <Plus className="w-4 h-4 mr-1.5" /> New Board
-            </Button>
-          }
         />
       )}
 
