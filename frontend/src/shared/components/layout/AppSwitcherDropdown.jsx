@@ -1,16 +1,27 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/shared/lib/utils";
-import { LayoutGrid } from "lucide-react";
+import { LayoutGrid, Home } from "lucide-react";
 import { APP_DEFS, workspaceUrl } from "@/shared/lib/navLinks";
 import { usePermission } from "@/contexts/PermissionsContext";
 import { useActiveApp } from "@/shared/hooks/useActiveApp";
 import { Tooltip } from "@/shared/components/ui/tooltip";
 
-function AppList({ activeApp, visibleApps, onNavigate }) {
+function AppList({ activeApp, visibleApps, onNavigate, onGoHome }) {
   return (
     <div className="py-1">
-      <p className="px-3 pt-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50 select-none">
+      <button
+        onClick={onGoHome}
+        className="flex items-center gap-2.5 w-full px-2 mx-1 py-2 rounded-md text-sm transition-colors text-muted-foreground hover:bg-accent hover:text-foreground"
+        style={{ width: "calc(100% - 8px)" }}
+      >
+        <div className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 bg-muted">
+          <Home className="w-3.5 h-3.5 text-muted-foreground" />
+        </div>
+        <span className="flex-1 text-left text-sm">All apps</span>
+      </button>
+      <div className="mx-3 my-1 border-t border-border/60" />
+      <p className="px-3 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50 select-none">
         Apps
       </p>
       {visibleApps.map((app) => {
@@ -77,6 +88,11 @@ export default function AppSwitcherDropdown({ workspaceId, collapsed }) {
     setOpen(false);
   };
 
+  const handleGoHome = () => {
+    navigate(workspaceUrl(workspaceId, "apps"));
+    setOpen(false);
+  };
+
   // ── Collapsed: colored icon button, flyout to the right ───────────────────
   if (collapsed) {
     return (
@@ -102,6 +118,7 @@ export default function AppSwitcherDropdown({ workspaceId, collapsed }) {
               activeApp={activeApp}
               visibleApps={visibleApps}
               onNavigate={handleNavigate}
+              onGoHome={handleGoHome}
             />
           </div>
         )}

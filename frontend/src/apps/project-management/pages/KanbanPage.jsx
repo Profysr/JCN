@@ -190,6 +190,9 @@ export default function KanbanPage() {
   const perms = useBoardPermissions(workspaceId, boardId);
   const { can, isOwner: isWsOwner } = usePermission();
 
+  const canEdit  = perms.canEdit  || isWsOwner;
+  const canAdmin = perms.canAdmin || isWsOwner || can("board.admin");
+
   const moveTask = useMoveTask(workspaceId, boardId);
   const createLabel = useCreateLabel(workspaceId, boardId);
   const bulkUpdate = useBulkUpdateTasks(workspaceId, boardId);
@@ -287,7 +290,7 @@ export default function KanbanPage() {
   const handleDragEnd = (result) => {
     setDragSourceColumnId(null);
     if (!result.destination) return;
-    if (!perms.canEdit && !(isWsOwner || can("task.move"))) return;
+    if (!canEdit && !can("task.move")) return;
 
     const { draggableId, source, destination } = result;
 
@@ -441,13 +444,13 @@ export default function KanbanPage() {
                 label: "Board members & access",
                 Icon: Users,
                 onClick: () => setMembersModal(true),
-                show: perms.canAdmin || isWsOwner || can("board.admin"),
+                show: canAdmin,
               },
               {
                 label: "Board settings",
                 Icon: Settings2,
                 onClick: () => setBoardSettings(true),
-                show: perms.canAdmin || isWsOwner || can("board.admin"),
+                show: canAdmin,
               },
             ]
               .filter(({ show }) => show)
@@ -462,7 +465,7 @@ export default function KanbanPage() {
                 </Tooltip>
               ))}
 
-            {(perms.canEdit || isWsOwner || can("task.create")) && (
+            {(canEdit || can("task.create")) && (
               <Button
                 size="sm"
                 onClick={() =>
@@ -700,7 +703,7 @@ export default function KanbanPage() {
         workspaceId={workspaceId}
         boardId={boardId}
         board={board}
-        canAdmin={perms.canAdmin}
+        canAdmin={canAdmin}
       />
     </div>
   );
