@@ -11,7 +11,6 @@ import { Avatar } from "@/shared/components/ui/avatar";
 import { useToast } from "@/shared/components/ui/toast";
 import Modal from "@/shared/components/ui/Modal";
 import { cn } from "@/shared/lib/utils";
-import { useModules } from "@/shared/hooks/useModules";
 import { usePermission } from "@/contexts/PermissionsContext";
 import {
   useLeaveBalances,
@@ -641,8 +640,7 @@ const TABS = [
 
 export default function LeavePage() {
   const { workspaceId } = useParams();
-  const { isEnabled } = useModules();
-  const { isOwner, can } = usePermission();
+  const { isOwner, can, hasAppAccess } = usePermission();
   const [tab, setTab] = useState("my-leave");
   const [requestOpen, setRequestOpen] = useState(false);
 
@@ -652,11 +650,11 @@ export default function LeavePage() {
   const { data: balances = [], isLoading: balancesLoading } = useLeaveBalances(workspaceId);
   const { data: myRequests = [], isLoading: requestsLoading } = useLeaveRequests(workspaceId);
 
-  if (!isEnabled("hr_management")) {
+  if (!isOwner && !hasAppAccess("hr")) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
         <Users className="w-10 h-10" />
-        <p className="text-sm">HR Management is not enabled for this workspace.</p>
+        <p className="text-sm">You don't have access to HR Management.</p>
       </div>
     );
   }

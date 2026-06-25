@@ -16,7 +16,7 @@ from ..serializers import (
 )
 from ..permissions import has_project_permission, log_audit, bulk_log_audit
 
-from workspaces.rbac import has_workspace_permission
+from workspaces.permissions import has_app_access
 
 from .helpers import (
     _parse_pk,
@@ -34,7 +34,7 @@ class BoardListCreateView(APIView):
 
     def get(self, request, workspace_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
-        if not has_workspace_permission(request.user, workspace, "projects.view"):
+        if not has_app_access(request.user, workspace, "projects"):
             return Response(
                 {"detail": "You don't have access to the Projects app."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -63,7 +63,7 @@ class BoardDetailView(APIView):
 
     def get_board(self, workspace_id, board_id, user):
         workspace = get_workspace_for_user(workspace_id, user)
-        if not has_workspace_permission(user, workspace, "projects.view"):
+        if not has_app_access(user, workspace, "projects"):
             from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied("You don't have access to the Projects app.")
         return get_object_or_404(

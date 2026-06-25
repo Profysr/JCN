@@ -7,8 +7,6 @@ export const ORG_NAV_ITEMS = [
     label: "Departments",
     desc: "Company departments & structure",
     path: "departments",
-    permission: "org.view",
-    moduleKey: "org_structure",
   },
   {
     key: "teams",
@@ -16,8 +14,6 @@ export const ORG_NAV_ITEMS = [
     label: "Teams",
     desc: "Teams & their members",
     path: "teams",
-    permission: "org.view",
-    moduleKey: "org_structure",
   },
   {
     key: "org-chart",
@@ -25,8 +21,6 @@ export const ORG_NAV_ITEMS = [
     label: "Org Chart",
     desc: "Visual company org chart",
     path: "org-chart",
-    permission: "org.view",
-    moduleKey: "org_structure",
   },
 ];
 

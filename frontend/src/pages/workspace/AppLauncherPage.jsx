@@ -4,30 +4,32 @@ import {
   WORKSPACE_NAV_ITEMS,
   workspaceUrl,
 } from "@/shared/lib/navLinks";
-import { useModules } from "@/shared/hooks/useModules";
+import { usePermissions } from "@/shared/hooks/usePermissions";
 import { usePermission } from "@/contexts/PermissionsContext";
 import { ArrowUpRight } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 
-const _appByKey = Object.fromEntries(APP_DEFS.map((a) => [a.key, a]));
+const _defByKey = Object.fromEntries(APP_DEFS.map((a) => [a.key, a]));
+
 export default function AppLauncherPage() {
   const { workspaceId } = useParams();
   const navigate = useNavigate();
-  const { modules, isLoading: modulesLoading } = useModules();
-  const { can, isOwner, isLoading: permsLoading } = usePermission();
+  const { data: registry, isLoading } = usePermissions(workspaceId);
+  const { can, isOwner, hasAppAccess, isLoading: permsLoading } = usePermission();
 
-  // API returns name/description/tier; APP_DEFS supplies icon, landing, colors.
-  // Discard the API's string `icon` field so it doesn't shadow the Lucide component.
-  const apps = modules
-    .filter((m) => m.is_enabled)
-    .filter((m) => _appByKey[m.key])
-    .filter((m) => {
-      const def = _appByKey[m.key];
-      if (permsLoading) return true;
-      if (def.permKey && !isOwner && !can(def.permKey)) return false;
-      return true;
+  // Combine backend app registry (name, description) with frontend APP_DEFS (icon, colors, landing)
+  const apps = Object.entries(registry?.apps ?? {})
+    .map(([key, meta]) => {
+      const def = _defByKey[key];
+      if (!def) return null;
+      return { key, ...meta, ...def };
     })
-    .map(({ icon: _apiIcon, ...m }) => ({ ...m, ..._appByKey[m.key] }));
+    .filter(Boolean)
+    .filter((app) => {
+      if (permsLoading) return true;
+      if (!isOwner && !hasAppAccess(app.key)) return false;
+      return true;
+    });
 
   const visibleWorkspaceItems = WORKSPACE_NAV_ITEMS.filter((item) => {
     if (permsLoading) return true;
@@ -45,9 +47,9 @@ export default function AppLauncherPage() {
           </p>
         </div>
 
-        {/* App cards — driven by the backend /modules API */}
+        {/* App cards */}
         <div className="grid grid-cols-2 gap-3 mb-10">
-          {modulesLoading
+          {isLoading
             ? Array.from({ length: 4 }).map((_, i) => (
                 <div
                   key={i}
@@ -87,7 +89,7 @@ export default function AppLauncherPage() {
               })}
         </div>
 
-        {/* Workspace utility pages — sourced from navLinks (workspaceLevel: true) */}
+        {/* Workspace utility pages */}
         <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
           Workspace
         </h2>

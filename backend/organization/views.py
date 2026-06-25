@@ -4,8 +4,8 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from core.modules import require_module
 from workspaces.models import Workspace, WorkspaceMember
+from workspaces.permissions import require_app_access
 from .models import (
     Department,
     DepartmentMember,
@@ -30,8 +30,8 @@ def _get_workspace(workspace_id, user):
     return get_object_or_404(Workspace, id=workspace_id, members__user=user)
 
 
-def _require_module(workspace, module_key):
-    require_module(workspace, module_key)
+def _require_module(request, workspace):
+    require_app_access(request.user, workspace, "org")
 
 
 def _require_admin(workspace, user):
@@ -55,7 +55,7 @@ class DepartmentListCreateView(APIView):
 
     def get(self, request, workspace_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace, "org_structure")
+        _require_module(request, workspace)
         depts = (
             Department.objects.filter(workspace=workspace)
             .select_related("head", "head__user", "parent")
@@ -66,7 +66,7 @@ class DepartmentListCreateView(APIView):
 
     def post(self, request, workspace_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace, "org_structure")
+        _require_module(request, workspace)
         _require_admin(workspace, request.user)
         ser = DepartmentSerializer(
             data=request.data, context={"request": request, "workspace": workspace}
@@ -80,7 +80,7 @@ class DepartmentDetailView(APIView):
 
     def _get(self, workspace_id, dept_id, user):
         workspace = _get_workspace(workspace_id, user)
-        _require_module(workspace, "org_structure")
+        _require_module(request, workspace)
         return workspace, get_object_or_404(Department, id=dept_id, workspace=workspace)
 
     def get(self, request, workspace_id, dept_id):
@@ -112,7 +112,7 @@ class DepartmentMemberListCreateView(APIView):
 
     def _get_dept(self, workspace_id, dept_id, user):
         workspace = _get_workspace(workspace_id, user)
-        _require_module(workspace, "org_structure")
+        _require_module(request, workspace)
         return workspace, get_object_or_404(Department, id=dept_id, workspace=workspace)
 
     def get(self, request, workspace_id, dept_id):
@@ -142,7 +142,7 @@ class DepartmentMemberDetailView(APIView):
 
     def delete(self, request, workspace_id, dept_id, membership_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace, "org_structure")
+        _require_module(request, workspace)
         _require_admin(workspace, request.user)
         dept = get_object_or_404(Department, id=dept_id, workspace=workspace)
         membership = get_object_or_404(
@@ -158,7 +158,7 @@ class TeamListCreateView(APIView):
 
     def get(self, request, workspace_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace, "org_structure")
+        _require_module(request, workspace)
         teams = (
             Team.objects.filter(workspace=workspace)
             .select_related("lead", "lead__user", "department")
@@ -169,7 +169,7 @@ class TeamListCreateView(APIView):
 
     def post(self, request, workspace_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace, "org_structure")
+        _require_module(request, workspace)
         _require_admin(workspace, request.user)
         ser = TeamSerializer(
             data=request.data, context={"request": request, "workspace": workspace}
@@ -184,7 +184,7 @@ class TeamDetailView(APIView):
 
     def _get(self, workspace_id, team_id, user):
         workspace = _get_workspace(workspace_id, user)
-        _require_module(workspace, "org_structure")
+        _require_module(request, workspace)
         return workspace, get_object_or_404(Team, id=team_id, workspace=workspace)
 
     def get(self, request, workspace_id, team_id):
@@ -216,7 +216,7 @@ class TeamMemberListCreateView(APIView):
 
     def _get_team(self, workspace_id, team_id, user):
         workspace = _get_workspace(workspace_id, user)
-        _require_module(workspace, "org_structure")
+        _require_module(request, workspace)
         return workspace, get_object_or_404(Team, id=team_id, workspace=workspace)
 
     def get(self, request, workspace_id, team_id):
@@ -243,7 +243,7 @@ class TeamMemberDetailView(APIView):
 
     def delete(self, request, workspace_id, team_id, membership_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace, "org_structure")
+        _require_module(request, workspace)
         _require_admin(workspace, request.user)
         team = get_object_or_404(Team, id=team_id, workspace=workspace)
         membership = get_object_or_404(TeamMember, id=membership_id, team=team)
@@ -257,13 +257,13 @@ class JobTitleListCreateView(APIView):
 
     def get(self, request, workspace_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace, "org_structure")
+        _require_module(request, workspace)
         titles = JobTitle.objects.filter(workspace=workspace).order_by("level", "name")
         return Response(JobTitleSerializer(titles, many=True).data)
 
     def post(self, request, workspace_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace, "org_structure")
+        _require_module(request, workspace)
         _require_admin(workspace, request.user)
         ser = JobTitleSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
@@ -276,7 +276,7 @@ class JobTitleDetailView(APIView):
 
     def _get_title(self, workspace_id, title_id, user):
         workspace = _get_workspace(workspace_id, user)
-        _require_module(workspace, "org_structure")
+        _require_module(request, workspace)
         _require_admin(workspace, user)
         return get_object_or_404(JobTitle, id=title_id, workspace=workspace)
 
@@ -299,14 +299,14 @@ class OrgProfileView(APIView):
 
     def get(self, request, workspace_id, member_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace, "org_structure")
+        _require_module(request, workspace)
         member = get_object_or_404(WorkspaceMember, id=member_id, workspace=workspace)
         profile, _ = OrgProfile.objects.get_or_create(member=member)
         return Response(OrgProfileSerializer(profile).data)
 
     def patch(self, request, workspace_id, member_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace, "org_structure")
+        _require_module(request, workspace)
         member = get_object_or_404(WorkspaceMember, id=member_id, workspace=workspace)
         _require_admin_or_self(workspace, request.user, member)
         profile, _ = OrgProfile.objects.get_or_create(member=member)
@@ -322,7 +322,7 @@ class ReportingLineListCreateView(APIView):
 
     def get(self, request, workspace_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace, "org_structure")
+        _require_module(request, workspace)
         lines = (
             ReportingLine.objects.filter(workspace=workspace)
             .select_related("manager", "manager__user", "report", "report__user")
@@ -332,7 +332,7 @@ class ReportingLineListCreateView(APIView):
 
     def post(self, request, workspace_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace, "org_structure")
+        _require_module(request, workspace)
         _require_admin(workspace, request.user)
         ser = ReportingLineSerializer(
             data=request.data, context={"request": request, "workspace": workspace}
@@ -347,7 +347,7 @@ class ReportingLineDetailView(APIView):
 
     def delete(self, request, workspace_id, line_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace, "org_structure")
+        _require_module(request, workspace)
         _require_admin(workspace, request.user)
         line = get_object_or_404(ReportingLine, id=line_id, workspace=workspace)
         line.delete()
@@ -362,7 +362,7 @@ class OrgChartView(APIView):
 
     def get(self, request, workspace_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace, "org_structure")
+        _require_module(request, workspace)
         members = (
             WorkspaceMember.objects.filter(workspace=workspace)
             .select_related("user")

@@ -18,6 +18,7 @@ import {
   UserCheck,
   Check,
   Minus,
+  Shield,
 } from "lucide-react";
 import { Avatar } from "@/shared/components/ui/avatar";
 import { Button } from "@/shared/components/ui/button";
@@ -31,7 +32,6 @@ import {
   useCancelInvite,
 } from "@/shared/hooks/useMembers";
 import { useRoles, useAssignRole, useBulkAssignRole } from "@/shared/hooks/useRoles";
-import { useModules } from "@/shared/hooks/useModules";
 import { APP_DEFS } from "@/shared/lib/navLinks";
 import {
   EMPLOYMENT_TYPES,
@@ -43,6 +43,8 @@ import { useAuthStore } from "@/store/authStore";
 import { usePermission } from "@/contexts/PermissionsContext";
 import InviteModal from "@/shared/components/workspace/InviteModal";
 import { ConfirmModal } from "@/shared/components/ui/ConfirmModal";
+import RolesSection from "@/shared/components/workspace/RolesSection";
+import PermissionsReferenceModal from "@/shared/components/workspace/PermissionsReferenceModal";
 import {
   useOrgProfile,
   useUpdateOrgProfile,
@@ -444,9 +446,8 @@ function getMemberRole(member, roles) {
 /** Returns true if the member's role grants access to an app. */
 function memberHasAppAccess(member, appDef, roles, isWorkspaceOwner) {
   if (isWorkspaceOwner || member.role === "Admin") return true;
-  if (!appDef.permKey) return true;
   const role = getMemberRole(member, roles);
-  return role?.permissions?.[appDef.permKey] === true;
+  return role?.app_access?.[appDef.key] === true;
 }
 
 /**
@@ -490,8 +491,7 @@ function AppAccessCell({ hasAccess, appDef, isInteractive, onToggle }) {
   );
 }
 
-function AppAccessTab({ workspaceId, members, roles, isAdmin, user, workspace }) {
-  const { isEnabled } = useModules();
+function AppAccessTab({ workspaceId, members, roles, isAdmin, user, workspace, onSwitchToRoles }) {
   const assignRole = useAssignRole(workspaceId);
   const bulkAssignRole = useBulkAssignRole(workspaceId);
 
@@ -514,10 +514,7 @@ function AppAccessTab({ workspaceId, members, roles, isAdmin, user, workspace })
     return () => document.removeEventListener("mousedown", handler);
   }, [cellPopover]);
 
-  // Only show columns for enabled modules
-  const visibleApps = APP_ACCESS_DEFS.filter(
-    (app) => !app.moduleKey || isEnabled(app.moduleKey),
-  );
+  const visibleApps = APP_ACCESS_DEFS;
 
   const toggleCheck = (id) =>
     setCheckedIds((prev) => {
@@ -537,7 +534,7 @@ function AppAccessTab({ workspaceId, members, roles, isAdmin, user, workspace })
   };
 
   const openCellPopover = (e, member, appDef, hasAccess) => {
-    if (!isAdmin || !appDef.permKey) return;
+    if (!isAdmin) return;
     const isSelf = member.user?.email === user?.email;
     const isOwner = workspace?.owner?.email === member.user?.email;
     if (isSelf || isOwner) return;
@@ -550,10 +547,10 @@ function AppAccessTab({ workspaceId, members, roles, isAdmin, user, workspace })
     ? APP_ACCESS_DEFS.find((a) => a.key === cellPopover.appKey)
     : null;
   const rolesWithAccess = popoverApp
-    ? roles.filter((r) => r.permissions?.[popoverApp.permKey] === true)
+    ? roles.filter((r) => r.app_access?.[popoverApp.key] === true)
     : [];
   const rolesWithoutAccess = popoverApp
-    ? roles.filter((r) => !r.permissions?.[popoverApp.permKey])
+    ? roles.filter((r) => !r.app_access?.[popoverApp.key])
     : [];
   const suggestedRoles = cellPopover?.hasAccess ? rolesWithoutAccess : rolesWithAccess;
 
@@ -716,7 +713,7 @@ function AppAccessTab({ workspaceId, members, roles, isAdmin, user, workspace })
                 {/* App access cells */}
                 {visibleApps.map((app) => {
                   const hasAccess = memberHasAppAccess(member, app, roles, isWorkspaceOwner);
-                  const interactive = isAdmin && !!app.permKey && !isSelf && !isWorkspaceOwner;
+                  const interactive = isAdmin && !isSelf && !isWorkspaceOwner;
                   return (
                     <div key={app.key} className="px-2 py-3">
                       <AppAccessCell
@@ -754,20 +751,19 @@ function AppAccessTab({ workspaceId, members, roles, isAdmin, user, workspace })
           </p>
           <p className="px-3 pb-1.5 text-[11px] text-muted-foreground/60">
             {cellPopover.hasAccess
-              ? `Choose a role without ${popoverApp.permKey}`
-              : `Choose a role with ${popoverApp.permKey}`}
+              ? `Choose a role without ${popoverApp.label} access`
+              : `Choose a role with ${popoverApp.label} access`}
           </p>
           <div className="border-t" />
           {suggestedRoles.length === 0 ? (
             <div className="px-3 py-2.5 text-xs text-muted-foreground">
               No matching roles.{" "}
-              <Link
-                to={`/w/${workspaceId}/settings`}
+              <button
                 className="text-primary underline"
-                onClick={() => setCellPopover(null)}
+                onClick={() => { setCellPopover(null); onSwitchToRoles?.(); }}
               >
-                Create one in Settings → Roles
-              </Link>
+                Create one in Roles & Permissions
+              </button>
             </div>
           ) : (
             suggestedRoles.map((r) => (
@@ -792,8 +788,8 @@ function AppAccessTab({ workspaceId, members, roles, isAdmin, user, workspace })
       <p className="text-xs text-muted-foreground">
         Access is controlled by each member's role. Click a{" "}
         <Check className="w-3 h-3 inline text-emerald-500" /> or{" "}
-        <Minus className="w-3 h-3 inline text-muted-foreground/40" /> to pick a different role, or use the role dropdown to change their role directly. Manage roles in{" "}
-        <Link to={`/w/${workspaceId}/settings`} className="text-primary underline">Settings → Roles</Link>.
+        <Minus className="w-3 h-3 inline text-muted-foreground/40" /> to pick a different role, or use the role dropdown to change their role directly. Manage roles in the{" "}
+        <button className="text-primary underline" onClick={() => onSwitchToRoles?.()}>Roles & Permissions</button> tab.
       </p>
     </div>
   );
@@ -818,6 +814,7 @@ export default function MembersPage() {
 
   const [activeTab, setActiveTab] = useState("members");
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [permsRefOpen, setPermsRefOpen] = useState(false);
   const [confirmState, setConfirmState] = useState(null);
   const [copiedToken, setCopiedToken] = useState(null);
   const [selectedMemberId, setSelectedMemberId] = useState(null);
@@ -877,20 +874,25 @@ export default function MembersPage() {
           {[
             { key: "members", label: "Members" },
             { key: "app-access", label: "App Access" },
-          ].map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => { setActiveTab(tab.key); setSelectedMemberId(null); }}
-              className={cn(
-                "px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px",
-                activeTab === tab.key
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
+            { key: "roles", label: "Roles & Permissions", icon: Shield },
+          ].map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.key}
+                onClick={() => { setActiveTab(tab.key); setSelectedMemberId(null); }}
+                className={cn(
+                  "flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px",
+                  activeTab === tab.key
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {Icon && <Icon className="w-3.5 h-3.5" />}
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
 
         {/* ── Members tab ── */}
@@ -1008,6 +1010,16 @@ export default function MembersPage() {
             isAdmin={isAdmin}
             user={user}
             workspace={workspace}
+            onSwitchToRoles={() => setActiveTab("roles")}
+          />
+        )}
+
+        {/* ── Roles & Permissions tab ── */}
+        {activeTab === "roles" && (
+          <RolesSection
+            workspaceId={workspaceId}
+            isAdmin={isAdmin}
+            onOpenPermissionsRef={() => setPermsRefOpen(true)}
           />
         )}
       </div>
@@ -1039,6 +1051,13 @@ export default function MembersPage() {
             setConfirmState(null);
           }}
           onCancel={() => setConfirmState(null)}
+        />
+      )}
+
+      {permsRefOpen && (
+        <PermissionsReferenceModal
+          workspaceId={workspaceId}
+          onClose={() => setPermsRefOpen(false)}
         />
       )}
     </div>

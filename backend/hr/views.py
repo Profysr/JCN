@@ -13,8 +13,8 @@ from rest_framework.views import APIView
 from django.db import transaction
 from django.db.models import Count
 
-from core.modules import require_module
 from workspaces.models import Workspace, WorkspaceMember
+from workspaces.permissions import require_app_access
 from projects.views.helpers import notify
 from .models import Attendance, AttendancePolicy, EmployeeDocument, EmployeeNote, LeaveBalance, LeavePolicy, LeaveRequest
 from .serializers import (
@@ -52,8 +52,8 @@ def _get_member(workspace, user):
     return get_object_or_404(WorkspaceMember, workspace=workspace, user=user)
 
 
-def _require_module(workspace):
-    require_module(workspace, "hr_management")
+def _require_module(request, workspace):
+    require_app_access(request.user, workspace, "hr")
 
 
 def _is_admin(workspace, user):
@@ -108,13 +108,13 @@ class LeavePolicyListCreateView(APIView):
 
     def get(self, request, workspace_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace)
+        _require_module(request, workspace)
         policies = LeavePolicy.objects.filter(workspace=workspace)
         return Response(LeavePolicySerializer(policies, many=True).data)
 
     def post(self, request, workspace_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace)
+        _require_module(request, workspace)
         _require_admin(workspace, request.user)
         serializer = LeavePolicySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -127,7 +127,7 @@ class LeavePolicyDetailView(APIView):
 
     def _get_policy(self, workspace_id, policy_id, user):
         workspace = _get_workspace(workspace_id, user)
-        _require_module(workspace)
+        _require_module(request, workspace)
         policy = get_object_or_404(LeavePolicy, id=policy_id, workspace=workspace)
         return workspace, policy
 
@@ -153,7 +153,7 @@ class LeaveRequestListCreateView(APIView):
 
     def get(self, request, workspace_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace)
+        _require_module(request, workspace)
         member = _get_member(workspace, request.user)
 
         qs = LeaveRequest.objects.select_related(
@@ -177,7 +177,7 @@ class LeaveRequestListCreateView(APIView):
 
     def post(self, request, workspace_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace)
+        _require_module(request, workspace)
         member = _get_member(workspace, request.user)
 
         serializer = LeaveRequestSerializer(data=request.data)
@@ -236,7 +236,7 @@ class LeaveRequestReviewView(APIView):
 
     def post(self, request, workspace_id, request_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace)
+        _require_module(request, workspace)
         _require_admin(workspace, request.user)
 
         leave_request = get_object_or_404(
@@ -295,7 +295,7 @@ class LeaveBalanceListView(APIView):
 
     def get(self, request, workspace_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace)
+        _require_module(request, workspace)
         member = _get_member(workspace, request.user)
 
         current_year = timezone.localdate().year
@@ -316,7 +316,7 @@ class WhosOffView(APIView):
 
     def get(self, request, workspace_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace)
+        _require_module(request, workspace)
 
         today = timezone.localdate()
         window_end = today + timedelta(days=7)
@@ -367,13 +367,13 @@ class AttendancePolicyView(APIView):
 
     def get(self, request, workspace_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace)
+        _require_module(request, workspace)
         policy = _get_attendance_policy(workspace)
         return Response(AttendancePolicySerializer(policy).data)
 
     def patch(self, request, workspace_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace)
+        _require_module(request, workspace)
         _require_admin(workspace, request.user)
         policy = _get_attendance_policy(workspace)
         serializer = AttendancePolicySerializer(policy, data=request.data, partial=True)
@@ -389,7 +389,7 @@ class ClockInView(APIView):
 
     def post(self, request, workspace_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace)
+        _require_module(request, workspace)
         member = _get_member(workspace, request.user)
 
         today = timezone.localdate()
@@ -418,7 +418,7 @@ class ClockOutView(APIView):
 
     def post(self, request, workspace_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace)
+        _require_module(request, workspace)
         member = _get_member(workspace, request.user)
 
         today = timezone.localdate()
@@ -448,7 +448,7 @@ class AttendanceListView(APIView):
 
     def get(self, request, workspace_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace)
+        _require_module(request, workspace)
         _require_admin(workspace, request.user)
 
         date_from, date_to = _parse_date_window(request)
@@ -472,7 +472,7 @@ class MyAttendanceView(APIView):
 
     def get(self, request, workspace_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace)
+        _require_module(request, workspace)
         member = _get_member(workspace, request.user)
 
         date_from, date_to = _parse_date_window(request)
@@ -489,7 +489,7 @@ class AttendanceSummaryView(APIView):
 
     def get(self, request, workspace_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace)
+        _require_module(request, workspace)
         _require_admin(workspace, request.user)
 
         today = timezone.localdate()
@@ -546,7 +546,7 @@ class AttendanceQRView(APIView):
 
     def get(self, request, workspace_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace)
+        _require_module(request, workspace)
         _require_admin(workspace, request.user)
 
         today = timezone.localdate()
@@ -576,7 +576,7 @@ class QRClockInView(APIView):
             raise ValidationError({"non_field_errors": "This QR code has expired."})
 
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace)
+        _require_module(request, workspace)
         member = _get_member(workspace, request.user)
 
         now_time = timezone.localtime().time().replace(second=0, microsecond=0)
@@ -606,7 +606,7 @@ class HRDashboardView(APIView):
 
     def get(self, request, workspace_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace)
+        _require_module(request, workspace)
         _require_admin(workspace, request.user)
 
         from organization.models import OrgProfile
@@ -723,7 +723,7 @@ class EmployeeDocumentListCreateView(APIView):
 
     def get(self, request, workspace_id, member_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace)
+        _require_module(request, workspace)
         _require_admin(workspace, request.user)
         employee = get_object_or_404(WorkspaceMember, id=member_id, workspace=workspace)
         docs = EmployeeDocument.objects.filter(employee=employee).select_related("uploaded_by")
@@ -731,7 +731,7 @@ class EmployeeDocumentListCreateView(APIView):
 
     def post(self, request, workspace_id, member_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace)
+        _require_module(request, workspace)
         _require_admin(workspace, request.user)
         employee = get_object_or_404(WorkspaceMember, id=member_id, workspace=workspace)
 
@@ -763,7 +763,7 @@ class EmployeeDocumentDetailView(APIView):
 
     def delete(self, request, workspace_id, member_id, doc_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace)
+        _require_module(request, workspace)
         _require_admin(workspace, request.user)
         doc = get_object_or_404(
             EmployeeDocument, id=doc_id, employee__workspace=workspace, employee_id=member_id
@@ -780,7 +780,7 @@ class EmployeeNoteListCreateView(APIView):
 
     def get(self, request, workspace_id, member_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace)
+        _require_module(request, workspace)
         _require_admin(workspace, request.user)
         employee = get_object_or_404(WorkspaceMember, id=member_id, workspace=workspace)
         notes = EmployeeNote.objects.filter(employee=employee).select_related("author")
@@ -788,7 +788,7 @@ class EmployeeNoteListCreateView(APIView):
 
     def post(self, request, workspace_id, member_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace)
+        _require_module(request, workspace)
         _require_admin(workspace, request.user)
         employee = get_object_or_404(WorkspaceMember, id=member_id, workspace=workspace)
         ser = EmployeeNoteSerializer(data=request.data)
@@ -802,7 +802,7 @@ class EmployeeNoteDetailView(APIView):
 
     def patch(self, request, workspace_id, member_id, note_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace)
+        _require_module(request, workspace)
         _require_admin(workspace, request.user)
         note = get_object_or_404(
             EmployeeNote, id=note_id, employee__workspace=workspace, employee_id=member_id
@@ -814,7 +814,7 @@ class EmployeeNoteDetailView(APIView):
 
     def delete(self, request, workspace_id, member_id, note_id):
         workspace = _get_workspace(workspace_id, request.user)
-        _require_module(workspace)
+        _require_module(request, workspace)
         _require_admin(workspace, request.user)
         note = get_object_or_404(
             EmployeeNote, id=note_id, employee__workspace=workspace, employee_id=member_id

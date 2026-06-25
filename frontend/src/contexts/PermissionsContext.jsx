@@ -5,6 +5,7 @@ import { useAuthStore } from "@/store/authStore";
 
 const PermissionsContext = createContext({
   can: () => false,
+  hasAppAccess: () => false,
   isOwner: false,
   isLoading: true,
   myRole: null,
@@ -21,6 +22,7 @@ export function PermissionsProvider({ workspaceId, children }) {
     if (isOwner) {
       return {
         can: () => true,
+        hasAppAccess: () => true,
         isOwner: true,
         isLoading: false,
         myRole: null,
@@ -29,10 +31,21 @@ export function PermissionsProvider({ workspaceId, children }) {
 
     const myRoleName = workspace?.my_role;
     const myRole = roles.find((r) => r.name === myRoleName) ?? null;
-    const permissions = myRole?.permissions ?? {};
+
+    // Build a flat permission map from the nested { workspace: {...}, projects: {...}, ... } structure
+    const nestedPerms = myRole?.permissions ?? {};
+    const flatPerms = {};
+    for (const appPerms of Object.values(nestedPerms)) {
+      if (appPerms && typeof appPerms === "object") {
+        Object.assign(flatPerms, appPerms);
+      }
+    }
+
+    const appAccess = myRole?.app_access ?? {};
 
     return {
-      can: (key) => !!permissions[key],
+      can: (key) => !!flatPerms[key],
+      hasAppAccess: (appKey) => !!appAccess[appKey],
       isOwner: false,
       isLoading: isLoading || !workspace,
       myRole,

@@ -781,6 +781,27 @@ class WorkspaceModuleToggleView(APIView):
 # ==============================================================================
 
 
+class WorkspacePermissionsView(APIView):
+    """
+    GET /api/workspaces/{ws}/permissions/
+
+    Returns the full permission schema (apps + internal permissions).
+    This is a static registry — the response never changes at runtime,
+    so the frontend caches it indefinitely (staleTime: Infinity).
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, workspace_id):
+        from .permissions import get_enabled_apps, get_enabled_permissions
+
+        _get_workspace(workspace_id, request.user)  # membership check
+        return Response({
+            "apps": get_enabled_apps(),
+            "permissions": get_enabled_permissions(),
+        })
+
+
 class CustomRoleListCreateView(APIView):
     """
     GET  /api/workspaces/{ws}/roles/  — list all roles for this workspace.

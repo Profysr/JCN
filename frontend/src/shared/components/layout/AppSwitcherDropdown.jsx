@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { cn } from "@/shared/lib/utils";
 import { LayoutGrid } from "lucide-react";
 import { APP_DEFS, workspaceUrl } from "@/shared/lib/navLinks";
-import { useModules } from "@/shared/hooks/useModules";
 import { usePermission } from "@/contexts/PermissionsContext";
 import { useActiveApp } from "@/shared/hooks/useActiveApp";
 import { Tooltip } from "@/shared/components/ui/tooltip";
@@ -51,14 +50,12 @@ export default function AppSwitcherDropdown({ workspaceId, collapsed }) {
   const ref = useRef(null);
   const navigate = useNavigate();
   const activeApp = useActiveApp();
-  const { isEnabled, isLoading: modulesLoading } = useModules();
-  const { can, isOwner, isLoading: permsLoading } = usePermission();
+  const { isOwner, hasAppAccess, isLoading: permsLoading } = usePermission();
 
   const visibleApps = APP_DEFS.filter((app) => {
     if (app.key === "workspace") return false;
-    if (modulesLoading || permsLoading) return true;
-    if (app.moduleKey && !isEnabled(app.moduleKey)) return false;
-    if (app.permKey && !isOwner && !can(app.permKey)) return false;
+    if (permsLoading) return true;
+    if (!isOwner && !hasAppAccess(app.key)) return false;
     return true;
   });
 

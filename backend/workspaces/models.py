@@ -397,7 +397,9 @@ class CustomRole(models.Model):
     name = models.CharField(max_length=100)
     description = models.CharField(max_length=500, blank=True)
     is_system = models.BooleanField(default=False)
-    # {"project.create": true, "hr.manage_leave": false, ...}
+    # {"projects": true, "hr": false, ...}
+    app_access = models.JSONField(default=dict)
+    # {"projects": {"task.create": true, ...}, "workspace": {"member.invite": true, ...}}
     permissions = models.JSONField(default=dict)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

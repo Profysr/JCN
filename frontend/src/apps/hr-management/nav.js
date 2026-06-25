@@ -7,8 +7,6 @@ export const HR_NAV_ITEMS = [
     label: "HR Overview",
     desc: "Headcount, leave & attendance summary",
     path: "hr",
-    permission: "hr.view",
-    moduleKey: "hr_management",
     end: true,
   },
   {
@@ -17,8 +15,6 @@ export const HR_NAV_ITEMS = [
     label: "Leave",
     desc: "Leave requests & balances",
     path: "hr/leave",
-    permission: "hr.view",
-    moduleKey: "hr_management",
   },
   {
     key: "hr-attendance",
@@ -26,8 +22,6 @@ export const HR_NAV_ITEMS = [
     label: "Attendance",
     desc: "Clock-in/out & team hours",
     path: "hr/attendance",
-    permission: "hr.view",
-    moduleKey: "hr_management",
   },
 ];
 

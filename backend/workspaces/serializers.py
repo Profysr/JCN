@@ -243,37 +243,19 @@ class ImportJobDetailSerializer(ImportJobSerializer):
 
 
 # ── vD.1 — Custom RBAC ───────────────────────────────────────────────────────
-from .constants import PERMISSIONS  # noqa: E402
-
-
 class CustomRoleSerializer(serializers.ModelSerializer):
-    """
-    Read + write serializer for CustomRole.
-
-    `permissions` must be a dict keyed on known permission strings.
-    Unknown keys are rejected; system roles may not be mutated via this serializer.
-    The `permission_definitions` field exposes the full PERMISSIONS registry
-    (key → description) so the frontend can build the role editor without a
-    separate API call.
-    """
-
-    permission_definitions = serializers.SerializerMethodField()
     member_count = serializers.SerializerMethodField()
 
     class Meta:
         model = CustomRole
         fields = [
             "id", "name", "description", "is_system",
-            "permissions", "member_count", "permission_definitions",
+            "app_access", "permissions", "member_count",
             "created_at", "updated_at",
         ]
         read_only_fields = ["id", "is_system", "created_at", "updated_at"]
 
-    def get_permission_definitions(self, obj):
-        return PERMISSIONS
-
     def get_member_count(self, obj):
-        # Reads from prefetch cache when the view prefetches `assignments`.
         return len(obj.assignments.all())
 
     def validate_name(self, value):
@@ -282,16 +264,22 @@ class CustomRoleSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Name cannot be blank.")
         return value
 
+    def validate_app_access(self, value):
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("app_access must be an object.")
+        return {k: bool(v) for k, v in value.items()}
+
     def validate_permissions(self, value):
         if not isinstance(value, dict):
             raise serializers.ValidationError("permissions must be an object.")
-        # Coerce all values to bool.
-        # Known keys missing from the payload default to False.
-        # Unknown/custom keys are preserved as-is — PERMISSIONS is a UI registry,
-        # not an enforcement gate, so custom keys defined via the API are valid.
-        coerced = {key: bool(v) for key, v in value.items()}
-        for key in PERMISSIONS:
-            coerced.setdefault(key, False)
+        # Each value must be a dict of {perm_key: bool}
+        coerced = {}
+        for app_key, app_perms in value.items():
+            if not isinstance(app_perms, dict):
+                raise serializers.ValidationError(
+                    f"permissions['{app_key}'] must be an object."
+                )
+            coerced[app_key] = {k: bool(v) for k, v in app_perms.items()}
         return coerced
 
     def validate(self, attrs):

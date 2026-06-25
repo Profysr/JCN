@@ -16,23 +16,20 @@ import { HR_NAV_ITEMS, HR_NAV_GROUPS } from "@/apps/hr-management/nav";
 
 // ── App definitions ─────────────────────────────────────────────────────────
 // Single source of truth for every product app in the workspace.
+// Keys must match the backend APP_REGISTRY keys exactly.
 //
 // Fields consumed across the codebase:
-//   permKey    → MembersPage App Access tab, AppSwitcher permission gating
-//   moduleKey  → module enable/disable checks (null = always on)
-//   icon       → AppSwitcher, AppLauncher, SettingsPage, AppWelcome, ModuleUnavailable
+//   icon       → AppSwitcher, AppLauncher, RolesSection, ModuleUnavailable
 //   landing    → route suffix after /w/:id/ when switching to this app
 //   colors     → icon bubble bg / icon text / active dot / accent bar
 //   welcome    → AppWelcomeScreen copy  (null = no welcome screen shown)
-//   locked     → ModuleUnavailablePage copy  (null = always-on, never locked)
+//   locked     → ModuleUnavailablePage copy  (null = never locked)
 
 export const APP_DEFS = [
   {
     key: "projects",
     label: "Project Management",
     shortLabel: "Projects",
-    moduleKey: null,
-    permKey: "projects.view",
     icon: FolderKanban,
     landing: "boards",
     colors: {
@@ -44,11 +41,9 @@ export const APP_DEFS = [
     locked: null,
   },
   {
-    key: "org_structure",
+    key: "org",
     label: "Org Structure",
     shortLabel: "Org",
-    moduleKey: "org_structure",
-    permKey: "org.view",
     icon: Network,
     landing: "departments",
     colors: {
@@ -68,18 +63,12 @@ export const APP_DEFS = [
       ],
       ctaLabel: "Set up Org Structure",
     },
-    locked: {
-      tier: "Pro",
-      description:
-        "Visualize your company's departments, teams, and reporting lines. Build an org chart and manage your entire organizational hierarchy in one place.",
-    },
+    locked: null,
   },
   {
-    key: "hr_management",
+    key: "hr",
     label: "HR Management",
     shortLabel: "HR",
-    moduleKey: "hr_management",
-    permKey: "hr.view",
     icon: Users2,
     landing: "hr",
     colors: {
@@ -99,19 +88,12 @@ export const APP_DEFS = [
       ],
       ctaLabel: "Set up HR Management",
     },
-    locked: {
-      tier: "Enterprise",
-      description:
-        "Manage leave requests, track attendance, and maintain employee records — all in one place. Requires Org Structure to be enabled first.",
-      requires: "Org Structure must be enabled before HR Management.",
-    },
+    locked: null,
   },
   {
-    key: "analytics_advanced",
+    key: "analytics",
     label: "Advanced Analytics",
     shortLabel: "Analytics",
-    moduleKey: "analytics_advanced",
-    permKey: null,
     icon: BarChart2,
     landing: "analytics",
     colors: {
@@ -120,18 +102,12 @@ export const APP_DEFS = [
       solid: "bg-amber-500",
     },
     welcome: null,
-    locked: {
-      tier: "Pro",
-      description:
-        "Unlock velocity charts, flow metrics, and team performance dashboards built on real project data.",
-    },
+    locked: null,
   },
   {
     key: "workspace",
     label: "Workspace",
     shortLabel: "Workspace",
-    moduleKey: null,
-    permKey: null,
     icon: Settings,
     landing: "members",
     colors: {
@@ -209,8 +185,8 @@ export const NAV_ITEMS = [
 
 export const NAV_GROUPS = [
   ...PM_NAV_GROUPS.map((g) => ({ ...g, app: "projects" })),
-  ...ORG_NAV_GROUPS.map((g) => ({ ...g, app: "org_structure" })),
-  ...HR_NAV_GROUPS.map((g) => ({ ...g, app: "hr_management" })),
+  ...ORG_NAV_GROUPS.map((g) => ({ ...g, app: "org" })),
+  ...HR_NAV_GROUPS.map((g) => ({ ...g, app: "hr" })),
   ...WORKSPACE_NAV_GROUPS.map((g) => ({ ...g, app: "workspace" })),
 ];
 

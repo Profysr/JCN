@@ -55,25 +55,36 @@ Default permission: `IsAuthenticated`. Public endpoints (forms, invite detail) u
 
 ---
 
-## Module System (`core/modules.py`)
+## App & Permission Registry (`workspaces/constants.py`)
 
-Product areas are gated behind workspace-level modules. `MODULE_REGISTRY` is the single source of truth:
+Single source of truth for all product apps and their permissions. Replaces the old `MODULE_REGISTRY` in `core/modules.py` (`core/modules.py` is now a thin shim that re-exports `APP_REGISTRY` as `MODULE_REGISTRY` for any remaining legacy references).
 
-| Key | Name | Tier | always_on | depends_on |
-|-----|------|------|-----------|-----------|
-| `projects` | Project Management | free | ✅ | — |
-| `org_structure` | Org Structure | pro | — | — |
-| `hr_management` | HR Management | enterprise | — | `org_structure` |
-| `analytics_advanced` | Advanced Analytics | pro | — | — |
+### APP_REGISTRY
 
-- Views enforce access with `require_module(workspace, key)` → raises **403** with `{detail, module}` if the `WorkspaceModule` row isn't enabled. `always_on` modules short-circuit (never blocked).
-- Enabling a module with `depends_on` requires its dependencies enabled first (enforced in `WorkspaceModuleToggleView`). **hr_management therefore requires org_structure.**
-- Tier order: `free < pro < enterprise` (`TIER_ORDER`).
+| Key | Name | depends_on |
+|-----|------|------------|
+| `projects` | Project Management | — |
+| `org` | Org Structure | — |
+| `hr` | HR Management | `org` |
+| `analytics` | Advanced Analytics | — |
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/workspaces/{ws}/modules/` | List all modules with `is_enabled` resolved (always_on or row enabled) |
-| PATCH | `/api/workspaces/{ws}/modules/{module_key}/` | Enable/disable a module (admin only). Body `{ is_enabled }`. 400 if always_on or a dependency is missing. |
+### PERMISSIONS (nested by app key)
+
+```
+workspace:  member.invite, member.remove, member.view_profile, report.view,
+            settings.manage, api_keys.manage
+projects:   project.create, project.delete, project.admin, task.view,
+            task.create, task.edit, task.delete, task.move, task.comment,
+            sprint.manage, automation.manage
+org:        org.manage
+hr:         hr.manage_leave, hr.manage_attendance
+```
+
+**How to add a new app:** Add to `APP_REGISTRY` + `PERMISSIONS` + `SYSTEM_ROLE_PERMISSIONS`. Frontend picks it up automatically from `GET /api/workspaces/{ws}/permissions/`.
+
+**How to add a new permission:** Add it under the correct app key in `PERMISSIONS` and update `SYSTEM_ROLE_PERMISSIONS`. Serializer validation and the role editor UI derive from this dict — no other files change.
+
+> See `CHANGELOG.md` for full migration history and the planned vD.2 DRF permission class upgrade.
 
 ---
 
@@ -129,22 +140,34 @@ Product areas are gated behind workspace-level modules. `MODULE_REGISTRY` is the
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/workspaces/{ws}/roles/` | List all roles (system + custom) with `member_count` and `permission_definitions` |
-| POST | `/api/workspaces/{ws}/roles/` | Create a custom role (admin only). Body: `{ name, description?, permissions: {key: bool} }`. Unknown permission keys → 400. `is_system` is always `false` for created roles. |
+| GET | `/api/workspaces/{ws}/permissions/` | Permission schema: `{ apps: APP_REGISTRY, permissions: PERMISSIONS }`. Static — cache with `staleTime: Infinity`. |
+| GET | `/api/workspaces/{ws}/roles/` | List all roles (system + custom) with `member_count`, `app_access`, and nested `permissions` |
+| POST | `/api/workspaces/{ws}/roles/` | Create a custom role (admin only). Body: `{ name, description?, app_access: {app_key: bool}, permissions: {app_key: {perm_key: bool}} }`. `is_system` is always `false` for created roles. |
 | GET | `/api/workspaces/{ws}/roles/{id}/` | Role detail |
-| PATCH | `/api/workspaces/{ws}/roles/{id}/` | Update name/description/permissions (admin only). System roles → 400. |
+| PATCH | `/api/workspaces/{ws}/roles/{id}/` | Update name/description/app_access/permissions (admin only). System roles → 400. |
 | DELETE | `/api/workspaces/{ws}/roles/{id}/` | Delete role (admin only). System roles → 400. Roles with active assignments → 400. |
 | POST | `/api/workspaces/{ws}/members/{id}/assign-role/` | Assign or reassign a CustomRole to a member (admin only). Body: `{ role: "<uuid>" }`. Role must belong to this workspace. Idempotent via `update_or_create`. |
+| POST | `/api/workspaces/{ws}/members/bulk-assign-role/` | Assign a single role to multiple members. Body: `{ role, member_ids: [] }`. Max 200 members. |
 
-**Permission keys** (defined in `workspaces/constants.py::PERMISSIONS`):
-`project.create`, `project.delete`, `project.admin`, `task.create`, `task.edit`, `task.delete`, `sprint.manage`, `automation.manage`, `member.invite`, `member.remove`, `member.view_profile`, `hr.view`, `hr.manage_leave`, `hr.manage_attendance`, `org.view`, `org.manage`, `report.view`, `settings.manage`, `api_keys.manage`
+**Two-level permission model:**
+- `app_access` — `{"projects": true, "hr": false, ...}` controls whether a user can enter a product area
+- `permissions` — nested by app key; controls fine-grained actions within apps a user has access to
 
-**System roles** (auto-created per workspace, `is_system=True`, non-deletable):
-- `Admin` — all permissions `true`
-- `Member` — project.create/task.create+edit/sprint.manage/member.invite/member.view_profile/hr.view/org.view/report.view
-- `Viewer` — member.view_profile/hr.view/org.view/report.view
+**System roles** (auto-created per workspace via `create_system_roles()`, `is_system=True`, non-deletable):
+- `Admin` — all `app_access` true, all `permissions` true
+- `Member` — all apps accessible; project/task/sprint perms on; destructive/admin perms off
+- `Viewer` — all apps accessible; read-only perms only
 
-**Helper** `has_workspace_permission(user, workspace, action)` in `workspaces/rbac.py` — owner short-circuits to `True`; otherwise checks `RoleAssignment→CustomRole.permissions`; returns `False` if no `RoleAssignment` exists.
+**Permission helpers (`workspaces/permissions.py`):**
+
+| Function | Purpose |
+|----------|---------|
+| `has_app_access(user, workspace, app_key)` | True if user's role has `app_access[app_key] = True` (or owner) |
+| `require_app_access(user, workspace, app_key)` | Raises 403 if no app access |
+| `has_permission(user, workspace, app_key, perm_key)` | True if user has the specific permission (implicitly checks app access first) |
+| `resolve_permission(user, workspace, perm_key)` | Looks up app via `_PERM_TO_APP` reverse map, then delegates to `has_permission` — O(1), no scanning |
+
+**`has_workspace_permission(user, workspace, action)`** in `workspaces/rbac.py` delegates to `resolve_permission` — kept for call sites that pass a bare action key without knowing the app.
 
 ### Inbox
 
@@ -483,7 +506,7 @@ Available `{metric}` values:
 | `WebhookDelivery` | `webhook` (FK), `event`, `request_body`, `response_code`, `response_body`, `duration_ms`, `success`, `attempt` | indexes: webhook+created_at, webhook+success |
 | `ImportJob` | `workspace` (FK), `source`, `status`, `file_name`, `parsed_rows`, `field_mapping`, `preview_rows`, `progress_pct`, `total_count`, `imported_count`, `skipped_count`, `error_log`, `imported_task_ids`, `created_by`, `completed_at` | index: workspace+status. Sources: jira, clickup, monday, notion, github, asana, csv |
 | `OnboardingState` | `workspace` (O2O), `wizard_completed`, `team_type`, `checklist_dismissed`, `dismissed_by_users` (JSON) | |
-| `CustomRole` | `workspace` (FK), `name`, `description`, `is_system` (bool), `permissions` (JSONField `{"task.create": true, ...}`) | unique: workspace+name; ordering: -is_system, name; index: `crole_workspace_system_idx`. `is_system=True` protects built-in Admin/Member/Viewer roles. Auto-created per workspace via `create_system_roles()`. |
+| `CustomRole` | `workspace` (FK), `name`, `description`, `is_system` (bool), `app_access` (JSONField `{"projects": true, "hr": false, ...}`), `permissions` (JSONField `{"workspace": {"settings.manage": true}, "projects": {"task.create": true}, ...}`) | unique: workspace+name; ordering: -is_system, name; index: `crole_workspace_system_idx`. `is_system=True` protects built-in Admin/Member/Viewer roles. Auto-created per workspace via `create_system_roles()`. |
 | `RoleAssignment` | `workspace_member` (O2O→WorkspaceMember), `role` (FK→CustomRole, PROTECT), `assigned_by` (FK→User, nullable) | One per member; `update_or_create` on reassign; index: `rla_role_idx`. Auto-created for workspace owner (Admin) on workspace creation and for invited members on invite acceptance. |
 
 ### projects
@@ -547,7 +570,7 @@ Available `{metric}` values:
 
 ### organization — URL Reference
 
-All org endpoints require the `org_structure` module enabled (`_require_module(workspace, "org_structure")`). Mutations require workspace admin (owner or `role=admin`); reads require membership only.
+All org endpoints require `app_access["org"] = true` on the user's role (enforced via `require_app_access(user, workspace, "org")` in `_require_module`). Mutations require workspace admin; reads require membership only.
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -605,7 +628,7 @@ All org endpoints require the `org_structure` module enabled (`_require_module(w
 
 `AttendanceSerializer` computed fields: `status` (on_time/late/absent — compared against `AttendancePolicy.work_start_time + grace_period_minutes`), `total_hours` (float, null if no clock_out).
 
-All hr endpoints require `hr_management` module enabled (`require_module(workspace, "hr_management")`).
+All hr endpoints require `app_access["hr"] = true` on the user's role (enforced via `require_app_access(user, workspace, "hr")` in `_require_module`).
 
 **hr helpers (`hr/views.py`):** `_business_days(start, end)` (Mon–Fri count, inclusive; holidays not modelled); `_parse_date_window(request, default_lookback_days=31, max_span_days=366)` (bounded date-range parser used by attendance lists). Leave balance create/review wrap the balance mutation in `transaction.atomic()` + `select_for_update()`. All "today" logic uses `timezone.localdate()`.
 
@@ -681,14 +704,20 @@ User created → post_save → UserProfile auto-created
 
 ### Workspace-level (vD.1 — Custom RBAC)
 
-Every `WorkspaceMember` has a `RoleAssignment` → `CustomRole` with a `permissions` JSONField. Permission resolution:
-1. Workspace owner → always `True` for any action.
-2. Check `RoleAssignment → CustomRole.permissions[action]`.
-3. No assignment → `False`.
+Every `WorkspaceMember` has a `RoleAssignment` → `CustomRole` with two JSONFields:
+- `app_access` — `{"projects": true, "hr": false, ...}` — coarse app-level gate
+- `permissions` — `{"workspace": {"settings.manage": true}, "projects": {"task.create": true}, ...}` — nested fine-grained permissions
 
-`has_workspace_permission(user, workspace, action)` in `workspaces/rbac.py` is the single entry point.
-Admin-level actions (API keys, webhooks, role changes, invites) gate on `settings.manage`.
-Project-admin actions gate on `project.admin`.
+Permission resolution:
+1. Workspace owner → always `True` for any check.
+2. App access check: `role.app_access[app_key]`
+3. Permission check: `role.permissions[app_key][perm_key]`
+4. No `RoleAssignment` → `False`.
+
+All logic lives in `workspaces/permissions.py`. `workspaces/rbac.py` is a thin wrapper that delegates to it.
+Admin-level actions gate on `settings.manage` (in the `workspace` group).
+Project-admin actions gate on `project.admin` (in the `projects` group).
+App access for hr/org/projects is enforced via `require_app_access()` at the top of each view.
 
 ### Board-level (unchanged from v2.1)
 
@@ -732,7 +761,7 @@ Module-level helpers shared across all org-structure views:
 | Helper | Purpose |
 |--------|---------|
 | `_get_workspace(workspace_id, user)` | 404 if user not a member (same pattern as projects) |
-| `_require_module(workspace, module_key)` | 403 if module not enabled; no-op for `always_on` modules |
+| `_require_module(request, workspace)` | 403 if user's role has no `app_access["org"]`; delegates to `require_app_access` |
 | `_require_admin(workspace, user)` | 403 if not workspace owner or admin member |
 | `_require_admin_or_self(workspace, requesting_user, target_member)` | Allows self-edit; otherwise delegates to `_require_admin`. Used by `OrgProfileView.patch`. |
 

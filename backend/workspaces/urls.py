@@ -30,6 +30,7 @@ from .views import (
     ImportJobRunView,
     ImportJobRollbackView,
     # vD.1 — Custom RBAC
+    WorkspacePermissionsView,
     CustomRoleListCreateView,
     CustomRoleDetailView,
     MemberAssignRoleView,
@@ -88,6 +89,7 @@ urlpatterns = [
     path(f"{_ws}/modules/<str:module_key>/", WorkspaceModuleToggleView.as_view()),
 
     # Custom RBAC (vD.1)
+    path(f"{_ws}/permissions/", WorkspacePermissionsView.as_view()),
     path(f"{_ws}/roles/", CustomRoleListCreateView.as_view()),
     path(f"{_ws}/roles/<str:role_id>/", CustomRoleDetailView.as_view()),
     path(f"{_ws}/members/bulk-assign-role/", MemberBulkAssignRoleView.as_view()),

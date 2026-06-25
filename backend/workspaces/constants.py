@@ -1,148 +1,163 @@
-# ── vD.1 — Custom RBAC ───────────────────────────────────────────────────────
-# All permission keys recognised by the system.
-# Each entry: key → human-readable description (shown in the role builder UI).
-# Each entry: key → {group, label}.
-# This is the single source of truth for permission keys, human-readable labels,
-# and display grouping. The roles API exposes this dict as `permission_definitions`
-# so the frontend can build the role editor dynamically — add a permission here
-# and it appears everywhere automatically, with no frontend changes required.
+# ── App Registry ─────────────────────────────────────────────────────────────
+# Single source of truth for all product apps/modules.
+# Replaces MODULE_REGISTRY in core/modules.py — core now imports this.
 #
-# Group order follows Python dict insertion order (3.7+), which is preserved
-# through JSON serialisation, so the frontend uses the same order without extra config.
-PERMISSIONS = {
-    # ── App Access ────────────────────────────────────────────────────────────
-    "projects.view": {
-        "group": "App Access",
-        "label": "Access the Projects app (boards, tasks, sprints)",
+# Keys are short canonical identifiers: "projects", "org", "hr", "analytics".
+#
+# HOW TO ADD A NEW APP
+#   1. Add an entry here in APP_REGISTRY.
+#   2. Add its permissions block in PERMISSIONS below.
+#   3. Add its default perm values to SYSTEM_ROLE_PERMISSIONS.
+#   4. Add the module key mapping in core/modules.py (_OLD_TO_NEW is only
+#      needed during the one-time data migration — see migration 0016).
+#   Frontend picks up new apps automatically from GET /api/workspaces/{ws}/permissions/.
+
+APP_REGISTRY = {
+    "projects": {
+        "name": "Project Management",
+        "description": "Boards, tasks, sprints, Kanban, and time tracking.",
+        "depends_on": [],
+        "icon": "layout-grid",
     },
-    "org.view": {
-        "group": "App Access",
-        "label": "View org chart, departments, and teams",
+    "org": {
+        "name": "Org Structure",
+        "description": "Departments, teams, org chart, job titles, and reporting lines.",
+        "depends_on": [],
+        "icon": "building-2",
     },
-    "hr.view": {
-        "group": "App Access",
-        "label": "View HR section (leave balances, attendance)",
+    "hr": {
+        "name": "HR Management",
+        "description": "Leave management, attendance, and employee records.",
+        "depends_on": ["org"],
+        "icon": "users-round",
     },
-    # ── Boards ─────────────────────────────────────────────────────
-    "project.create": {
-        "group": "Boards",
-        "label": "Create new boards",
+    "analytics": {
+        "name": "Advanced Analytics",
+        "description": "Custom dashboards, burndown charts, and team velocity metrics.",
+        "depends_on": [],
+        "icon": "bar-chart-2",
     },
-    "project.delete": {
-        "group": "Boards",
-        "label": "Delete boards",
-    },
-    "project.admin": {
-        "group": "Boards",
-        "label": "Manage project settings, members, and statuses",
-    },
-    # ── Tasks ─────────────────────────────────────────────────────────────────
-    "task.view": {"group": "Tasks", "label": "View tasks and board content"},
-    "task.create": {"group": "Tasks", "label": "Create tasks"},
-    "task.edit": {
-        "group": "Tasks",
-        "label": "Edit task fields (title, assignee, due date, etc.)",
-    },
-    "task.delete": {"group": "Tasks", "label": "Delete tasks"},
-    "task.move": {
-        "group": "Tasks",
-        "label": "Move tasks between statuses (drag-and-drop)",
-    },
-    "task.comment": {"group": "Tasks", "label": "Post and edit comments on tasks"},
-    "sprint.manage": {"group": "Tasks", "label": "Create, start, and complete sprints"},
-    "automation.manage": {
-        "group": "Tasks",
-        "label": "Create and edit automation rules",
-    },
-    # ── People ────────────────────────────────────────────────────────────────
-    "member.invite": {
-        "group": "People",
-        "label": "Invite new members to the workspace",
-    },
-    "member.remove": {"group": "People", "label": "Remove members from the workspace"},
-    "member.view_profile": {
-        "group": "People",
-        "label": "View member org profiles and contact info",
-    },
-    "hr.manage_leave": {"group": "People", "label": "Approve or reject leave requests"},
-    "hr.manage_attendance": {
-        "group": "People",
-        "label": "Manage attendance records and policies",
-    },
-    "org.manage": {
-        "group": "People",
-        "label": "Create and edit departments, teams, and reporting lines",
-    },
-    # ── Workspace ─────────────────────────────────────────────────────────────
-    "report.view": {"group": "Workspace", "label": "View analytics and reports"},
-    "settings.manage": {
-        "group": "Workspace",
-        "label": "Manage workspace settings and integrations",
-    },
-    "api_keys.manage": {"group": "Workspace", "label": "Create and revoke API keys"},
 }
 
-# Any key NOT in PERMISSIONS is still accepted by the API — PERMISSIONS is a
-# UI registry (shown in the role editor), not an enforcement gate. This means
-# you can define custom permission keys (e.g. "feature.beta_dashboard") through
-# the API/admin panel without touching code. Backend views that want to enforce
-# a custom key just call has_workspace_permission(user, ws, "feature.beta_dashboard").
+# ── Permission Registry ───────────────────────────────────────────────────────
+# Internal permissions grouped by app key.
+# "workspace" is a special group — always present, never module-gated.
+#
+# HOW TO ADD A PERMISSION
+#   1. Add it under the correct app key below.
+#   2. Update SYSTEM_ROLE_PERMISSIONS to include it for each built-in role.
+#   The /permissions/ endpoint, role editor, and serializer validation all
+#   derive their structure from this dict — no other files need changing.
 
-# Default permissions for each built-in system role.
-# These are written into CustomRole.permissions when system roles are created.
-_ALL_KEYS = list(PERMISSIONS.keys())
+PERMISSIONS = {
+    "workspace": {
+        "member.invite": {"label": "Invite new members to the workspace"},
+        "member.remove": {"label": "Remove members from the workspace"},
+        "member.view_profile": {"label": "View member org profiles and contact info"},
+        "report.view": {"label": "View analytics and reports"},
+        "settings.manage": {"label": "Manage workspace settings and integrations"},
+        "api_keys.manage": {"label": "Create and revoke API n Webhook keys"},
+    },
+    "projects": {
+        "project.create": {"label": "Create new boards"},
+        "project.delete": {"label": "Delete boards"},
+        "project.admin": {"label": "Manage board settings, members, and statuses"},
+        "task.view": {"label": "View tasks and board content"},
+        "task.create": {"label": "Create tasks"},
+        "task.edit": {"label": "Edit task fields (title, assignee, due date, etc.)"},
+        "task.delete": {"label": "Delete tasks"},
+        "task.move": {"label": "Move tasks between statuses (drag-and-drop)"},
+        "task.comment": {"label": "Post and edit comments on tasks"},
+        "sprint.manage": {"label": "Create, start, and complete sprints"},
+        "automation.manage": {"label": "Create and edit automation rules"},
+    },
+    "org": {
+        "org.manage": {
+            "label": "Create and edit departments, teams, and reporting lines"
+        },
+    },
+    "hr": {
+        "hr.manage_leave": {"label": "Approve or reject leave requests"},
+        "hr.manage_attendance": {"label": "Manage attendance records and policies"},
+    },
+}
+
+# ── System Role Defaults ──────────────────────────────────────────────────────
+# Written into CustomRole when workspaces are created (see rbac.py).
+# Each entry has two keys: "app_access" and "permissions".
 
 SYSTEM_ROLE_PERMISSIONS = {
-    "Admin": {key: True for key in _ALL_KEYS},
+    "Admin": {
+        "app_access": {app: True for app in APP_REGISTRY},
+        "permissions": {
+            app: {key: True for key in perms} for app, perms in PERMISSIONS.items()
+        },
+    },
     "Member": {
-        "projects.view": True,
-        "project.create": True,
-        "project.delete": False,
-        "project.admin": False,
-        "task.view": True,
-        "task.create": True,
-        "task.edit": True,
-        "task.delete": False,
-        "task.move": True,
-        "task.comment": True,
-        "sprint.manage": True,
-        "automation.manage": False,
-        "member.invite": True,
-        "member.remove": False,
-        "member.view_profile": True,
-        "hr.view": True,
-        "hr.manage_leave": False,
-        "hr.manage_attendance": False,
-        "org.view": True,
-        "org.manage": False,
-        "report.view": True,
-        "settings.manage": False,
-        "api_keys.manage": False,
+        "app_access": {app: True for app in APP_REGISTRY},
+        "permissions": {
+            "workspace": {
+                "member.invite": False,
+                "member.remove": False,
+                "member.view_profile": False,
+                "report.view": False,
+                "settings.manage": False,
+                "api_keys.manage": False,
+            },
+            "projects": {
+                "project.create": True,
+                "project.delete": False,
+                "project.admin": False,
+                "task.view": True,
+                "task.create": True,
+                "task.edit": True,
+                "task.delete": False,
+                "task.move": True,
+                "task.comment": True,
+                "sprint.manage": True,
+                "automation.manage": False,
+            },
+            "org": {
+                "org.manage": False,
+            },
+            "hr": {
+                "hr.manage_leave": False,
+                "hr.manage_attendance": False,
+            },
+        },
     },
     "Viewer": {
-        "projects.view": True,
-        "project.create": False,
-        "project.delete": False,
-        "project.admin": False,
-        "task.view": True,
-        "task.create": False,
-        "task.edit": False,
-        "task.delete": False,
-        "task.move": False,
-        "task.comment": False,
-        "sprint.manage": False,
-        "automation.manage": False,
-        "member.invite": False,
-        "member.remove": False,
-        "member.view_profile": True,
-        "hr.view": True,
-        "hr.manage_leave": False,
-        "hr.manage_attendance": False,
-        "org.view": True,
-        "org.manage": False,
-        "report.view": True,
-        "settings.manage": False,
-        "api_keys.manage": False,
+        "app_access": {app: True for app in APP_REGISTRY},
+        "permissions": {
+            "workspace": {
+                "member.invite": False,
+                "member.remove": False,
+                "member.view_profile": True,
+                "report.view": True,
+                "settings.manage": False,
+                "api_keys.manage": False,
+            },
+            "projects": {
+                "project.create": False,
+                "project.delete": False,
+                "project.admin": False,
+                "task.view": True,
+                "task.create": False,
+                "task.edit": False,
+                "task.delete": False,
+                "task.move": False,
+                "task.comment": False,
+                "sprint.manage": False,
+                "automation.manage": False,
+            },
+            "org": {
+                "org.manage": False,
+            },
+            "hr": {
+                "hr.manage_leave": False,
+                "hr.manage_attendance": False,
+            },
+        },
     },
 }
 

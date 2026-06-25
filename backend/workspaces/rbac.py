@@ -17,26 +17,12 @@ create_system_roles(workspace) -> dict[str, CustomRole]
 """
 
 from .constants import SYSTEM_ROLE_PERMISSIONS
+from .permissions import resolve_permission
 
 
 def has_workspace_permission(user, workspace, action: str) -> bool:
     """Return True if `user` has `action` permission in `workspace`."""
-    from .models import RoleAssignment, WorkspaceMember
-
-    if workspace.owner_id == user.pk:
-        return True
-
-    try:
-        member = WorkspaceMember.objects.select_related("role_assignment__role").get(
-            workspace=workspace, user=user
-        )
-    except WorkspaceMember.DoesNotExist:
-        return False
-
-    try:
-        return bool(member.role_assignment.role.permissions.get(action, False))
-    except RoleAssignment.DoesNotExist:
-        return False
+    return resolve_permission(user, workspace, action)
 
 
 def create_system_roles(workspace):
@@ -47,14 +33,15 @@ def create_system_roles(workspace):
     from .models import CustomRole
 
     roles = {}
-    for name, perms in SYSTEM_ROLE_PERMISSIONS.items():
+    for name, role_data in SYSTEM_ROLE_PERMISSIONS.items():
         role, _ = CustomRole.objects.get_or_create(
             workspace=workspace,
             name=name,
             defaults={
                 "description": f"Built-in {name} role",
                 "is_system": True,
-                "permissions": perms,
+                "app_access": role_data["app_access"],
+                "permissions": role_data["permissions"],
             },
         )
         roles[name] = role

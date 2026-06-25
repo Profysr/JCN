@@ -10,7 +10,6 @@ import { Loader } from "@/shared/components/ui/Loader";
 import { Avatar } from "@/shared/components/ui/avatar";
 import Modal from "@/shared/components/ui/Modal";
 import { cn } from "@/shared/lib/utils";
-import { useModules } from "@/shared/hooks/useModules";
 import { usePermission } from "@/contexts/PermissionsContext";
 import {
   useAttendancePolicy,
@@ -596,8 +595,7 @@ const TABS = [
 
 export default function AttendancePage() {
   const { workspaceId } = useParams();
-  const { isEnabled } = useModules();
-  const { isOwner, can } = usePermission();
+  const { isOwner, can, hasAppAccess } = usePermission();
 
   const [tab, setTab] = useState("my");
   const [chartWeekOffset, setChartWeekOffset] = useState(0);
@@ -637,14 +635,14 @@ export default function AttendancePage() {
   // QR data
   const { data: qrData } = useAttendanceQR(workspaceId, showQR && isAdmin);
 
-  if (!isEnabled("hr_management")) {
+  if (!isOwner && !hasAppAccess("hr")) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4 text-center p-8">
         <Timer className="h-12 w-12 text-muted-foreground/40" />
         <div>
-          <p className="text-lg font-semibold">HR Management is not enabled</p>
+          <p className="text-lg font-semibold">No access to HR Management</p>
           <p className="text-sm text-muted-foreground mt-1">
-            Enable it in workspace settings to use attendance tracking.
+            Your role doesn't grant access to attendance tracking.
           </p>
         </div>
       </div>

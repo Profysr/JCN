@@ -1,9 +1,8 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { cn } from "@/shared/lib/utils";
 import { Search, ChevronsLeft, ChevronsRight } from "lucide-react";
-import { resolvedNavGroups, workspaceUrl, APP_DEFS } from "@/shared/lib/navLinks";
+import { resolvedNavGroups, workspaceUrl } from "@/shared/lib/navLinks";
 import { usePermission } from "@/contexts/PermissionsContext";
-import { useModules } from "@/shared/hooks/useModules";
 import { useInboxUnreadCount } from "@/shared/hooks/useInbox";
 import UserPanel from "@/shared/components/layout/UserPanel";
 import { ShortcutTooltip } from "@/shared/components/ui/ShortcutTooltip";
@@ -25,8 +24,7 @@ export default function Sidebar({
   onLogout,
 }) {
   const inboxUnread = useInboxUnreadCount(workspaceId);
-  const { can, isOwner, isLoading: permsLoading } = usePermission();
-  const { isEnabled, isLoading: modulesLoading } = useModules();
+  const { can, isOwner, hasAppAccess, isLoading: permsLoading } = usePermission();
   const activeApp = useActiveApp();
   const navigate = useNavigate();
 
@@ -40,19 +38,11 @@ export default function Sidebar({
     members: "g m"
   };
 
-  // Build filtered nav groups
+  // Build filtered nav groups — gated only by workspace-level permissions (e.g. settings.manage)
   const allNavGroups = resolvedNavGroups()
     .map((group) => ({
       ...group,
       items: group.items
-        // Module gate — hide items whose module is disabled (not just loading)
-        .filter(
-          (item) =>
-            !item.moduleKey ||
-            modulesLoading ||
-            isEnabled(item.moduleKey),
-        )
-        // Permission gate
         .filter(
           (item) =>
             !item.permission || isOwner || permsLoading || can(item.permission),
@@ -68,20 +58,14 @@ export default function Sidebar({
     }))
     .filter((group) => group.items.length > 0);
 
-  // App-level gate lookup — moduleKey + permKey from APP_DEFS
-  const _appGates = Object.fromEntries(
-    APP_DEFS.map((a) => [a.key, { moduleKey: a.moduleKey, permKey: a.permKey }])
-  );
-
-  // Show only the current app's groups; also gate the whole app by module + permission.
-  // Launcher maps to workspace-level links; all other apps show their own groups.
+  // Show only the current app's groups; gate all product apps by app_access.
+  // workspace is always visible (settings, members, etc. are permission-gated per item).
   const targetApp = activeApp === "launcher" ? "workspace" : activeApp;
   const navGroups = allNavGroups.filter((g) => {
     if (g.app !== targetApp) return false;
-    const gate = _appGates[g.app];
-    if (!gate) return true;
-    if (gate.moduleKey && !modulesLoading && !isEnabled(gate.moduleKey)) return false;
-    if (gate.permKey && !permsLoading && !isOwner && !can(gate.permKey)) return false;
+    if (g.app === "workspace") return true;
+    if (permsLoading) return true;
+    if (!isOwner && !hasAppAccess(g.app)) return false;
     return true;
   });
 

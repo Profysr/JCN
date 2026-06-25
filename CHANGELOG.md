@@ -2695,3 +2695,184 @@ Candidate approach: Redis-based per-user-per-endpoint lock (`SET NX EX`). Needs 
 |-------|------|-----|--------|
 | H | Automation Engine Rebuild | `automations/` | 📋 Planned |
 | I | Recruitment & ATS | `recruitment/` | 📋 Planned |
+
+
+# JCN Backend — Changelog & Roadmap
+
+---
+
+## vD.2 — App-Level RBAC Permission Classes (Planned)
+
+**Status:** Not started. Design agreed; deferred to future sprint.
+
+### Problem
+
+App access is currently enforced by a helper function called inside each view:
+
+```python
+# hr/views.py
+def _require_module(request, workspace):
+    require_app_access(request.user, workspace, "hr")
+
+class LeaveRequestListView(APIView):
+    def get(self, request, workspace_id):
+        workspace = _get_workspace(workspace_id, request.user)
+        _require_module(request, workspace)   # ← every handler, manually
+        ...
+```
+
+This is error-prone in two ways:
+1. **Forgetting to call it** — a new view or a new HTTP method on an existing view can silently skip the check.
+2. **No single place to look** — to verify that the "hr" app is gated, you have to read every view handler individually.
+
+The same problem applies to fine-grained permission checks (`_require_admin`, etc.).
+
+### Solution — DRF Permission Classes
+
+Django REST Framework's `permission_classes` runs before any handler code, is declared at the class level (one place per view), and composes cleanly with `IsAuthenticated`.
+
+**Design:**
+
+```python
+# workspaces/drf_permissions.py
+
+from rest_framework.permissions import BasePermission
+from .permissions import has_app_access, resolve_permission
+
+
+class RequiresAppAccess(BasePermission):
+    """
+    Gate an entire view on app-level access.
+    The view must expose get_workspace() returning a Workspace instance.
+
+    Usage:
+        class HRListView(APIView):
+            permission_classes = [IsAuthenticated, RequiresAppAccess("hr")]
+    """
+    def __init__(self, app_key: str):
+        self.app_key = app_key
+
+    def has_permission(self, request, view):
+        workspace = view.get_workspace()
+        return has_app_access(request.user, workspace, self.app_key)
+
+    def message(self):
+        return f"You do not have access to this app."
+
+
+class RequiresPermission(BasePermission):
+    """
+    Gate a view on a specific fine-grained permission key.
+    Looks up the app from the registry — caller just passes the perm key.
+
+    Usage:
+        class LeaveApprovalView(APIView):
+            permission_classes = [IsAuthenticated, RequiresPermission("hr.manage_leave")]
+    """
+    def __init__(self, perm_key: str):
+        self.perm_key = perm_key
+
+    def has_permission(self, request, view):
+        workspace = view.get_workspace()
+        return resolve_permission(request.user, workspace, self.perm_key)
+```
+
+**View pattern — every view exposes `get_workspace()`:**
+
+```python
+class LeaveRequestListView(APIView):
+    permission_classes = [IsAuthenticated, RequiresAppAccess("hr")]
+
+    def get_workspace(self):
+        # Called once by the permission class before any handler runs.
+        # Cache it on self so handler methods don't fetch it again.
+        if not hasattr(self, "_workspace"):
+            from workspaces.models import Workspace
+            self._workspace = get_object_or_404(
+                Workspace, id=self.kwargs["workspace_id"], members__user=self.request.user
+            )
+        return self._workspace
+
+    def get(self, request, workspace_id):
+        workspace = self.get_workspace()   # free — cached above
+        requests = LeaveRequest.objects.filter(workspace=workspace)
+        ...
+```
+
+**Why this achieves "one place to change":**
+- Add a new app? Register it in `APP_REGISTRY` (constants.py) — permission classes resolve automatically.
+- Change which app key a view belongs to? Update `permission_classes` on the view class — one line.
+- Add a new view for an existing app? Declare `permission_classes = [IsAuthenticated, RequiresAppAccess("hr")]` — impossible to forget, because nothing works without it.
+
+### Implementation Scope
+
+1. Create `workspaces/drf_permissions.py` with `RequiresAppAccess` and `RequiresPermission`.
+2. Add `get_workspace()` mixin (e.g. `WorkspaceScopedMixin`) that views inherit from — eliminates boilerplate.
+3. Migrate `hr/views.py` — remove `_require_module`, declare `permission_classes` on each view class.
+4. Migrate `organization/views.py` — same.
+5. Migrate `projects/views/board.py` — replace `has_app_access()` inline calls.
+6. Remove the `_require_module` helper from both `hr/views.py` and `organization/views.py`.
+
+---
+
+## vD.1 — Two-Level RBAC: App Access + Nested Permissions (Completed)
+
+### What changed
+
+Replaced the flat permission dict + module system with a two-level model:
+
+| Level | Field | What it controls |
+|-------|-------|-----------------|
+| App access | `CustomRole.app_access` | Can the user enter this product area at all? |
+| Internal | `CustomRole.permissions` | Fine-grained actions within an app |
+
+**Before:**
+```python
+# Flat permissions + separate WorkspaceModule rows for app gating
+role.permissions = {"task.create": True, "hr.view": True, "settings.manage": False}
+require_module(workspace, "hr_management")  # separate gate
+```
+
+**After:**
+```python
+# Two JSONFields on CustomRole — no module rows needed
+role.app_access   = {"projects": True, "hr": True, "org": False, "analytics": False}
+role.permissions  = {
+    "workspace": {"settings.manage": False, "member.invite": True, ...},
+    "projects":  {"task.create": True, "project.delete": False, ...},
+    "hr":        {"hr.manage_leave": True, "hr.manage_attendance": False},
+    "org":       {"org.manage": False},
+}
+```
+
+### Files changed
+
+| File | Change |
+|------|--------|
+| `workspaces/constants.py` | `APP_REGISTRY` + `PERMISSIONS` (nested) + `SYSTEM_ROLE_PERMISSIONS` — single source of truth |
+| `core/modules.py` | Stripped to thin shim; `MODULE_REGISTRY = APP_REGISTRY` for backwards compat |
+| `workspaces/permissions.py` | New: `has_app_access`, `require_app_access`, `has_permission`, `resolve_permission`, `_PERM_TO_APP` reverse map |
+| `workspaces/models.py` | Added `app_access = JSONField(default=dict)` to `CustomRole` |
+| `workspaces/rbac.py` | `has_workspace_permission` delegates to `resolve_permission`; `create_system_roles` sets both `app_access` and `permissions` |
+| `workspaces/serializers.py` | `CustomRoleSerializer`: removed `permission_definitions`, added `app_access`, validates nested structure |
+| `workspaces/views.py` | Added `WorkspacePermissionsView` (`GET /permissions/`) |
+| `workspaces/urls.py` | Registered `permissions/` endpoint |
+| `projects/views/board.py` | Replaced `has_workspace_permission("projects.view")` with `has_app_access("projects")` |
+| `hr/views.py` | Replaced `require_module(workspace, "hr_management")` with `require_app_access(user, workspace, "hr")` |
+| `organization/views.py` | Replaced `require_module(workspace, "org_structure")` with `require_app_access(user, workspace, "org")` |
+
+### How to add a new app in the future
+
+1. Add entry to `APP_REGISTRY` in `workspaces/constants.py`
+2. Add its `permissions` block in `PERMISSIONS`
+3. Add its defaults to `SYSTEM_ROLE_PERMISSIONS` for all three system roles
+4. Run `makemigrations` (no code change — JSONField expands automatically)
+5. Frontend picks up the new app automatically from `GET /api/workspaces/{ws}/permissions/`
+
+### How to add a new permission in the future
+
+1. Add it under the correct app key in `PERMISSIONS` (constants.py)
+2. Update `SYSTEM_ROLE_PERMISSIONS` for all three roles
+3. Done — serializer validation, role editor UI, and the `/permissions/` endpoint all derive from this dict
+
+---

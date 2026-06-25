@@ -5,7 +5,6 @@ import { Loader } from "@/shared/components/ui/Loader";
 
 // ── Shell components — always needed, load eagerly ───────────────────────────
 import ProtectedRoute from "@/shared/components/layout/ProtectedRoute";
-import ProtectedModuleRoute from "@/shared/components/layout/ProtectedModuleRoute";
 import AppLayout from "@/shared/components/layout/AppLayout";
 import WorkspaceRedirect from "@/pages/workspace/WorkspaceRedirect";
 
@@ -42,11 +41,14 @@ const WikiPage = lazy(() => import("@/apps/project-management/pages/WikiPage"));
 const FormsPage = lazy(
   () => import("@/apps/project-management/pages/FormsPage"),
 );
-// ‼️ Automation disabled — const AutomationsPage = lazy(() => import("@/pages/projects/AutomationsPage"));
 
 // ── Org Structure pages ───────────────────────────────────────────────────────
 const DepartmentsPage = lazy(
   () => import("@/apps/org-structure/pages/DepartmentsPage"),
+);
+const TeamsPage = lazy(() => import("@/apps/org-structure/pages/TeamsPage"));
+const OrgChartPage = lazy(
+  () => import("@/apps/org-structure/pages/OrgChartPage"),
 );
 
 // ── HR Management pages ───────────────────────────────────────────────────────
@@ -59,10 +61,6 @@ const AttendancePage = lazy(
 );
 const MemberDetailPage = lazy(
   () => import("@/apps/hr-management/pages/MemberDetailPage"),
-);
-const TeamsPage = lazy(() => import("@/apps/org-structure/pages/TeamsPage"));
-const OrgChartPage = lazy(
-  () => import("@/apps/org-structure/pages/OrgChartPage"),
 );
 
 // ── Workspace pages ───────────────────────────────────────────────────────────
@@ -84,20 +82,14 @@ const ImportPage = lazy(() => import("@/pages/workspace/ImportPage"));
 
 // ── Fallback UIs ──────────────────────────────────────────────────────────────
 
-/** Used for full-screen public/auth routes. */
 function FullPageLoader() {
   return <Loader size="lg" className="min-h-screen bg-background" />;
 }
 
-/** Used inside AppLayout — only the content area suspends, sidebar stays visible. */
 function ContentLoader() {
   return <Loader className="h-screen" />;
 }
 
-/**
- * Layout route that wraps all workspace children with a Suspense boundary.
- * AppLayout renders instantly; only the outlet content shows the fallback.
- */
 function FullPageSuspense() {
   return (
     <Suspense fallback={<FullPageLoader />}>
@@ -182,35 +174,17 @@ export default function App() {
                 element={<FormsPage />}
                 handle={{ app: "projects" }}
               />
-              {/* ‼️ Automation disabled
-            <Route
-              path="boards/:boardId/automations"
-              element={<AutomationsPage />}
-            /> */}
 
-              {/* Org Structure — gated by org_structure module */}
-              <Route
-                element={<ProtectedModuleRoute moduleKey="org_structure" />}
-                handle={{ app: "org_structure" }}
-              >
-                <Route path="departments" element={<DepartmentsPage />} />
-                <Route path="teams" element={<TeamsPage />} />
-                <Route path="org-chart" element={<OrgChartPage />} />
-              </Route>
+              {/* Org Structure */}
+              <Route path="departments" element={<DepartmentsPage />} handle={{ app: "org" }} />
+              <Route path="teams" element={<TeamsPage />} handle={{ app: "org" }} />
+              <Route path="org-chart" element={<OrgChartPage />} handle={{ app: "org" }} />
 
-              {/* HR Management — gated by hr_management module */}
-              <Route
-                element={<ProtectedModuleRoute moduleKey="hr_management" />}
-                handle={{ app: "hr_management" }}
-              >
-                <Route path="hr" element={<HRDashboardPage />} />
-                <Route path="hr/leave" element={<LeavePage />} />
-                <Route path="hr/attendance" element={<AttendancePage />} />
-                <Route
-                  path="members/:memberId"
-                  element={<MemberDetailPage />}
-                />
-              </Route>
+              {/* HR Management */}
+              <Route path="hr" element={<HRDashboardPage />} handle={{ app: "hr" }} />
+              <Route path="hr/leave" element={<LeavePage />} handle={{ app: "hr" }} />
+              <Route path="hr/attendance" element={<AttendancePage />} handle={{ app: "hr" }} />
+              <Route path="members/:memberId" element={<MemberDetailPage />} handle={{ app: "hr" }} />
 
               {/* Workspace */}
               <Route
@@ -221,7 +195,7 @@ export default function App() {
               <Route
                 path="analytics"
                 element={<AnalyticsPage />}
-                handle={{ app: "projects" }}
+                handle={{ app: "analytics" }}
               />
               <Route
                 path="goals"
