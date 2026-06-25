@@ -14,6 +14,7 @@ import {
   Eye,
   EyeOff,
   AlertCircle,
+  Mail,
 } from "lucide-react";
 import { Avatar } from "@/shared/components/ui/avatar";
 import Modal from "@/shared/components/ui/Modal";
@@ -36,14 +37,24 @@ function Key({ label }) {
   return (
     <kbd
       className={cn(
-        "inline-flex items-center justify-center rounded-md border border-border bg-muted",
-        "text-[11px] font-semibold text-foreground leading-none shadow-sm",
-        "min-w-[22px] h-[22px] px-1.5",
-        (label === "Space" || label === "Enter" || label === "Esc") && "px-2.5",
+        "inline-flex items-center justify-center rounded border border-border/80 bg-muted/80",
+        "text-[10px] font-semibold text-muted-foreground leading-none",
+        "shadow-[0_1px_0_0_hsl(var(--border))]",
+        "min-w-[20px] h-[20px] px-1.5",
+        (label === "Space" || label === "Enter" || label === "Esc") && "px-2",
       )}
     >
       {label}
     </kbd>
+  );
+}
+
+// ── Section heading ───────────────────────────────────────────────────────────
+function SectionLabel({ children }) {
+  return (
+    <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70 mb-3">
+      {children}
+    </p>
   );
 }
 
@@ -58,30 +69,9 @@ const TABS = [
 
 // ── Avatar picker ─────────────────────────────────────────────────────────────
 const AVATAR_ICONS = [
-  "🦊",
-  "🐻",
-  "🐼",
-  "🐨",
-  "🐯",
-  "🦁",
-  "🦄",
-  "🐸",
-  "🦋",
-  "🐬",
-  "🦜",
-  "🐺",
-  "🌟",
-  "🚀",
-  "⚡",
-  "🔥",
-  "🌊",
-  "🌈",
-  "🍀",
-  "🎯",
-  "🎸",
-  "🎭",
-  "🌺",
-  "🐝",
+  "🦊", "🐻", "🐼", "🐨", "🐯", "🦁", "🦄", "🐸",
+  "🦋", "🐬", "🦜", "🐺", "🌟", "🚀", "⚡", "🔥",
+  "🌊", "🌈", "🍀", "🎯", "🎸", "🎭", "🌺", "🐝",
 ];
 
 function AvatarPicker({ user }) {
@@ -107,71 +97,50 @@ function AvatarPicker({ user }) {
     applyAvatar({ avatar_type: "icon", avatar_icon: emoji });
   };
 
-  // Build a preview user merging in live selections before save
   const previewUser = { ...user, avatar_type: mode };
 
   const optionCls = (active) =>
     cn(
-      "flex items-center gap-2 px-3 py-2 rounded border text-sm font-medium transition-colors cursor-pointer",
+      "flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-all cursor-pointer",
       active
-        ? "border-primary bg-primary/10 text-primary"
-        : "border-border text-muted-foreground hover:bg-accent hover:text-foreground",
+        ? "border-primary bg-primary/8 text-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.2)]"
+        : "border-border/60 text-muted-foreground hover:border-border hover:bg-accent/60 hover:text-foreground",
     );
 
   return (
-    <div className="space-y-4">
-      {/* Live preview */}
-      <div className="flex items-center gap-4">
-        <Avatar
-          user={previewUser}
-          name={user?.full_name || user?.email}
-          size="2xl"
-        />
-        <div>
-          <p className="font-semibold text-sm">
-            {user?.full_name || user?.email}
-          </p>
-          <p className="text-xs text-muted-foreground mt-0.5">{user?.email}</p>
+    <div className="space-y-5">
+      <div className="flex items-center gap-4 p-4 rounded-xl bg-muted/30 border border-border/50">
+        <Avatar user={previewUser} name={user?.full_name || user?.email} size="2xl" />
+        <div className="min-w-0">
+          <p className="font-semibold text-sm truncate">{user?.full_name || user?.email}</p>
+          <p className="text-xs text-muted-foreground mt-0.5 truncate">{user?.email}</p>
           {saving && (
-            <p className="text-xs text-muted-foreground mt-1">Saving…</p>
+            <p className="text-[11px] text-primary mt-1 flex items-center gap-1">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+              Saving…
+            </p>
           )}
         </div>
       </div>
 
-      {/* Mode selector */}
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-          Profile picture
-        </p>
+        <SectionLabel>Profile picture</SectionLabel>
         <div className="flex flex-wrap gap-2">
-          <button
-            className={optionCls(mode === "initials")}
-            onClick={() => selectMode("initials")}
-          >
-            <span className="w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0">
+          <button className={optionCls(mode === "initials")} onClick={() => selectMode("initials")}>
+            <span className="w-5 h-5 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-[9px] font-bold flex-shrink-0">
               {(user?.full_name || user?.email || "?")[0].toUpperCase()}
             </span>
             Initials
           </button>
 
           {hasGoogle && (
-            <button
-              className={optionCls(mode === "google")}
-              onClick={() => selectMode("google")}
-            >
-              <img
-                src={user.avatar}
-                className="w-5 h-5 rounded-full object-cover flex-shrink-0"
-                alt=""
-              />
+            <button className={optionCls(mode === "google")} onClick={() => selectMode("google")}>
+              <img src={user.avatar} className="w-5 h-5 rounded-full object-cover flex-shrink-0" alt="" />
               Google Profile
             </button>
           )}
 
-          <button
-            className={optionCls(mode === "icon")}
-            onClick={() => selectMode("icon")}
-          >
+          <button className={optionCls(mode === "icon")} onClick={() => selectMode("icon")}>
             <span className="text-base leading-none">
               {user?.avatar_type === "icon" ? user.avatar_icon : "🎨"}
             </span>
@@ -180,20 +149,19 @@ function AvatarPicker({ user }) {
         </div>
       </div>
 
-      {/* Icon grid */}
       {mode === "icon" && (
         <div>
-          <p className="text-xs text-muted-foreground mb-2">Pick an icon</p>
-          <div className="grid grid-cols-8 gap-1">
+          <SectionLabel>Pick an icon</SectionLabel>
+          <div className="grid grid-cols-8 gap-1 p-3 rounded-xl bg-muted/20 border border-border/50">
             {AVATAR_ICONS.map((emoji) => (
               <button
                 key={emoji}
                 onClick={() => selectIcon(emoji)}
                 className={cn(
-                  "w-9 h-9 rounded flex items-center justify-center text-lg transition-colors hover:bg-accent",
+                  "w-9 h-9 rounded-lg flex items-center justify-center text-lg transition-all hover:scale-110",
                   user?.avatar_type === "icon" && user?.avatar_icon === emoji
-                    ? "bg-primary/15 ring-2 ring-primary"
-                    : "bg-muted/40",
+                    ? "bg-primary/15 ring-2 ring-primary shadow-sm"
+                    : "hover:bg-accent",
                 )}
                 title={emoji}
               >
@@ -231,42 +199,48 @@ function MeTab() {
 
   return (
     <div className="space-y-6">
-      {/* Avatar picker */}
       <AvatarPicker user={user} />
 
-      <div className="border-t border-border" />
+      <div className="border-t border-border/60" />
 
-      <form
-        onSubmit={handleProfileSave}
-        className="space-y-4"
-      >
-        <div className="space-y-1.5">
-          <Label htmlFor="full-name">Full name</Label>
-          <Input
-            id="full-name"
-            placeholder="Your full name"
-            value={form.full_name}
-            onChange={(e) => setForm({ full_name: e.target.value })}
-          />
+      <form onSubmit={handleProfileSave} className="space-y-4">
+        <SectionLabel>Profile details</SectionLabel>
+
+        <div className="space-y-4 p-4 rounded-xl bg-muted/20 border border-border/50">
+          <div className="space-y-1.5">
+            <Label htmlFor="full-name" className="text-xs font-medium">Full name</Label>
+            <Input
+              id="full-name"
+              placeholder="Your full name"
+              value={form.full_name}
+              onChange={(e) => setForm({ full_name: e.target.value })}
+              className="h-9"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Email address</Label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/50" />
+              <Input
+                value={user?.email || ""}
+                disabled
+                className="pl-8 h-9 opacity-50 cursor-not-allowed bg-muted/40"
+              />
+            </div>
+            <p className="text-[11px] text-muted-foreground/70">Email cannot be changed here.</p>
+          </div>
         </div>
-        <div className="space-y-1.5">
-          <Label>Email address</Label>
-          <Input
-            value={user?.email || ""}
-            disabled
-            className="opacity-60 cursor-not-allowed"
-          />
-          <p className="text-xs text-muted-foreground">
-            Email cannot be changed here.
-          </p>
-        </div>
+
         <div className="flex items-center gap-3">
-          <Button type="submit" size="sm" disabled={save.isPending}>
+          <Button type="submit" size="sm" disabled={save.isPending} className="h-8 px-4">
             {save.isPending ? "Saving…" : "Save changes"}
           </Button>
           {success && (
             <span className="flex items-center gap-1.5 text-sm text-emerald-600 font-medium">
-              <Check className="w-3.5 h-3.5" /> Saved
+              <span className="flex items-center justify-center w-4 h-4 rounded-full bg-emerald-500/15">
+                <Check className="w-2.5 h-2.5" />
+              </span>
+              Saved
             </span>
           )}
         </div>
@@ -275,36 +249,29 @@ function MeTab() {
   );
 }
 
-// ── Stable password field
+// ── Password field ────────────────────────────────────────────────────────────
 function PwField({ id, label, value, onChange }) {
-  // Move the show/hide visibility state right here where it belongs!
   const [isVisible, setIsVisible] = useState(false);
 
   return (
     <div className="space-y-1.5">
-      <Label htmlFor={id}>{label}</Label>
-
+      <Label htmlFor={id} className="text-xs font-medium">{label}</Label>
       <div className="relative">
         <Input
           id={id}
           type={isVisible ? "text" : "password"}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="pr-10"
+          className="pr-10 h-9"
           required
         />
-
         <button
           type="button"
           tabIndex={-1}
           onClick={() => setIsVisible((prev) => !prev)}
-          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
         >
-          {isVisible ? (
-            <EyeOff className="w-4 h-4" />
-          ) : (
-            <Eye className="w-4 h-4" />
-          )}
+          {isVisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
         </button>
       </div>
     </div>
@@ -355,58 +322,66 @@ function PasswordTab() {
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div>
-        <p className="text-sm font-medium mb-0.5">Change password</p>
-        <p className="text-xs text-muted-foreground">
-          Use the form below to update your account password.
+        <SectionLabel>Change password</SectionLabel>
+        <p className="text-xs text-muted-foreground -mt-1 mb-4">
+          Choose a strong password you don't use elsewhere.
         </p>
+
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div className="space-y-3 p-4 rounded-xl bg-muted/20 border border-border/50">
+            {PASSWORD_FIELDS.map((field) => (
+              <PwField
+                key={field.id}
+                id={field.id}
+                label={field.label}
+                value={form[field.name]}
+                onChange={(val) => setForm((prev) => ({ ...prev, [field.name]: val }))}
+              />
+            ))}
+          </div>
+
+          {serverError && (
+            <div className="flex items-start gap-2.5 text-sm text-destructive bg-destructive/6 border border-destructive/15 rounded-lg px-3 py-2.5">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <span className="text-xs leading-relaxed">{serverError}</span>
+            </div>
+          )}
+
+          <div className="flex items-center gap-3">
+            <Button type="submit" size="sm" disabled={change.isPending} className="h-8 px-4">
+              {change.isPending ? "Updating…" : "Update password"}
+            </Button>
+            {success && (
+              <span className="flex items-center gap-1.5 text-sm text-emerald-600 font-medium">
+                <span className="flex items-center justify-center w-4 h-4 rounded-full bg-emerald-500/15">
+                  <Check className="w-2.5 h-2.5" />
+                </span>
+                Password updated
+              </span>
+            )}
+          </div>
+        </form>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {PASSWORD_FIELDS.map((field) => (
-          <PwField
-            key={field.id}
-            id={field.id}
-            label={field.label}
-            value={form[field.name]}
-            onChange={(val) =>
-              setForm((prev) => ({ ...prev, [field.name]: val }))
-            }
-          />
-        ))}
-
-        {serverError && (
-          <div className="flex items-start gap-2 text-sm text-destructive bg-destructive/8 border border-destructive/20 rounded px-3 py-2">
-            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-            {serverError}
-          </div>
-        )}
-
-        <div className="flex items-center gap-3">
-          <Button type="submit" size="sm" disabled={change.isPending}>
-            {change.isPending ? "Updating…" : "Update password"}
-          </Button>
-          {success && (
-            <span className="flex items-center gap-1.5 text-sm text-emerald-600 font-medium">
-              <Check className="w-3.5 h-3.5" /> Password updated
-            </span>
-          )}
+      <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
+        <div>
+          <p className="text-sm font-semibold text-amber-700 dark:text-amber-400 mb-0.5">
+            Forgot your current password?
+          </p>
+          <p className="text-xs text-muted-foreground">
+            We'll send a reset link to{" "}
+            <span className="font-medium text-foreground">{user?.email}</span>.
+          </p>
         </div>
-      </form>
-
-      <div className="border-t border-border pt-3">
-        <p className="text-sm font-medium mb-0.5">Forgot your current password?</p>
-        <p className="text-xs text-muted-foreground mb-3">
-          We'll send a reset link to{" "}
-          <span className="font-medium text-foreground">{user?.email}</span>.
-        </p>
         <div className="flex items-center gap-2">
           <Button
             type="button"
             variant="outline"
             size="sm"
             disabled={reset.isPending || resetSent}
+            className="h-8 px-4 border-amber-500/30 hover:bg-amber-500/10 hover:border-amber-500/50 text-amber-700 dark:text-amber-400"
             onClick={() =>
               reset.mutate(user?.email, {
                 onSuccess: () => {
@@ -420,7 +395,10 @@ function PasswordTab() {
           </Button>
           {resetSent && (
             <span className="flex items-center gap-1.5 text-sm text-emerald-600 font-medium">
-              <Check className="w-3.5 h-3.5" /> Check your inbox
+              <span className="flex items-center justify-center w-4 h-4 rounded-full bg-emerald-500/15">
+                <Check className="w-2.5 h-2.5" />
+              </span>
+              Check your inbox
             </span>
           )}
         </div>
@@ -431,7 +409,6 @@ function PasswordTab() {
 
 // ── Preferences tab ───────────────────────────────────────────────────────────
 function PreferencesTab() {
-  // Focus Mode DND and future toggles live here
   const [focusModeUntil, setFocusModeUntil] = useState(() => {
     const v = localStorage.getItem("jcn_focus_until");
     return v ? parseInt(v, 10) : null;
@@ -450,18 +427,21 @@ function PreferencesTab() {
 
   return (
     <div className="space-y-6">
-      {/* Focus Mode */}
       <div>
-        <p className="text-sm font-medium mb-0.5">Focus Mode (DND)</p>
-        <p className="text-xs text-muted-foreground mb-3">
+        <SectionLabel>Focus Mode (DND)</SectionLabel>
+        <p className="text-xs text-muted-foreground -mt-1 mb-4">
           Mute in-app notifications for a set period.
         </p>
+
         {isFocusMode ? (
-          <div className="flex items-center justify-between p-3 rounded-md bg-violet-500/10 border border-violet-500/20">
-            <span className="text-sm font-medium text-violet-700">
-              Focus Mode is on
-            </span>
-            <Button size="sm" variant="outline" onClick={disableFocus}>
+          <div className="flex items-center justify-between p-4 rounded-xl bg-violet-500/8 border border-violet-500/20">
+            <div className="flex items-center gap-2.5">
+              <span className="w-2 h-2 rounded-full bg-violet-500 animate-pulse" />
+              <span className="text-sm font-semibold text-violet-700 dark:text-violet-400">
+                Focus Mode active
+              </span>
+            </div>
+            <Button size="sm" variant="outline" onClick={disableFocus} className="h-8 border-violet-500/30 hover:bg-violet-500/10">
               Turn off
             </Button>
           </div>
@@ -473,6 +453,7 @@ function PreferencesTab() {
                 size="sm"
                 variant="outline"
                 onClick={() => enableFocus(d.hours)}
+                className="h-8 text-xs"
               >
                 Mute for {d.label}
               </Button>
@@ -481,10 +462,8 @@ function PreferencesTab() {
         )}
       </div>
 
-      {/* Placeholder for future prefs */}
-      <div className="text-xs text-muted-foreground border border-dashed border-border rounded-md px-4 py-3">
-        More preferences (notification digest time, quiet hours, etc.) coming
-        soon.
+      <div className="rounded-xl border border-dashed border-border/60 px-4 py-3.5 text-xs text-muted-foreground/60 text-center">
+        More preferences (notification digest, quiet hours, etc.) coming soon.
       </div>
     </div>
   );
@@ -497,53 +476,38 @@ const ACCENTS = Object.entries(ACCENT_COLORS).map(([value, { hex }]) => ({
 }));
 
 function AppearanceTab() {
-  const { theme, accent, density, setTheme, setAccent, setDensity } =
-    useThemeStore();
+  const { theme, accent, density, setTheme, setAccent, setDensity } = useThemeStore();
 
   return (
-    <div className="space-y-7">
-      {/* Theme */}
+    <div className="space-y-6">
       <div>
-        <p className="text-sm font-medium mb-2">Theme</p>
+        <SectionLabel>Theme</SectionLabel>
         <div className="flex gap-3">
           {THEMES.map((t) => (
             <button
               key={t.value}
               onClick={() => setTheme(t.value)}
-              className={cn("flex flex-col items-center gap-1.5 group")}
+              className="flex flex-col items-center gap-2 group"
             >
               <div
                 className={cn(
-                  "w-16 h-10 rounded border-2 transition-all",
+                  "w-[72px] h-[50px] rounded-md border-2 transition-all overflow-hidden",
                   t.preview,
                   theme === t.value
-                    ? "border-primary ring-2 ring-primary/30"
-                    : "border-border hover:border-primary/40",
+                    ? "border-primary ring-2 ring-primary/25 shadow-sm"
+                    : "border-border/60 hover:border-primary/40",
                 )}
               >
-                <div
-                  className={cn(
-                    "m-1.5 h-2 w-6 rounded-sm",
-                    theme === t.value
-                      ? "bg-primary/70"
-                      : "bg-muted-foreground/30",
-                  )}
-                />
-                <div
-                  className={cn(
-                    "m-1.5 mt-0.5 h-1.5 w-8 rounded-sm",
-                    theme === t.value
-                      ? "bg-primary/40"
-                      : "bg-muted-foreground/20",
-                  )}
-                />
+                <div className="flex gap-1 p-1.5">
+                  <div className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", theme === t.value ? "bg-primary/80" : "bg-muted-foreground/30")} />
+                  <div className={cn("h-1.5 rounded-sm flex-1", theme === t.value ? "bg-primary/40" : "bg-muted-foreground/20")} />
+                </div>
+                <div className="px-1.5 space-y-1">
+                  <div className={cn("h-1.5 w-full rounded-sm", theme === t.value ? "bg-primary/25" : "bg-muted-foreground/15")} />
+                  <div className={cn("h-1.5 w-3/4 rounded-sm", theme === t.value ? "bg-primary/15" : "bg-muted-foreground/10")} />
+                </div>
               </div>
-              <span
-                className={cn(
-                  "text-xs font-medium",
-                  theme === t.value ? "text-primary" : "text-muted-foreground",
-                )}
-              >
+              <span className={cn("text-xs font-medium transition-colors", theme === t.value ? "text-primary" : "text-muted-foreground group-hover:text-foreground")}>
                 {t.label}
               </span>
             </button>
@@ -551,20 +515,19 @@ function AppearanceTab() {
         </div>
       </div>
 
-      {/* Accent colour */}
       <div>
-        <p className="text-sm font-medium mb-2">Accent colour</p>
-        <div className="flex flex-wrap gap-2">
+        <SectionLabel>Accent colour</SectionLabel>
+        <div className="flex flex-wrap gap-2.5 p-3.5 rounded-md bg-muted/20 border border-border/50">
           {ACCENTS.map((a) => (
             <button
               key={a.value}
               onClick={() => setAccent(a.value)}
               title={a.value}
               className={cn(
-                "w-7 h-7 rounded-full border-2 transition-transform hover:scale-110",
+                "w-7 h-7 rounded-full border-2 transition-all hover:scale-110",
                 accent === a.value
-                  ? "border-foreground scale-110 shadow-md"
-                  : "border-transparent",
+                  ? "border-foreground scale-110 shadow-[0_0_0_2px_hsl(var(--background)),0_0_0_4px_hsl(var(--foreground)/0.3)]"
+                  : "border-transparent hover:border-foreground/30",
               )}
               style={{ backgroundColor: a.hex }}
             />
@@ -572,19 +535,18 @@ function AppearanceTab() {
         </div>
       </div>
 
-      {/* Density */}
       <div>
-        <p className="text-sm font-medium mb-2">Layout density</p>
+        <SectionLabel>Layout density</SectionLabel>
         <div className="flex gap-2">
           {DENSITIES.map((d) => (
             <button
               key={d.value}
               onClick={() => setDensity(d.value)}
               className={cn(
-                "px-3 py-1.5 rounded border text-sm font-medium transition-colors",
+                "px-4 py-2 rounded-md border text-sm font-medium transition-all",
                 density === d.value
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border text-muted-foreground hover:bg-accent",
+                  ? "border-primary bg-primary/8 text-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.2)]"
+                  : "border-border/60 text-muted-foreground hover:border-border hover:bg-accent/60 hover:text-foreground",
               )}
             >
               {d.label}
@@ -592,7 +554,6 @@ function AppearanceTab() {
           ))}
         </div>
       </div>
-
     </div>
   );
 }
@@ -600,30 +561,26 @@ function AppearanceTab() {
 // ── Shortcuts tab ─────────────────────────────────────────────────────────────
 function ShortcutsTab() {
   return (
-    <div className="space-y-6">
-      <div>
-        <p className="text-sm text-muted-foreground">
-          All shortcuts are active globally when you're not typing in an input.
-          Press <Key label="?" /> anywhere to see this as an overlay.
-        </p>
-      </div>
+    <div className="space-y-5">
+      <p className="text-xs text-muted-foreground leading-relaxed">
+        Shortcuts are active globally when you're not typing in an input.
+        Press <Key label="?" /> anywhere to see this as an overlay.
+      </p>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
         {SHORTCUT_GROUPS.map((group) => (
-          <div key={group.id}>
-            <h4 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">
+          <div key={group.id} className="space-y-0">
+            <h4 className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest mb-2">
               {group.label}
             </h4>
-            <div className="space-y-0">
+            <div className="rounded-xl border border-border/50 overflow-hidden divide-y divide-border/40">
               {group.shortcuts.map((s, i) => (
                 <div
                   key={i}
-                  className="flex items-center justify-between gap-4 py-1.5 border-b border-border/40 last:border-0"
+                  className="flex items-center justify-between gap-4 px-3 py-2 bg-muted/10 hover:bg-muted/30 transition-colors"
                 >
-                  <span className="text-xs text-foreground">
-                    {s.description}
-                  </span>
-                  <div className="flex items-center gap-1 flex-shrink-0">
+                  <span className="text-xs text-foreground/80">{s.description}</span>
+                  <div className="flex items-center gap-0.5 flex-shrink-0">
                     {s.display.map((k, ki) => (
                       <Key key={ki} label={k} />
                     ))}
@@ -635,8 +592,8 @@ function ShortcutsTab() {
         ))}
       </div>
 
-      <p className="text-xs text-muted-foreground/60 border border-dashed border-border rounded-md px-4 py-3">
-        Custom keybindings are coming in a future updates.
+      <p className="text-xs text-muted-foreground/50 text-center py-2">
+        Custom keybindings coming in a future update.
       </p>
     </div>
   );
@@ -663,28 +620,39 @@ export default function UserSettingsModal({ onClose, defaultTab = "me" }) {
       maxWidth="900px"
       padding="p-0"
     >
-      <div className="flex" style={{ height: "min(540px, 80vh)" }}>
-        {/* Left tab sidebar */}
-        <aside className="w-44 flex-shrink-0 bg-muted/20 border-r border-border flex flex-col py-4 px-2 gap-0.5">
+      <div className="flex" style={{ height: "min(580px, 82vh)" }}>
+        {/* Left sidebar */}
+        <aside className="w-48 flex-shrink-0 border-r border-border/60 flex flex-col py-3 px-2 gap-0.5 bg-muted/10">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-3 pt-1 pb-2">
+            Settings
+          </p>
           {TABS.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               onClick={() => setActiveTab(id)}
               className={cn(
-                "w-full flex items-center gap-2.5 rounded px-3 py-2 text-sm font-medium transition-colors text-left",
+                "w-full flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-all text-left",
                 activeTab === id
                   ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:text-foreground hover:bg-accent",
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent/60",
               )}
             >
-              <Icon className="w-4 h-4 flex-shrink-0" />
+              <Icon
+                className={cn(
+                  "w-4 h-4 flex-shrink-0 transition-colors",
+                  activeTab === id ? "text-primary" : "text-muted-foreground/60",
+                )}
+              />
               {label}
+              {activeTab === id && (
+                <span className="ml-auto w-1 h-4 rounded-full bg-primary" />
+              )}
             </button>
           ))}
         </aside>
 
-        {/* Scrollable content pane */}
-        <div className="flex-1 overflow-y-auto px-6 py-5 min-w-0">
+        {/* Scrollable content */}
+        <div className="flex-1 overflow-y-auto px-7 py-6 min-w-0">
           {CONTENT[activeTab]}
         </div>
       </div>

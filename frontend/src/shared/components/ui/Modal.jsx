@@ -98,7 +98,7 @@ const BaseModal = ({
             </div>
             <button
               onClick={onClose}
-              className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              className="p-1.5 rounded-md text-muted-foreground bg-foreground/10 hover:text-red-500 hover:bg-red-500/10 transition-colors"
             >
               <X size={15} />
             </button>
