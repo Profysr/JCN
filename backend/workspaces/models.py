@@ -427,7 +427,7 @@ class RoleAssignment(models.Model):
     )
     role = models.ForeignKey(
         CustomRole,
-        on_delete=models.PROTECT,
+        on_delete=models.CASCADE,
         related_name="assignments",
     )
     assigned_at = models.DateTimeField(auto_now_add=True)

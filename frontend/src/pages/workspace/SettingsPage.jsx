@@ -1,9 +1,12 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { ConfirmModal } from "@/shared/components/ui/ConfirmModal";
+import { useToast } from "@/shared/components/ui/toast";
 import {
   useDeleteWorkspace,
   useUpdateWorkspace,
   useWorkspace,
+  useWorkspaces,
 } from "@/shared/hooks/useWorkspace";
 import { usePermission } from "@/contexts/PermissionsContext";
 import { Button } from "@/shared/components/ui/button";
@@ -22,15 +25,18 @@ import { Link } from "react-router-dom";
 export default function SettingsPage() {
   const { workspaceId } = useParams();
   const navigate = useNavigate();
-  const { isOwner, can } = usePermission();
+  const { isOwner } = usePermission();
+  const { toast } = useToast();
 
   const { data: workspace, isLoading } = useWorkspace(workspaceId);
+  const { data: workspaces = [] } = useWorkspaces();
   const updateWorkspace = useUpdateWorkspace(workspaceId);
   const deleteWorkspace = useDeleteWorkspace(workspaceId);
 
   const [form, setForm] = useState({ name: "", description: "" });
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
     if (workspace)
@@ -39,8 +45,6 @@ export default function SettingsPage() {
         description: workspace.description || "",
       });
   }, [workspace]);
-
-  const isAdmin = isOwner || can("settings.manage");
 
   const handleSave = (e) => {
     e.preventDefault();
@@ -51,9 +55,15 @@ export default function SettingsPage() {
   };
 
   const handleDelete = () => {
-    if (deleteConfirm !== workspace?.name) return;
     deleteWorkspace.mutate(undefined, {
-      onSuccess: () => navigate("/"),
+      onSuccess: () => {
+        const next = workspaces.find((w) => w.id !== workspaceId);
+        navigate(next ? `/w/${next.id}` : "/onboarding", { replace: true });
+      },
+      onError: () => {
+        setShowDeleteConfirm(false);
+        toast({ title: "Failed to delete workspace", description: "Something went wrong. Please try again.", variant: "destructive" });
+      },
     });
   };
 
@@ -214,14 +224,22 @@ export default function SettingsPage() {
               disabled={
                 deleteConfirm !== workspace?.name || deleteWorkspace.isPending
               }
-              onClick={handleDelete}
+              onClick={() => setShowDeleteConfirm(true)}
             >
-              {deleteWorkspace.isPending
-                ? "Deleting…"
-                : "Delete this workspace"}
+              Delete this workspace
             </Button>
           </div>
         </section>
+      )}
+
+      {showDeleteConfirm && (
+        <ConfirmModal
+          title="Delete workspace?"
+          message={`This will permanently delete "${workspace?.name}" and all its projects, tasks, and members. This cannot be undone.`}
+          confirmLabel={deleteWorkspace.isPending ? "Deleting…" : "Delete workspace"}
+          onConfirm={handleDelete}
+          onCancel={() => setShowDeleteConfirm(false)}
+        />
       )}
     </div>
   );

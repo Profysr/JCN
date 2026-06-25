@@ -39,7 +39,6 @@ import {
 import { APP_DEFS } from "@/shared/lib/navLinks";
 import {
   EMPLOYMENT_TYPES,
-  WORKSPACE_ROLE_CONFIG,
   getWorkspaceRoleConfig,
 } from "@/shared/lib/constants";
 import { useWorkspace } from "@/shared/hooks/useWorkspace";
