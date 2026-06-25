@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { usePortfolio } from "@/shared/hooks/useMyWork";
 import { Button } from "@/shared/components/ui/button";
 import { EmptyState } from "@/shared/components/ui/empty-state";
-import CreateProjectModal from "@/apps/project-management/components/projects/CreateProjectModal";
+import CreateBoardModal from "@/apps/project-management/components/projects/CreateBoardModal";
 import { Plus, ArrowRight, AlertTriangle, Zap } from "lucide-react";
 import { APP_COLORS as PROJECT_COLORS } from "@/shared/lib/constants";
 import BoardTypeIcon from "@/shared/components/ui/BoardTypeIcon";
@@ -169,7 +169,7 @@ export default function ProjectsPage() {
         })}
       </div>
 
-      <CreateProjectModal
+      <CreateBoardModal
         workspaceId={workspaceId}
         open={showCreate}
         onClose={() => setShowCreate(false)}
