@@ -190,7 +190,7 @@ class InviteMemberView(APIView):
         )
         serializer.is_valid(raise_exception=True)
         invite = serializer.save()
-        send_invite_email.delay(str(invite.id))
+        # send_invite_email.delay(str(invite.id))
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
