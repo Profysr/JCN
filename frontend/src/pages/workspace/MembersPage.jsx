@@ -31,7 +31,11 @@ import {
   usePendingInvites,
   useCancelInvite,
 } from "@/shared/hooks/useMembers";
-import { useRoles, useAssignRole, useBulkAssignRole } from "@/shared/hooks/useRoles";
+import {
+  useRoles,
+  useAssignRole,
+  useBulkAssignRole,
+} from "@/shared/hooks/useRoles";
 import { APP_DEFS } from "@/shared/lib/navLinks";
 import {
   EMPLOYMENT_TYPES,
@@ -52,9 +56,9 @@ import {
 } from "@/apps/org-structure/hooks/useOrg";
 
 /** App definitions used in the App Access tab — derived from the central APP_DEFS registry. */
-const APP_ACCESS_DEFS = APP_DEFS
-  .filter((a) => a.key !== "workspace")
-  .map((a) => ({ ...a, label: a.shortLabel }));
+const APP_ACCESS_DEFS = APP_DEFS.filter((a) => a.key !== "workspace").map(
+  (a) => ({ ...a, label: a.shortLabel }),
+);
 
 /* ==========================================
    INVITE FORM WORKSPACE HEADER
@@ -66,8 +70,12 @@ function InviteFormHeader({ workspaceName }) {
         <UserPlus className="w-4 h-4" />
       </div>
       <div>
-        <p className="text-sm font-semibold">Invite people to {workspaceName}</p>
-        <p className="text-xs text-muted-foreground">They'll receive a link to join this workspace.</p>
+        <p className="text-sm font-semibold">
+          Invite people to {workspaceName}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          They'll receive a link to join this workspace.
+        </p>
       </div>
     </div>
   );
@@ -137,32 +145,48 @@ function ActiveMemberItem({
       onClick={onSelect}
       className={cn(
         "flex items-center justify-between px-4 py-3 transition-colors cursor-pointer",
-        isSelected ? "bg-primary/5 border-l-2 border-l-primary" : "hover:bg-accent/40 border-l-2 border-l-transparent",
+        isSelected
+          ? "bg-primary/5 border-l-2 border-l-primary"
+          : "hover:bg-accent/40 border-l-2 border-l-transparent",
       )}
     >
       <div className="flex items-center gap-3">
         {checkable && (
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); onCheck?.(member.id); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onCheck?.(member.id);
+            }}
             className="flex-shrink-0 text-muted-foreground hover:text-primary transition-colors"
             title={isChecked ? "Deselect" : "Select"}
           >
-            {isChecked
-              ? <CheckSquare className="w-4 h-4 text-primary" />
-              : <Square className="w-4 h-4" />}
+            {isChecked ? (
+              <CheckSquare className="w-4 h-4 text-primary" />
+            ) : (
+              <Square className="w-4 h-4" />
+            )}
           </button>
         )}
         <Avatar user={member.user} size="md" />
         <div>
           <div className="flex items-center gap-1.5">
-            <p className="text-sm font-medium leading-tight">{member.user?.full_name || "-"}</p>
+            <p className="text-sm font-medium leading-tight">
+              {member.user?.full_name || "-"}
+            </p>
             {isWorkspaceOwner && (
-              <Crown className="w-3.5 h-3.5 text-yellow-500 flex-shrink-0" title="Owner" />
+              <Crown
+                className="w-3.5 h-3.5 text-yellow-500 flex-shrink-0"
+                title="Owner"
+              />
             )}
-            {isSelf && <span className="text-xs text-muted-foreground">(you)</span>}
+            {isSelf && (
+              <span className="text-xs text-muted-foreground">(you)</span>
+            )}
           </div>
-          <p className="text-xs text-muted-foreground leading-tight mt-0.5">{member.user?.email}</p>
+          <p className="text-xs text-muted-foreground leading-tight mt-0.5">
+            {member.user?.email}
+          </p>
         </div>
       </div>
 
@@ -174,15 +198,23 @@ function ActiveMemberItem({
             onClick={(e) => e.stopPropagation()}
             onChange={(e) => onRoleChange(member.id, e.target.value)}
           >
-            <option value="" disabled>Select role…</option>
+            <option value="" disabled>
+              Select role…
+            </option>
             {roles.map((r) => (
               <option key={r.id} value={r.id}>
-                {r.name}{r.is_system ? " 🔒" : ""}
+                {r.name}
+                {r.is_system ? " 🔒" : ""}
               </option>
             ))}
           </select>
         ) : (
-          <span className={cn("flex items-center gap-1 text-xs px-2 py-0.5 rounded border font-medium", roleConf.className)}>
+          <span
+            className={cn(
+              "flex items-center gap-1 text-xs px-2 py-0.5 rounded border font-medium",
+              roleConf.className,
+            )}
+          >
             <RoleIcon className="w-3 h-3" />
             {roleConf.label}
           </span>
@@ -190,7 +222,10 @@ function ActiveMemberItem({
 
         {isAdmin && !isSelf && !isWorkspaceOwner && (
           <button
-            onClick={(e) => { e.stopPropagation(); onRemove(member); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove(member);
+            }}
             className="p-1.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
             title="Remove member"
           >
@@ -198,7 +233,12 @@ function ActiveMemberItem({
           </button>
         )}
 
-        <ChevronRight className={cn("w-4 h-4 text-muted-foreground/40 transition-transform", isSelected && "text-primary rotate-90")} />
+        <ChevronRight
+          className={cn(
+            "w-4 h-4 text-muted-foreground/40 transition-transform",
+            isSelected && "text-primary rotate-90",
+          )}
+        />
       </div>
     </div>
   );
@@ -210,9 +250,13 @@ function ActiveMemberItem({
 function ProfileField({ label, icon: Icon, children }) {
   return (
     <div className="flex items-start gap-3">
-      {Icon && <Icon className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />}
+      {Icon && (
+        <Icon className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+      )}
       <div className="min-w-0 flex-1">
-        <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{label}</p>
+        <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">
+          {label}
+        </p>
         <div className="mt-0.5">{children}</div>
       </div>
     </div>
@@ -231,14 +275,19 @@ function MemberProfilePanel({ member, workspaceId, isAdmin, onClose }) {
     updateProfile.mutate({ [field]: value });
   };
 
-  const empType = EMPLOYMENT_TYPES.find((t) => t.value === profile?.employment_type);
+  const empType = EMPLOYMENT_TYPES.find(
+    (t) => t.value === profile?.employment_type,
+  );
 
   return (
     <div className="w-80 border-l bg-card flex flex-col h-full animate-panel-in">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b">
         <span className="text-sm font-semibold">Member Profile</span>
-        <button onClick={onClose} className="p-1 rounded hover:bg-accent text-muted-foreground">
+        <button
+          onClick={onClose}
+          className="p-1 rounded hover:bg-accent text-muted-foreground"
+        >
           <X className="w-4 h-4" />
         </button>
       </div>
@@ -246,20 +295,33 @@ function MemberProfilePanel({ member, workspaceId, isAdmin, onClose }) {
       <div className="flex-1 overflow-y-auto">
         {/* Identity block */}
         <div className="p-5 border-b flex flex-col items-center text-center gap-3">
-          <Avatar name={member.user?.full_name || member.user?.email} src={member.user?.avatar} size="lg" />
+          <Avatar
+            name={member.user?.full_name || member.user?.email}
+            src={member.user?.avatar}
+            size="lg"
+          />
           <div>
             <p className="font-semibold">{member.user?.full_name || "—"}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">{member.user?.email}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {member.user?.email}
+            </p>
           </div>
           {empType && (
-            <span className={cn("text-xs font-medium px-2.5 py-1 rounded-full", empType.color)}>
+            <span
+              className={cn(
+                "text-xs font-medium px-2.5 py-1 rounded-full",
+                empType.color,
+              )}
+            >
               {empType.label}
             </span>
           )}
         </div>
 
         {isLoading && (
-          <div className="p-6 text-sm text-muted-foreground">Loading profile…</div>
+          <div className="p-6 text-sm text-muted-foreground">
+            Loading profile…
+          </div>
         )}
 
         {!isLoading && profile && (
@@ -275,13 +337,21 @@ function MemberProfilePanel({ member, workspaceId, isAdmin, onClose }) {
                 >
                   <option value="">— None —</option>
                   {jobTitles.map((t) => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
                   ))}
                 </select>
               ) : (
                 <button
-                  onClick={() => isAdmin && setEditing((p) => ({ ...p, job_title_id: true }))}
-                  className={cn("text-sm text-left w-full", isAdmin && "hover:text-primary cursor-pointer", !profile.job_title && "text-muted-foreground italic")}
+                  onClick={() =>
+                    isAdmin && setEditing((p) => ({ ...p, job_title_id: true }))
+                  }
+                  className={cn(
+                    "text-sm text-left w-full",
+                    isAdmin && "hover:text-primary cursor-pointer",
+                    !profile.job_title && "text-muted-foreground italic",
+                  )}
                 >
                   {profile.job_title?.name || (isAdmin ? "Click to set" : "—")}
                 </button>
@@ -294,10 +364,14 @@ function MemberProfilePanel({ member, workspaceId, isAdmin, onClose }) {
                 <select
                   className="text-sm border rounded px-2 py-1 bg-background w-full"
                   value={profile.employment_type || "full_time"}
-                  onChange={(e) => updateProfile.mutate({ employment_type: e.target.value })}
+                  onChange={(e) =>
+                    updateProfile.mutate({ employment_type: e.target.value })
+                  }
                 >
                   {EMPLOYMENT_TYPES.map((t) => (
-                    <option key={t.value} value={t.value}>{t.label}</option>
+                    <option key={t.value} value={t.value}>
+                      {t.label}
+                    </option>
                   ))}
                 </select>
               </ProfileField>
@@ -308,7 +382,15 @@ function MemberProfilePanel({ member, workspaceId, isAdmin, onClose }) {
               <ProfileField label="Department" icon={Building2}>
                 <div className="flex flex-wrap gap-1 mt-0.5">
                   {profile.departments.map((d) => (
-                    <span key={d.id} className="text-xs px-2 py-0.5 rounded-full border" style={{ color: d.color, borderColor: d.color + "44", background: d.color + "18" }}>
+                    <span
+                      key={d.id}
+                      className="text-xs px-2 py-0.5 rounded-full border"
+                      style={{
+                        color: d.color,
+                        borderColor: d.color + "44",
+                        background: d.color + "18",
+                      }}
+                    >
                       {d.name}
                     </span>
                   ))}
@@ -321,7 +403,15 @@ function MemberProfilePanel({ member, workspaceId, isAdmin, onClose }) {
               <ProfileField label="Teams" icon={Users}>
                 <div className="flex flex-wrap gap-1 mt-0.5">
                   {profile.teams.map((t) => (
-                    <span key={t.id} className="text-xs px-2 py-0.5 rounded-full border" style={{ color: t.color, borderColor: t.color + "44", background: t.color + "18" }}>
+                    <span
+                      key={t.id}
+                      className="text-xs px-2 py-0.5 rounded-full border"
+                      style={{
+                        color: t.color,
+                        borderColor: t.color + "44",
+                        background: t.color + "18",
+                      }}
+                    >
                       {t.name}
                     </span>
                   ))}
@@ -333,14 +423,19 @@ function MemberProfilePanel({ member, workspaceId, isAdmin, onClose }) {
             {profile.manager && (
               <ProfileField label="Reports To" icon={User}>
                 <p className="text-sm">{profile.manager.name}</p>
-                <p className="text-xs text-muted-foreground">{profile.manager.email}</p>
+                <p className="text-xs text-muted-foreground">
+                  {profile.manager.email}
+                </p>
               </ProfileField>
             )}
 
             {/* Direct reports */}
             {profile.direct_reports_count > 0 && (
               <ProfileField label="Direct Reports" icon={Users}>
-                <p className="text-sm">{profile.direct_reports_count} {profile.direct_reports_count === 1 ? "person" : "people"}</p>
+                <p className="text-sm">
+                  {profile.direct_reports_count}{" "}
+                  {profile.direct_reports_count === 1 ? "person" : "people"}
+                </p>
               </ProfileField>
             )}
 
@@ -357,8 +452,14 @@ function MemberProfilePanel({ member, workspaceId, isAdmin, onClose }) {
                 />
               ) : (
                 <button
-                  onClick={() => isAdmin && setEditing((p) => ({ ...p, employee_id: true }))}
-                  className={cn("text-sm text-left w-full", isAdmin && "hover:text-primary cursor-pointer", !profile.employee_id && "text-muted-foreground italic")}
+                  onClick={() =>
+                    isAdmin && setEditing((p) => ({ ...p, employee_id: true }))
+                  }
+                  className={cn(
+                    "text-sm text-left w-full",
+                    isAdmin && "hover:text-primary cursor-pointer",
+                    !profile.employee_id && "text-muted-foreground italic",
+                  )}
                 >
                   {profile.employee_id || (isAdmin ? "Click to set" : "—")}
                 </button>
@@ -373,16 +474,29 @@ function MemberProfilePanel({ member, workspaceId, isAdmin, onClose }) {
                   type="date"
                   className="text-sm border rounded px-2 py-1 bg-background w-full"
                   defaultValue={profile.start_date || ""}
-                  onBlur={(e) => { save("start_date", e.target.value || null); }}
+                  onBlur={(e) => {
+                    save("start_date", e.target.value || null);
+                  }}
                 />
               ) : (
                 <button
-                  onClick={() => isAdmin && setEditing((p) => ({ ...p, start_date: true }))}
-                  className={cn("text-sm text-left w-full", isAdmin && "hover:text-primary cursor-pointer", !profile.start_date && "text-muted-foreground italic")}
+                  onClick={() =>
+                    isAdmin && setEditing((p) => ({ ...p, start_date: true }))
+                  }
+                  className={cn(
+                    "text-sm text-left w-full",
+                    isAdmin && "hover:text-primary cursor-pointer",
+                    !profile.start_date && "text-muted-foreground italic",
+                  )}
                 >
                   {profile.start_date
-                    ? new Date(profile.start_date).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })
-                    : isAdmin ? "Click to set" : "—"}
+                    ? new Date(profile.start_date).toLocaleDateString(
+                        undefined,
+                        { year: "numeric", month: "long", day: "numeric" },
+                      )
+                    : isAdmin
+                      ? "Click to set"
+                      : "—"}
                 </button>
               )}
             </ProfileField>
@@ -400,8 +514,14 @@ function MemberProfilePanel({ member, workspaceId, isAdmin, onClose }) {
                 />
               ) : (
                 <button
-                  onClick={() => isAdmin && setEditing((p) => ({ ...p, location: true }))}
-                  className={cn("text-sm text-left w-full", isAdmin && "hover:text-primary cursor-pointer", !profile.location && "text-muted-foreground italic")}
+                  onClick={() =>
+                    isAdmin && setEditing((p) => ({ ...p, location: true }))
+                  }
+                  className={cn(
+                    "text-sm text-left w-full",
+                    isAdmin && "hover:text-primary cursor-pointer",
+                    !profile.location && "text-muted-foreground italic",
+                  )}
                 >
                   {profile.location || (isAdmin ? "Click to set" : "—")}
                 </button>
@@ -420,8 +540,14 @@ function MemberProfilePanel({ member, workspaceId, isAdmin, onClose }) {
                 />
               ) : (
                 <button
-                  onClick={() => isAdmin && setEditing((p) => ({ ...p, bio: true }))}
-                  className={cn("text-sm text-left w-full leading-relaxed", isAdmin && "hover:text-primary cursor-pointer", !profile.bio && "text-muted-foreground italic")}
+                  onClick={() =>
+                    isAdmin && setEditing((p) => ({ ...p, bio: true }))
+                  }
+                  className={cn(
+                    "text-sm text-left w-full leading-relaxed",
+                    isAdmin && "hover:text-primary cursor-pointer",
+                    !profile.bio && "text-muted-foreground italic",
+                  )}
                 >
                   {profile.bio || (isAdmin ? "Click to add bio" : "—")}
                 </button>
@@ -455,7 +581,8 @@ function memberHasAppAccess(member, appDef, roles, isWorkspaceOwner) {
  * Fires onToggle(e) so the parent can open a role-picker popover.
  */
 function AppAccessCell({ hasAccess, appDef, isInteractive, onToggle }) {
-  const base = "w-6 h-6 rounded-full flex items-center justify-center transition-transform";
+  const base =
+    "w-6 h-6 rounded-full flex items-center justify-center transition-transform";
   const interactive = isInteractive
     ? "cursor-pointer hover:scale-110 hover:ring-2 hover:ring-offset-1"
     : "";
@@ -470,9 +597,7 @@ function AppAccessCell({ hasAccess, appDef, isInteractive, onToggle }) {
           base,
           interactive,
           ringColor,
-          hasAccess
-            ? "bg-emerald-100 dark:bg-emerald-900/30"
-            : "bg-muted",
+          hasAccess ? "bg-emerald-100 dark:bg-emerald-900/30" : "bg-muted",
         )}
         title={
           hasAccess
@@ -491,7 +616,15 @@ function AppAccessCell({ hasAccess, appDef, isInteractive, onToggle }) {
   );
 }
 
-function AppAccessTab({ workspaceId, members, roles, isAdmin, user, workspace, onSwitchToRoles }) {
+function AppAccessTab({
+  workspaceId,
+  members,
+  roles,
+  isAdmin,
+  user,
+  workspace,
+  onSwitchToRoles,
+}) {
   const assignRole = useAssignRole(workspaceId);
   const bulkAssignRole = useBulkAssignRole(workspaceId);
 
@@ -523,7 +656,10 @@ function AppAccessTab({ workspaceId, members, roles, isAdmin, user, workspace, o
       return next;
     });
 
-  const clearChecked = () => { setCheckedIds(new Set()); setBulkRoleId(""); };
+  const clearChecked = () => {
+    setCheckedIds(new Set());
+    setBulkRoleId("");
+  };
 
   const handleBulkAssign = () => {
     if (!bulkRoleId || checkedIds.size === 0) return;
@@ -539,7 +675,12 @@ function AppAccessTab({ workspaceId, members, roles, isAdmin, user, workspace, o
     const isOwner = workspace?.owner?.email === member.user?.email;
     if (isSelf || isOwner) return;
     const rect = e.currentTarget.getBoundingClientRect();
-    setCellPopover({ memberId: member.id, appKey: appDef.key, hasAccess, rect });
+    setCellPopover({
+      memberId: member.id,
+      appKey: appDef.key,
+      hasAccess,
+      rect,
+    });
   };
 
   // Roles filtered to those that grant / revoke the selected app's permission
@@ -552,13 +693,22 @@ function AppAccessTab({ workspaceId, members, roles, isAdmin, user, workspace, o
   const rolesWithoutAccess = popoverApp
     ? roles.filter((r) => !r.app_access?.[popoverApp.key])
     : [];
-  const suggestedRoles = cellPopover?.hasAccess ? rolesWithoutAccess : rolesWithAccess;
+  const suggestedRoles = cellPopover?.hasAccess
+    ? rolesWithoutAccess
+    : rolesWithAccess;
 
   // Build a quick lookup: app key → member count with access
   const appMemberCounts = Object.fromEntries(
     visibleApps.map((app) => [
       app.key,
-      members.filter((m) => memberHasAppAccess(m, app, roles, workspace?.owner?.email === m.user?.email)).length,
+      members.filter((m) =>
+        memberHasAppAccess(
+          m,
+          app,
+          roles,
+          workspace?.owner?.email === m.user?.email,
+        ),
+      ).length,
     ]),
   );
 
@@ -569,7 +719,10 @@ function AppAccessTab({ workspaceId, members, roles, isAdmin, user, workspace, o
         {visibleApps.map((app) => {
           const Icon = app.icon;
           return (
-            <div key={app.key} className="rounded-lg border bg-card px-4 py-3 flex items-center gap-3">
+            <div
+              key={app.key}
+              className="rounded-lg border bg-card px-4 py-3 flex items-center gap-3"
+            >
               <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
                 <Icon className={cn("w-4 h-4", app.colors?.text)} />
               </div>
@@ -591,7 +744,9 @@ function AppAccessTab({ workspaceId, members, roles, isAdmin, user, workspace, o
       {isAdmin && checkedIds.size > 0 && (
         <div className="flex items-center gap-3 px-3 py-2 rounded-lg border bg-primary/5 border-primary/20">
           <UserCheck className="w-4 h-4 text-primary flex-shrink-0" />
-          <span className="text-sm font-medium text-primary">{checkedIds.size} selected</span>
+          <span className="text-sm font-medium text-primary">
+            {checkedIds.size} selected
+          </span>
           <select
             className="ml-2 text-xs border rounded px-2 py-1 bg-background outline-none focus:ring-1 focus:ring-ring"
             value={bulkRoleId}
@@ -600,7 +755,8 @@ function AppAccessTab({ workspaceId, members, roles, isAdmin, user, workspace, o
             <option value="">Assign role…</option>
             {roles.map((r) => (
               <option key={r.id} value={r.id}>
-                {r.name}{r.is_system ? " 🔒" : ""}
+                {r.name}
+                {r.is_system ? " 🔒" : ""}
               </option>
             ))}
           </select>
@@ -623,7 +779,12 @@ function AppAccessTab({ workspaceId, members, roles, isAdmin, user, workspace, o
       {/* Access table */}
       <div className="rounded-lg border bg-card overflow-hidden">
         {/* Table header */}
-        <div className="grid bg-muted/30 border-b" style={{ gridTemplateColumns: `1fr 160px ${visibleApps.map(() => "80px").join(" ")}` }}>
+        <div
+          className="grid bg-muted/30 border-b"
+          style={{
+            gridTemplateColumns: `1fr 160px ${visibleApps.map(() => "80px").join(" ")}`,
+          }}
+        >
           <div className="px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
             Member
           </div>
@@ -633,7 +794,10 @@ function AppAccessTab({ workspaceId, members, roles, isAdmin, user, workspace, o
           {visibleApps.map((app) => {
             const Icon = app.icon;
             return (
-              <div key={app.key} className="flex flex-col items-center justify-center py-2.5 gap-1">
+              <div
+                key={app.key}
+                className="flex flex-col items-center justify-center py-2.5 gap-1"
+              >
                 <Icon className={cn("w-3.5 h-3.5", app.colors?.text)} />
                 <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
                   {app.label === "Org Structure" ? "Org" : app.label}
@@ -647,7 +811,8 @@ function AppAccessTab({ workspaceId, members, roles, isAdmin, user, workspace, o
         <div className="divide-y">
           {members.map((member) => {
             const isSelf = member.user?.email === user?.email;
-            const isWorkspaceOwner = workspace?.owner?.email === member.user?.email;
+            const isWorkspaceOwner =
+              workspace?.owner?.email === member.user?.email;
             const checkable = isAdmin && !isSelf && !isWorkspaceOwner;
             const isChecked = checkedIds.has(member.id);
             const roleConf = getWorkspaceRoleConfig(member.role);
@@ -661,7 +826,9 @@ function AppAccessTab({ workspaceId, members, roles, isAdmin, user, workspace, o
                   "grid items-center transition-colors",
                   isChecked ? "bg-primary/5" : "hover:bg-accent/30",
                 )}
-                style={{ gridTemplateColumns: `1fr 160px ${visibleApps.map(() => "80px").join(" ")}` }}
+                style={{
+                  gridTemplateColumns: `1fr 160px ${visibleApps.map(() => "80px").join(" ")}`,
+                }}
               >
                 {/* Member info */}
                 <div className="flex items-center gap-3 px-4 py-3">
@@ -671,19 +838,31 @@ function AppAccessTab({ workspaceId, members, roles, isAdmin, user, workspace, o
                       onClick={() => toggleCheck(member.id)}
                       className="flex-shrink-0 text-muted-foreground hover:text-primary transition-colors"
                     >
-                      {isChecked
-                        ? <CheckSquare className="w-4 h-4 text-primary" />
-                        : <Square className="w-4 h-4" />}
+                      {isChecked ? (
+                        <CheckSquare className="w-4 h-4 text-primary" />
+                      ) : (
+                        <Square className="w-4 h-4" />
+                      )}
                     </button>
                   )}
                   <Avatar user={member.user} size="sm" />
                   <div className="min-w-0">
                     <div className="flex items-center gap-1">
-                      <p className="text-sm font-medium truncate">{member.user?.full_name || "—"}</p>
-                      {isWorkspaceOwner && <Crown className="w-3 h-3 text-yellow-500 flex-shrink-0" />}
-                      {isSelf && <span className="text-xs text-muted-foreground">(you)</span>}
+                      <p className="text-sm font-medium truncate">
+                        {member.user?.full_name || "—"}
+                      </p>
+                      {isWorkspaceOwner && (
+                        <Crown className="w-3 h-3 text-yellow-500 flex-shrink-0" />
+                      )}
+                      {isSelf && (
+                        <span className="text-xs text-muted-foreground">
+                          (you)
+                        </span>
+                      )}
                     </div>
-                    <p className="text-xs text-muted-foreground truncate">{member.user?.email}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {member.user?.email}
+                    </p>
                   </div>
                 </div>
 
@@ -693,17 +872,30 @@ function AppAccessTab({ workspaceId, members, roles, isAdmin, user, workspace, o
                     <select
                       className="text-xs border rounded px-2 py-1 bg-background outline-none focus:ring-1 focus:ring-ring w-full"
                       value={memberRole?.id ?? ""}
-                      onChange={(e) => assignRole.mutate({ memberId: member.id, roleId: e.target.value })}
+                      onChange={(e) =>
+                        assignRole.mutate({
+                          memberId: member.id,
+                          roleId: e.target.value,
+                        })
+                      }
                     >
-                      <option value="" disabled>Select…</option>
+                      <option value="" disabled>
+                        Select…
+                      </option>
                       {roles.map((r) => (
                         <option key={r.id} value={r.id}>
-                          {r.name}{r.is_system ? " 🔒" : ""}
+                          {r.name}
+                          {r.is_system ? " 🔒" : ""}
                         </option>
                       ))}
                     </select>
                   ) : (
-                    <span className={cn("inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded border font-medium", roleConf.className)}>
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded border font-medium",
+                        roleConf.className,
+                      )}
+                    >
                       <RoleIcon className="w-3 h-3" />
                       {roleConf.label}
                     </span>
@@ -712,7 +904,12 @@ function AppAccessTab({ workspaceId, members, roles, isAdmin, user, workspace, o
 
                 {/* App access cells */}
                 {visibleApps.map((app) => {
-                  const hasAccess = memberHasAppAccess(member, app, roles, isWorkspaceOwner);
+                  const hasAccess = memberHasAppAccess(
+                    member,
+                    app,
+                    roles,
+                    isWorkspaceOwner,
+                  );
                   const interactive = isAdmin && !isSelf && !isWorkspaceOwner;
                   return (
                     <div key={app.key} className="px-2 py-3">
@@ -720,7 +917,9 @@ function AppAccessTab({ workspaceId, members, roles, isAdmin, user, workspace, o
                         hasAccess={hasAccess}
                         appDef={app}
                         isInteractive={interactive}
-                        onToggle={(e) => openCellPopover(e, member, app, hasAccess)}
+                        onToggle={(e) =>
+                          openCellPopover(e, member, app, hasAccess)
+                        }
                       />
                     </div>
                   );
@@ -738,10 +937,7 @@ function AppAccessTab({ workspaceId, members, roles, isAdmin, user, workspace, o
           className="fixed z-50 w-56 rounded-lg border bg-card shadow-xl py-1"
           style={{
             top: cellPopover.rect.bottom + 6,
-            left: Math.min(
-              cellPopover.rect.left - 80,
-              window.innerWidth - 232,
-            ),
+            left: Math.min(cellPopover.rect.left - 80, window.innerWidth - 232),
           }}
         >
           <p className="px-3 pt-2 pb-1 text-xs font-semibold text-muted-foreground">
@@ -760,7 +956,10 @@ function AppAccessTab({ workspaceId, members, roles, isAdmin, user, workspace, o
               No matching roles.{" "}
               <button
                 className="text-primary underline"
-                onClick={() => { setCellPopover(null); onSwitchToRoles?.(); }}
+                onClick={() => {
+                  setCellPopover(null);
+                  onSwitchToRoles?.();
+                }}
               >
                 Create one in Roles & Permissions
               </button>
@@ -771,13 +970,18 @@ function AppAccessTab({ workspaceId, members, roles, isAdmin, user, workspace, o
                 key={r.id}
                 className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent transition-colors text-left"
                 onClick={() => {
-                  assignRole.mutate({ memberId: cellPopover.memberId, roleId: r.id });
+                  assignRole.mutate({
+                    memberId: cellPopover.memberId,
+                    roleId: r.id,
+                  });
                   setCellPopover(null);
                 }}
               >
                 <span className="flex-1 truncate">{r.name}</span>
                 {r.is_system && (
-                  <span className="text-[10px] text-muted-foreground/50">🔒</span>
+                  <span className="text-[10px] text-muted-foreground/50">
+                    🔒
+                  </span>
                 )}
               </button>
             ))
@@ -788,8 +992,16 @@ function AppAccessTab({ workspaceId, members, roles, isAdmin, user, workspace, o
       <p className="text-xs text-muted-foreground">
         Access is controlled by each member's role. Click a{" "}
         <Check className="w-3 h-3 inline text-emerald-500" /> or{" "}
-        <Minus className="w-3 h-3 inline text-muted-foreground/40" /> to pick a different role, or use the role dropdown to change their role directly. Manage roles in the{" "}
-        <button className="text-primary underline" onClick={() => onSwitchToRoles?.()}>Roles & Permissions</button> tab.
+        <Minus className="w-3 h-3 inline text-muted-foreground/40" /> to pick a
+        different role, or use the role dropdown to change their role directly.
+        Manage roles in the{" "}
+        <button
+          className="text-primary underline"
+          onClick={() => onSwitchToRoles?.()}
+        >
+          Roles & Permissions
+        </button>{" "}
+        tab.
       </p>
     </div>
   );
@@ -828,7 +1040,10 @@ export default function MembersPage() {
       return next;
     });
 
-  const clearChecked = () => { setCheckedIds(new Set()); setBulkRoleId(""); };
+  const clearChecked = () => {
+    setCheckedIds(new Set());
+    setBulkRoleId("");
+  };
 
   const handleBulkAssign = () => {
     if (!bulkRoleId || checkedIds.size === 0) return;
@@ -842,6 +1057,12 @@ export default function MembersPage() {
   const isAdmin = isOwner || can("settings.manage");
 
   const selectedMember = members.find((m) => m.id === selectedMemberId);
+
+  useEffect(() => {
+    const handler = () => setPermsRefOpen(true);
+    window.addEventListener("jcn:open-permissions", handler);
+    return () => window.removeEventListener("jcn:open-permissions", handler);
+  }, []);
 
   const copyInviteLink = (token) => {
     navigator.clipboard.writeText(`${window.location.origin}/invites/${token}`);
@@ -858,7 +1079,8 @@ export default function MembersPage() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Team Members</h1>
             <p className="text-muted-foreground text-sm mt-1">
-              {members.length} member{members.length !== 1 ? "s" : ""} · {workspace?.name}
+              {members.length} member{members.length !== 1 ? "s" : ""} ·{" "}
+              {workspace?.name}
             </p>
           </div>
           {isAdmin && (
@@ -880,7 +1102,10 @@ export default function MembersPage() {
             return (
               <button
                 key={tab.key}
-                onClick={() => { setActiveTab(tab.key); setSelectedMemberId(null); }}
+                onClick={() => {
+                  setActiveTab(tab.key);
+                  setSelectedMemberId(null);
+                }}
                 className={cn(
                   "flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px",
                   activeTab === tab.key
@@ -942,7 +1167,8 @@ export default function MembersPage() {
                     <option value="">Assign role…</option>
                     {roles.map((r) => (
                       <option key={r.id} value={r.id}>
-                        {r.name}{r.is_system ? " 🔒" : ""}
+                        {r.name}
+                        {r.is_system ? " 🔒" : ""}
                       </option>
                     ))}
                   </select>
@@ -964,7 +1190,9 @@ export default function MembersPage() {
 
               <div className="rounded-lg border bg-card overflow-hidden">
                 {isLoading ? (
-                  <div className="p-6 text-sm text-muted-foreground">Loading…</div>
+                  <div className="p-6 text-sm text-muted-foreground">
+                    Loading…
+                  </div>
                 ) : (
                   <div className="divide-y">
                     {members.map((member) => (
@@ -972,7 +1200,9 @@ export default function MembersPage() {
                         key={member.id}
                         member={member}
                         isSelf={member.user?.email === user?.email}
-                        isWorkspaceOwner={workspace?.owner?.email === member.user?.email}
+                        isWorkspaceOwner={
+                          workspace?.owner?.email === member.user?.email
+                        }
                         isAdmin={isAdmin}
                         isSelected={member.id === selectedMemberId}
                         onSelect={() =>

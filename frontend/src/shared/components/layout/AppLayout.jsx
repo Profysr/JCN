@@ -67,6 +67,9 @@ export default function AppLayout() {
     onCreateTask: () => {
       window.dispatchEvent(new CustomEvent("jcn:create-task"));
     },
+    onOpenPermissions: () => {
+      window.dispatchEvent(new CustomEvent("jcn:open-permissions"));
+    },
   });
 
   return (

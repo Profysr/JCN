@@ -21,6 +21,7 @@ import {
 } from "@/shared/hooks/useRoles";
 import { usePermissions } from "@/shared/hooks/usePermissions";
 import { APP_DEFS } from "@/shared/lib/navLinks";
+import { ShortcutTooltip } from "@/shared/components/ui/ShortcutTooltip";
 
 const _appDefByKey = Object.fromEntries(APP_DEFS.map((a) => [a.key, a]));
 
@@ -427,15 +428,17 @@ export default function RolesSection({ workspaceId, isAdmin, onOpenPermissionsRe
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={onOpenPermissionsRef}
-            className="text-xs text-muted-foreground gap-1.5"
-          >
-            <ShieldCheck className="w-3.5 h-3.5" />
-            View all permissions
-          </Button>
+          <ShortcutTooltip label="View all permissions" shortcut="R" side="bottom">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onOpenPermissionsRef}
+              className="text-xs text-muted-foreground gap-1.5"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              View all permissions
+            </Button>
+          </ShortcutTooltip>
           {isAdmin && (
             <Button size="sm" variant="outline" onClick={handleCreate} disabled={createRole.isPending}>
               <Plus className="w-3.5 h-3.5 mr-1.5" />

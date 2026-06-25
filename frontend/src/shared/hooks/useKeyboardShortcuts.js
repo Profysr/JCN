@@ -50,8 +50,9 @@ function isTypingTarget(e) {
 export function useKeyboardShortcuts({
   onOpenPalette,
   onOpenShortcuts,
-  onCreateTask,
   onToggleSidebar,
+  onCreateTask,
+  onOpenPermissions,
 } = {}) {
   const navigate = useNavigate();
   const { workspaceId } = useParams();
@@ -67,7 +68,8 @@ export function useKeyboardShortcuts({
       p: () => navigate(ws("boards")),
       d: () => navigate(ws("dashboards")),
       w: () => navigate(ws("my-work")),
-      i: () => window.dispatchEvent(new CustomEvent("jcn:toggle-notifications")),
+      i: () =>
+        window.dispatchEvent(new CustomEvent("jcn:toggle-notifications")),
       a: () => navigate(ws("analytics")),
       g: () => navigate(ws("goals")),
       s: () => navigate(ws("settings")),
@@ -124,6 +126,11 @@ export function useKeyboardShortcuts({
         case "c":
           e.preventDefault();
           onCreateTask?.();
+          break;
+
+        case "r":
+          e.preventDefault();
+          onOpenPermissions?.();
           break;
 
         default:
