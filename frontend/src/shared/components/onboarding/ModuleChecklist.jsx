@@ -1,3 +1,17 @@
+/**
+ * ModuleChecklist — shared base component for per-module getting-started checklists.
+ *
+ * Usage (in each app module):
+ *   const ITEMS = [{ key, label, desc, action, cta, future? }, ...]
+ *   <ModuleChecklist moduleKey="projects" items={ITEMS} />
+ *
+ * To add a new module's checklist:
+ *   1. Add the module's compute function to backend/workspaces/checklist.py
+ *   2. Create src/apps/<module>/components/GettingStartedChecklist.jsx
+ *      that defines ITEMS and renders <ModuleChecklist moduleKey="<key>" items={ITEMS} />
+ *   3. Drop the component on the module's landing page.
+ */
+
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
@@ -14,47 +28,7 @@ import {
 } from "@/shared/hooks/useOnboarding";
 import { cn } from "@/shared/lib/utils";
 
-const ITEMS = [
-  {
-    key: "create_board",
-    label: "Create your first board",
-    desc: "Set up a board and invite the team",
-    action: (navigate, ws) => navigate(`/w/${ws}/boards`),
-    cta: "Create board",
-  },
-  {
-    key: "add_task",
-    label: "Add a task",
-    desc: "Break work into trackable pieces",
-    action: (navigate, ws) => navigate(`/w/${ws}/boards`),
-    cta: "Go to projects",
-  },
-  {
-    key: "invite_teammate",
-    label: "Invite a teammate",
-    desc: "Collaboration is better together",
-    action: (navigate, ws) => navigate(`/w/${ws}/members`),
-    cta: "Invite members",
-  },
-  {
-    key: "integration",
-    label: "Integration",
-    desc: "Link Team or Google chats for updates",
-    action: (navigate, ws) => navigate(`/w/${ws}/settings/integrations`),
-    cta: "Connect",
-    future: true,
-  },
-  {
-    key: "setup_automation",
-    label: "Set up an automation",
-    desc: "Automate repetitive work",
-    action: (navigate, ws) => navigate(`/w/${ws}/boards`),
-    cta: "Explore automations",
-    future: true,
-  },
-];
-
-export default function GettingStartedChecklist() {
+export default function ModuleChecklist({ moduleKey, items }) {
   const { workspaceId } = useParams();
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
@@ -62,19 +36,15 @@ export default function GettingStartedChecklist() {
   const { data: onboarding } = useOnboarding(workspaceId);
   const updateOnboarding = useUpdateOnboarding(workspaceId);
 
-  // Only workspace admins see the setup checklist.
-  // Non-admins join an existing workspace — it's already configured.
-  if (
-    !onboarding ||
-    !onboarding.user_is_admin ||
-    onboarding.checklist_dismissed
-  )
-    return null;
+  if (!onboarding || !onboarding.user_is_admin) return null;
 
-  const checklist = onboarding.checklist || {};
-  const completedCount = ITEMS.filter((item) => checklist[item.key]).length;
-  const allDone = completedCount === ITEMS.length;
-  const progress = Math.round((completedCount / ITEMS.length) * 100);
+  const moduleData = onboarding.checklists?.[moduleKey];
+  if (!moduleData || moduleData.dismissed) return null;
+
+  const checklist = moduleData.items || {};
+  const completedCount = items.filter((item) => checklist[item.key]).length;
+  const allDone = completedCount === items.length;
+  const progress = Math.round((completedCount / items.length) * 100);
 
   return (
     <div className="rounded-md border bg-card shadow-card overflow-hidden">
@@ -88,10 +58,11 @@ export default function GettingStartedChecklist() {
           <div>
             <p className="text-sm font-semibold">Getting started</p>
             <p className="text-xs text-muted-foreground">
-              {completedCount}/{ITEMS.length} complete
+              {completedCount}/{items.length} complete
             </p>
           </div>
         </button>
+
         <div className="flex items-center gap-1.5">
           {/* Progress bar */}
           <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden mr-1.5">
@@ -117,7 +88,7 @@ export default function GettingStartedChecklist() {
           {/* Dismiss permanently */}
           <button
             onClick={() =>
-              updateOnboarding.mutate({ checklist_dismissed: true })
+              updateOnboarding.mutate({ module_dismiss: moduleKey })
             }
             title="Dismiss permanently"
             className="text-muted-foreground hover:text-foreground p-1 rounded transition-colors"
@@ -127,10 +98,10 @@ export default function GettingStartedChecklist() {
         </div>
       </div>
 
-      {/* Items — hidden when collapsed */}
+      {/* Items */}
       {!collapsed && (
         <div className="divide-y animate-slide-down">
-          {ITEMS.map((item) => {
+          {items.map((item) => {
             const done = !!checklist[item.key];
             return (
               <div
@@ -183,11 +154,10 @@ export default function GettingStartedChecklist() {
             );
           })}
 
-          {/* All done state */}
           {allDone && (
             <div className="px-5 py-3 bg-emerald-50 dark:bg-emerald-900/20 border-t text-center">
               <p className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">
-                🎉 All done! You're ready to ship.
+                🎉 All done! You&apos;re all set up.
               </p>
             </div>
           )}

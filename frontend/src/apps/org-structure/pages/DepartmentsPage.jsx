@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams } from "react-router-dom";
-import { Plus, ChevronRight, Pencil, Trash2, Users, Building2 } from "lucide-react";
+import { Plus, ChevronRight, Pencil, Trash2, Users } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { EmptyState } from "@/shared/components/ui/empty-state";
@@ -16,6 +16,7 @@ import {
   useUpdateDepartment,
   useDeleteDepartment,
 } from "@/apps/org-structure/hooks/useOrg";
+import GettingStartedChecklist from "@/apps/org-structure/components/GettingStartedChecklist";
 
 const DEPT_COLORS = [
   "#6366f1", "#8b5cf6", "#3b82f6", "#10b981",
@@ -353,6 +354,10 @@ export default function DepartmentsPage() {
 
   return (
     <div className="p-8">
+      <div className="mb-6">
+        <GettingStartedChecklist />
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>

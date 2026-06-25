@@ -182,7 +182,7 @@ hr:         hr.manage_leave, hr.manage_attendance
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET/PATCH | `/api/workspaces/{ws}/onboarding/` | Get or update onboarding wizard/checklist state (owner only) |
+| GET/PATCH | `/api/workspaces/{ws}/onboarding/` | Get or update onboarding wizard/checklist state (admin only). GET response shape: `{ wizard_completed, team_type, user_is_admin, checklists: { projects: { dismissed, items: {create_board, add_task, invite_teammate} }, org: { dismissed, items: {create_department, create_team, set_reporting_line} }, hr: { dismissed, items: {create_leave_policy, submit_leave_request, record_attendance} } } }`. PATCH accepts `wizard_completed`, `team_type`, and `module_dismiss: "<module_key>"` to dismiss a specific module's checklist for the current user. |
 
 ### API Keys
 
@@ -505,7 +505,7 @@ Available `{metric}` values:
 | `Webhook` | `workspace` (FK), `name`, `url`, `events` (JSON), `secret`, `is_active` | HMAC-SHA256 signing. `create_with_secret()` classmethod |
 | `WebhookDelivery` | `webhook` (FK), `event`, `request_body`, `response_code`, `response_body`, `duration_ms`, `success`, `attempt` | indexes: webhook+created_at, webhook+success |
 | `ImportJob` | `workspace` (FK), `source`, `status`, `file_name`, `parsed_rows`, `field_mapping`, `preview_rows`, `progress_pct`, `total_count`, `imported_count`, `skipped_count`, `error_log`, `imported_task_ids`, `created_by`, `completed_at` | index: workspace+status. Sources: jira, clickup, monday, notion, github, asana, csv |
-| `OnboardingState` | `workspace` (O2O), `wizard_completed`, `team_type`, `checklist_dismissed`, `dismissed_by_users` (JSON) | |
+| `OnboardingState` | `workspace` (O2O), `wizard_completed`, `team_type`, `module_dismissed_by_users` (JSONField `{"projects": ["uuid1"], "org": [], "hr": []}`) | Per-module per-user dismissal. Checklist items computed on-the-fly from `workspaces/checklist.py` registry — add new modules there, no model change needed. |
 | `CustomRole` | `workspace` (FK), `name`, `description`, `is_system` (bool), `app_access` (JSONField `{"projects": true, "hr": false, ...}`), `permissions` (JSONField `{"workspace": {"settings.manage": true}, "projects": {"task.create": true}, ...}`) | unique: workspace+name; ordering: -is_system, name; index: `crole_workspace_system_idx`. `is_system=True` protects built-in Admin/Member/Viewer roles. Auto-created per workspace via `create_system_roles()`. |
 | `RoleAssignment` | `workspace_member` (O2O→WorkspaceMember), `role` (FK→CustomRole, PROTECT), `assigned_by` (FK→User, nullable) | One per member; `update_or_create` on reassign; index: `rla_role_idx`. Auto-created for workspace owner (Admin) on workspace creation and for invited members on invite acceptance. |
 

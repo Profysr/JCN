@@ -361,18 +361,16 @@ class ImportJob(models.Model):
 
 # ── v2.3.0 — Onboarding ───────────────────────────────────────────────────────
 class OnboardingState(models.Model):
-    """Tracks wizard + checklist progress per workspace."""
+    """Tracks wizard + per-module checklist progress per workspace."""
 
     workspace = models.OneToOneField(
         Workspace, on_delete=models.CASCADE, related_name="onboarding"
     )
     wizard_completed = models.BooleanField(default=False)
     team_type = models.CharField(max_length=50, blank=True)
-    checklist_dismissed = models.BooleanField(
-        default=False
-    )  # legacy, kept for migration compat
-    # Per-user dismissal: list of user UUID strings who have dismissed the checklist
-    dismissed_by_users = models.JSONField(default=list, blank=True)
+    # Per-module, per-user dismissal.
+    # Shape: {"projects": ["uuid1", "uuid2"], "org": ["uuid1"], "hr": []}
+    module_dismissed_by_users = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

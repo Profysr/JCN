@@ -26,13 +26,15 @@ Since **vB.0** the frontend is feature-sliced. Each product module is a self-con
 ```
 src/apps/project-management/   — PM: boards, tasks, sprints, kanban, gantt, wiki, forms, time
    ├── pages/        KanbanPage, ProjectsPage, WikiPage, FormsPage, …
-   ├── components/   tasks/*, projects/*
+   ├── components/   tasks/*, projects/*, GettingStartedChecklist
    └── hooks/        useTasks, useProjects, useSprints, … (see Hooks reference)
 src/apps/org-structure/        — Org: departments, teams, org chart, job titles, profiles
    ├── pages/        DepartmentsPage, TeamsPage, OrgChartPage
+   ├── components/   GettingStartedChecklist
    └── hooks/        useOrg.js (all org data hooks)
 src/apps/hr-management/        — HR: leave, attendance, HR dashboard, employee docs/notes
    ├── pages/        HRDashboardPage, LeavePage, AttendancePage, MemberDetailPage
+   ├── components/   GettingStartedChecklist
    └── hooks/        useLeave, useAttendance, useHRDashboard, useEmployeeDocs, useEmployeeNotes
 src/shared/                    — cross-app primitives
    ├── components/   layout/ (AppLayout, Sidebar), CommandPalette, ui/*
@@ -101,12 +103,11 @@ JCN's product areas are licensed as modules. The system spans backend + frontend
 
 ### Frontend module gating (implemented)
 
-The earlier "gating gap" is **closed** — the frontend now consumes `isEnabled` at both the nav and route layers:
+The frontend consumes `isEnabled` at the nav layer:
 
 - **Nav items carry a `moduleKey`.** Each per-app `nav.js` (`apps/<module>/nav.js`) tags its items with `moduleKey` (e.g. HR items → `"hr_management"`). Items without one are always shown.
 - **`Sidebar` filters by it** — `useModules()` → `isEnabled`; an item renders only when `!item.moduleKey || modulesLoading || isEnabled(item.moduleKey)`. (`modulesLoading` keeps items visible during the first fetch, then they resolve once modules load.)
-- **Routes are wrapped in `<ProtectedModuleRoute moduleKey="…">`** (`shared/components/layout/ProtectedModuleRoute.jsx`). When the module is disabled it renders `ModuleUnavailablePage` (an upsell, not a raw 403); on first visit after enabling it shows `AppWelcomeScreen` once (persisted per workspace+module in `localStorage`).
-- **App metadata** lives in `navLinks.js → APP_DEFS` (`moduleKey`, `permKey`, `icon`, `landing`, `colors`, `welcome`, `locked`) — the single source consumed by AppSwitcher, AppLauncher, SettingsPage, AppWelcomeScreen, and ModuleUnavailablePage.
+- **App metadata** lives in `navLinks.js → APP_DEFS` (`key`, `label`, `shortLabel`, `icon`, `landing`, `colors`) — consumed by AppSwitcher, AppLauncher, and SettingsPage. There are no `welcome` or `locked` fields — first-run onboarding is handled by per-module getting-started checklists instead.
 
 ---
 
@@ -1028,6 +1029,22 @@ Key factory filters out falsy `timePeriod`. All mutations (objectives, key resul
 
 `useUpdateOnboarding` uses `setQueryData` only — onboarding state never needs a server round-trip after an update.
 
+**Response shape:**
+```json
+{
+  "wizard_completed": true,
+  "team_type": "engineering",
+  "user_is_admin": true,
+  "checklists": {
+    "projects": { "dismissed": false, "items": { "create_board": true, "add_task": false, "invite_teammate": true } },
+    "org":      { "dismissed": false, "items": { "create_department": false, "create_team": false, "set_reporting_line": false } },
+    "hr":       { "dismissed": false, "items": { "create_leave_policy": false, "submit_leave_request": false, "record_attendance": false } }
+  }
+}
+```
+
+**PATCH payloads:** `{ wizard_completed, team_type }` or `{ module_dismiss: "<module_key>" }` to dismiss one module's checklist for the current user.
+
 ---
 
 ### `useDebounce.js`
@@ -1434,6 +1451,9 @@ Query key: `["automations", workspaceId, boardId]`
 | `pages/workspace/InboxPage.jsx`       | Page | Built, no route                       | Only if not planning inbox route |
 | `pages/projects/AccessDeniedPage.jsx` | Page | Orphaned, duplicate of inline UI      | Yes                              |
 | `hooks/useAutomations.js`             | Hook | Only used by dead AutomationsPage     | Yes (with page)                  |
+| ~~`layout/ProtectedModuleRoute.jsx`~~ | Comp | **Deleted** — was never wired into App.jsx | Done |
+| ~~`layout/AppWelcomeScreen.jsx`~~     | Comp | **Deleted** — replaced by per-module checklists | Done |
+| ~~`pages/errors/ModuleUnavailablePage.jsx`~~ | Page | **Deleted** — was only used by ProtectedModuleRoute | Done |
 
 **Hooks confirmed alive despite dead pages:** `useInbox`, `useInboxUnreadCount`, `useUpdateInboxItem`, `useBulkUpdateInbox` — all used by `NotificationBell.jsx` and `Sidebar.jsx`. Do not delete these.
 
@@ -1491,15 +1511,29 @@ Register / Google OAuth (verified)
                        shows "X accepted · Y pending" live counter
   → /w/:workspaceId  (main app)
 
-Post-entry — GettingStartedChecklist (dashboard)
-  Visible only to workspace admins. 5 items:
+Post-entry — per-module GettingStartedChecklists
+  Visible only to workspace admins. Each module has its own checklist on its landing page:
+
+  Projects  (DashboardsPage)
     ✓ Create your first board  → /boards
     ✓ Add a task               → /boards
     ✓ Invite a teammate        → /members
-    ○ Integration              (Soon)
-    ○ Set up an automation     (Soon)
-  Progress bar. Collapses. Permanently dismissible.
-  PATCH /api/workspaces/:id/onboarding/ { checklist_dismissed: true } on dismiss.
+
+  Org Structure  (DepartmentsPage)
+    ✓ Create a department      → /org/departments
+    ✓ Create a team            → /org/teams
+    ✓ Set up reporting lines   → /org/chart
+
+  HR Management  (HRDashboardPage)
+    ✓ Create a leave policy    → /hr/leave
+    ✓ Submit a leave request   → /hr/leave
+    ✓ Record attendance        → /hr/attendance
+
+  Each checklist: progress bar, collapse, permanent per-user dismiss.
+  PATCH /api/workspaces/:id/onboarding/ { module_dismiss: "<key>" } on dismiss.
+  Items computed server-side from workspaces/checklist.py CHECKLIST_REGISTRY.
+  Base UI: src/shared/components/onboarding/ModuleChecklist.jsx
+  Module wrappers: src/apps/<module>/components/GettingStartedChecklist.jsx
 ```
 
 **Key invariant:** `can_create_workspace` is `True` by default on signup and flips to `False` the moment the workspace is created. Attempting `POST /api/workspaces/` a second time returns a permission error from the serializer.

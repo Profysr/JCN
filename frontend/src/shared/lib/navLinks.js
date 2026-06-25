@@ -19,11 +19,9 @@ import { HR_NAV_ITEMS, HR_NAV_GROUPS } from "@/apps/hr-management/nav";
 // Keys must match the backend APP_REGISTRY keys exactly.
 //
 // Fields consumed across the codebase:
-//   icon       → AppSwitcher, AppLauncher, RolesSection, ModuleUnavailable
+//   icon       → AppSwitcher, AppLauncher, RolesSection
 //   landing    → route suffix after /w/:id/ when switching to this app
 //   colors     → icon bubble bg / icon text / active dot / accent bar
-//   welcome    → AppWelcomeScreen copy  (null = no welcome screen shown)
-//   locked     → ModuleUnavailablePage copy  (null = never locked)
 
 export const APP_DEFS = [
   {
@@ -37,8 +35,6 @@ export const APP_DEFS = [
       text: "text-violet-500",
       solid: "bg-violet-500",
     },
-    welcome: null,
-    locked: null,
   },
   {
     key: "org",
@@ -51,19 +47,6 @@ export const APP_DEFS = [
       text: "text-blue-500",
       solid: "bg-blue-500",
     },
-    welcome: {
-      tagline: "Your company, clearly mapped.",
-      description:
-        "Build a living org chart that reflects how your team is actually structured — departments, teams, reporting lines, and job titles all in one place.",
-      setupItems: [
-        "Create your top-level departments (e.g. Engineering, Design, Operations)",
-        "Add teams within each department and assign members",
-        "Set manager relationships to build out the reporting hierarchy",
-        "Assign job titles so every member's role is visible at a glance",
-      ],
-      ctaLabel: "Set up Org Structure",
-    },
-    locked: null,
   },
   {
     key: "hr",
@@ -76,19 +59,6 @@ export const APP_DEFS = [
       text: "text-purple-500",
       solid: "bg-purple-500",
     },
-    welcome: {
-      tagline: "Leave, attendance, and employee records — unified.",
-      description:
-        "Give your team a single place to request leave, clock in and out, and keep employee records up to date. Managers get the visibility they need without the spreadsheets.",
-      setupItems: [
-        "Define leave policies (annual leave, sick leave, etc.) with accrual rules",
-        "Enrol employees so they can start submitting requests",
-        "Configure attendance settings for clock-in/out and QR check-in",
-        "Review the HR overview dashboard to monitor balances and absences",
-      ],
-      ctaLabel: "Set up HR Management",
-    },
-    locked: null,
   },
   {
     key: "analytics",
@@ -101,8 +71,6 @@ export const APP_DEFS = [
       text: "text-amber-500",
       solid: "bg-amber-500",
     },
-    welcome: null,
-    locked: null,
   },
   {
     key: "workspace",
@@ -115,8 +83,6 @@ export const APP_DEFS = [
       text: "text-slate-400",
       solid: "bg-slate-400",
     },
-    welcome: null,
-    locked: null,
   },
 ];
 

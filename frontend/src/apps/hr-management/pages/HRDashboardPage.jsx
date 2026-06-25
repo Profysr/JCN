@@ -1,11 +1,12 @@
 import { useParams, Link } from "react-router-dom";
 import {
   Users, UserPlus, CalendarDays, Timer, AlertTriangle, Gift, Star,
-  TrendingUp, Clock, UserCheck,
+  Clock, UserCheck,
 } from "lucide-react";
 import { Loader } from "@/shared/components/ui/Loader";
 import { cn } from "@/shared/lib/utils";
 import { useHRDashboard } from "@/apps/hr-management/hooks/useHRDashboard";
+import GettingStartedChecklist from "@/apps/hr-management/components/GettingStartedChecklist";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -76,6 +77,8 @@ export default function HRDashboardPage() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-8">
+      <GettingStartedChecklist />
+
       <div>
         <h1 className="text-2xl font-bold">HR Dashboard</h1>
         <p className="text-sm text-muted-foreground mt-1">Workspace people overview</p>
