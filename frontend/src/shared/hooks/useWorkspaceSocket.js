@@ -161,10 +161,10 @@ function handleBoardEvent(type, payload, qc, workspaceId) {
     qc.invalidateQueries({ queryKey: ["tasks", workspaceId, payload.board_id] });
   }
 
-  // ── Typing indicators — forwarded to a custom event for TaskDetailPanel ──
-  if (type === "typing.update") {
-    window.dispatchEvent(new CustomEvent("jcn:typing", { detail: payload }));
-  }
+  // ── Typing indicators — disabled, not in use ──
+  // if (type === "typing.update") {
+  //   window.dispatchEvent(new CustomEvent("jcn:typing", { detail: payload }));
+  // }
 
   // ── Comment reaction events ──
   if (type === "reaction.updated") {

@@ -24,6 +24,7 @@ import {
   LabelPicker,
   PRIORITY_OPTIONS,
 } from "@/apps/project-management/components/tasks/TaskDetailShared";
+import { getShortcutDisplay } from "@/shared/lib/shortcutsRegistry";
 
 // ── Icon strip ────────────────────────────────────────────────────────────────
 
@@ -85,11 +86,16 @@ export function PanelSectionHeader({ title }) {
 }
 
 // ── Properties ────────────────────────────────────────────────────────────────
-function PropCell({ label, children, className }) {
+function PropCell({ label, shortcut, children, className }) {
   return (
     <div className={cn("flex flex-col gap-0.5", className)}>
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 pl-2">
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 pl-2 flex items-center gap-1.5">
         {label}
+        {shortcut && (
+          <kbd className="font-mono normal-case tracking-normal bg-muted/60 border border-border/60 rounded px-1 py-px leading-none text-[9px] text-muted-foreground/50">
+            {shortcut}
+          </kbd>
+        )}
       </span>
       {children}
     </div>
@@ -157,7 +163,7 @@ export function PropertiesPanel({
     <div className="px-3 py-4 space-y-3">
       {/* Status ── full width prominent */}
       <div className="rounded-lg border border-border/50 bg-background/60 p-2.5 space-y-2">
-        <PropCell label="Status">
+        <PropCell label="Status" shortcut={getShortcutDisplay("task:status")}>
           <Dropdown
             disabled={!canEdit}
             value={task.status_detail?.id || ""}
@@ -192,7 +198,7 @@ export function PropertiesPanel({
 
         {/* Priority + Type ── 2 col */}
         <div className="grid grid-cols-2 gap-1.5">
-          <PropCell label="Priority">
+          <PropCell label="Priority" shortcut={getShortcutDisplay("task:priority")}>
             <Dropdown
               disabled={!canEdit}
               value={task.priority}
@@ -272,7 +278,7 @@ export function PropertiesPanel({
         </div>
 
         {/* Assignee ── full width */}
-        <PropCell label="Assignee">
+        <PropCell label="Assignee" shortcut={getShortcutDisplay("task:assign")}>
           <Dropdown
             disabled={!canEdit}
             value={task.assignee?.id || ""}
@@ -352,7 +358,7 @@ export function PropertiesPanel({
               disabled={!canEdit}
             />
           </PropCell>
-          <PropCell label="Due Date">
+          <PropCell label="Due Date" shortcut={getShortcutDisplay("task:due-date")}>
             <DateField
               value={task.due_date || ""}
               onChange={(e) =>
@@ -409,8 +415,11 @@ export function PropertiesPanel({
 
       {/* Labels */}
       <div>
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 pl-2 mb-2">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 pl-2 mb-2 flex items-center gap-1.5">
           Labels
+          <kbd className="font-mono normal-case tracking-normal bg-muted/60 border border-border/60 rounded px-1 py-px leading-none text-[9px] text-muted-foreground/50">
+            {getShortcutDisplay("task:label")}
+          </kbd>
         </p>
         <div className="flex flex-wrap gap-1.5 items-center px-1">
           {task.labels?.map((l) => (

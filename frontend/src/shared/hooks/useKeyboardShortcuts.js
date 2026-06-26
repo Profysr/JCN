@@ -54,6 +54,7 @@ export function useKeyboardShortcuts({
   onCreateTask,
   onOpenPermissions,
   onOpenFilters,
+  onFocusSearch,
 } = {}) {
   const navigate = useNavigate();
   const { workspaceId } = useParams();
@@ -66,7 +67,7 @@ export function useKeyboardShortcuts({
     if (!workspaceId) return;
     const ws = (path) => `/w/${workspaceId}/${path}`;
     const CHORD_MAP = {
-      p: () => navigate(ws("boards")),
+      b: () => navigate(ws("boards")),
       d: () => navigate(ws("dashboards")),
       w: () => navigate(ws("my-work")),
       i: () =>
@@ -141,6 +142,11 @@ export function useKeyboardShortcuts({
           onOpenPermissions?.();
           break;
 
+        case "/":
+          e.preventDefault();
+          onFocusSearch?.();
+          break;
+
         default:
           break;
       }
@@ -159,5 +165,6 @@ export function useKeyboardShortcuts({
     onCreateTask,
     onToggleSidebar,
     onOpenFilters,
+    onFocusSearch,
   ]);
 }

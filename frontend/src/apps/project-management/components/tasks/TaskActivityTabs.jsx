@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { getShortcutDisplay } from "@/shared/lib/shortcutsRegistry";
 import {
   Trash2,
   Check,
@@ -51,9 +52,10 @@ function CommentsPanel({
   taskId,
   user,
   members,
-  typingUsers,
+  // typingUsers,   // typing indicators — disabled
   focusCommentId = null,
   commentCount = 0,
+  focusCommentTick = 0,
 }) {
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useTaskComments(workspaceId, boardId, taskId);
@@ -96,8 +98,10 @@ function CommentsPanel({
         user={user}
         members={members}
         createComment={createComment}
+        focusCommentTick={focusCommentTick}
       />
 
+      {/* typing indicator — disabled
       {typingUsers?.length > 0 && (
         <p className="text-xs text-muted-foreground flex items-center gap-1 pl-9">
           <span className="inline-flex gap-0.5">
@@ -109,6 +113,7 @@ function CommentsPanel({
           {typingUsers.length === 1 ? "is" : "are"} typing…
         </p>
       )}
+      */}
 
       {comments.length === 0 ? (
         <p className="text-sm text-muted-foreground py-2">
@@ -148,11 +153,20 @@ function CommentComposer({
   parentId = null,
   placeholder,
   onClose,
+  focusCommentTick = 0,
 }) {
   const isReply = !!parentId;
   const [body, setBody] = useState("");
   const [focused, setFocused] = useState(isReply);
   const editorRef = useRef(null);
+
+  // Triggered by the `i` keyboard shortcut via jcn:task-action → focusCommentTick signal
+  useEffect(() => {
+    if (focusCommentTick > 0) {
+      editorRef.current?.focus();
+      setFocused(true);
+    }
+  }, [focusCommentTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = (e) => {
     e?.preventDefault();
@@ -676,25 +690,41 @@ export function ActivityTabsSection({
   taskId,
   user,
   members,
-  typingUsers,
+  // typingUsers,   // typing indicators — disabled
   focusCommentId,
   commentCount = 0,
   approvals = [],
 }) {
   const [tab, setTab] = useState("comments");
+  const [focusCommentTick, setFocusCommentTick] = useState(0);
+
+  useEffect(() => {
+    const handler = (ev) => {
+      const { action } = ev.detail ?? {};
+      if (action === "tab-comments") { setTab("comments"); return; }
+      if (action === "tab-activity") { setTab("activity"); return; }
+      if (action === "tab-approvals") { setTab("approvals"); return; }
+      if (action === "focus-comment") {
+        setTab("comments");
+        setFocusCommentTick((n) => n + 1);
+      }
+    };
+    window.addEventListener("jcn:task-action", handler);
+    return () => window.removeEventListener("jcn:task-action", handler);
+  }, []);
 
   return (
     <div className="space-y-4">
       <Tabs value={tab} onChange={setTab}>
         <TabsList>
           <TabsTrigger value="comments" icon={MessageSquare} badge={commentCount}>
-            Comments
+            Comments <kbd className="font-mono normal-case tracking-normal bg-muted/60 border border-border/60 rounded px-1 py-px leading-none text-[9px] opacity-60">{getShortcutDisplay("panel:tab-comments")}</kbd>
           </TabsTrigger>
           <TabsTrigger value="activity" icon={History}>
-            Activity
+            Activity <kbd className="font-mono normal-case tracking-normal bg-muted/60 border border-border/60 rounded px-1 py-px leading-none text-[9px] opacity-60">{getShortcutDisplay("panel:tab-activity")}</kbd>
           </TabsTrigger>
           <TabsTrigger value="approvals" icon={ShieldCheck} badge={approvals.length || null}>
-            Approvals
+            Approvals <kbd className="font-mono normal-case tracking-normal bg-muted/60 border border-border/60 rounded px-1 py-px leading-none text-[9px] opacity-60">{getShortcutDisplay("panel:tab-approvals")}</kbd>
           </TabsTrigger>
         </TabsList>
       </Tabs>
@@ -706,9 +736,9 @@ export function ActivityTabsSection({
           taskId={taskId}
           user={user}
           members={members}
-          typingUsers={typingUsers}
           focusCommentId={focusCommentId}
           commentCount={commentCount}
+          focusCommentTick={focusCommentTick}
         />
       )}
 

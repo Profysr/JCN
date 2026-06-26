@@ -444,6 +444,7 @@ function TaskRow({
   sprintsById,
   onTaskClick,
   selectedTaskId,
+  focusedTaskId,
   selectedIds,
   onToggleSelect,
 }) {
@@ -457,6 +458,7 @@ function TaskRow({
   );
 
   const isSelected = selectedTaskId === task.id;
+  const isFocused = focusedTaskId === task.id;
   const isBulkSelected = selectedIds.has(task.id);
 
   const cellCtx = {
@@ -479,9 +481,11 @@ function TaskRow({
             ? "bg-primary/[0.08]"
             : isSelected
               ? "bg-primary/5 border-l-2 border-l-primary"
-              : depth > 0
-                ? "hover:bg-accent/30 bg-muted/20"
-                : "hover:bg-accent/40 bg-card",
+              : isFocused
+                ? "bg-accent/60 border-l-2 border-l-primary/40 outline-none"
+                : depth > 0
+                  ? "hover:bg-accent/30 bg-muted/20"
+                  : "hover:bg-accent/40 bg-card",
         )}
       >
         {onToggleSelect && (
@@ -542,6 +546,7 @@ function TaskRow({
             sprintsById={sprintsById}
             onTaskClick={onTaskClick}
             selectedTaskId={selectedTaskId}
+            focusedTaskId={focusedTaskId}
             selectedIds={selectedIds}
             onToggleSelect={onToggleSelect}
           />
@@ -559,6 +564,7 @@ export default function ListView({
   sprintsById = {},
   onTaskClick,
   selectedTaskId,
+  focusedTaskId,
   selectedIds = new Set(),
   onToggleSelect,
   workspaceId,
@@ -619,6 +625,7 @@ export default function ListView({
     sprintsById,
     onTaskClick,
     selectedTaskId,
+    focusedTaskId,
     selectedIds,
     onToggleSelect,
   };

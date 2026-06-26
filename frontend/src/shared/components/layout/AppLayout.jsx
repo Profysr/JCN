@@ -73,6 +73,9 @@ export default function AppLayout() {
     onOpenFilters: () => {
       window.dispatchEvent(new CustomEvent("jcn:open-filters"));
     },
+    onFocusSearch: () => {
+      window.dispatchEvent(new CustomEvent("jcn:focus-search"));
+    },
   });
 
   return (

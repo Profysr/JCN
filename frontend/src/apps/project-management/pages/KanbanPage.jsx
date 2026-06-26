@@ -69,6 +69,7 @@ const TaskDetailPanel = lazy(
 );
 import { cn } from "@/shared/lib/utils";
 import { useBulkUpdateTasks } from "@/apps/project-management/hooks/useBulkActions";
+import { useBoardShortcuts } from "@/apps/project-management/hooks/useBoardShortcuts";
 
 const EMPTY_FILTERS = {
   search: "",
@@ -221,6 +222,10 @@ export default function KanbanPage() {
     setFocusCommentId(searchParams.get("comment") || null);
   }, [searchParams]);
 
+  // Keyboard-focus state — tracks which task the arrow keys have highlighted.
+  // Distinct from selectedTaskId (which opens the detail panel).
+  const [focusedTaskId, setFocusedTaskId] = useState(null);
+
   // Use for bulk updates
   const [selectedIds, setSelectedIds] = useState(new Set());
 
@@ -263,12 +268,22 @@ export default function KanbanPage() {
 
   const openTask = (taskId) => {
     setSelectedTaskId(taskId);
+    setFocusedTaskId(null);
     setSearchParams({ task: taskId }, { replace: true });
   };
   const closeTask = () => {
     setSelectedTaskId(null);
     setSearchParams({}, { replace: true });
   };
+
+  useBoardShortcuts({
+    tasks,
+    selectedTaskId,
+    focusedTaskId,
+    setFocusedTaskId,
+    onOpenTask: openTask,
+    onCloseTask: closeTask,
+  });
 
   const labelsById = useMemo(
     () => Object.fromEntries(labels.map((l) => [l.id, l])),
@@ -566,6 +581,7 @@ export default function KanbanPage() {
             sprintsById={sprintsById}
             onTaskClick={(id) => openTask(id)}
             selectedTaskId={selectedTaskId}
+            focusedTaskId={focusedTaskId}
             selectedIds={selectedIds}
             onToggleSelect={toggleSelect}
             workspaceId={workspaceId}

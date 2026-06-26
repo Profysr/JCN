@@ -447,6 +447,16 @@ export default function FilterBar({
 }) {
   const [savingName, setSavingName] = useState("");
   const [showSaveInput, setShowSaveInput] = useState(false);
+  const searchRef = useRef(null);
+
+  useEffect(() => {
+    const handler = () => {
+      searchRef.current?.focus();
+      searchRef.current?.select();
+    };
+    window.addEventListener("jcn:focus-search", handler);
+    return () => window.removeEventListener("jcn:focus-search", handler);
+  }, []);
 
   const hasFilters =
     filters.search ||
@@ -487,6 +497,7 @@ export default function FilterBar({
       <div className="relative">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
         <input
+          ref={searchRef}
           className="pl-8 pr-3 py-1.5 text-xs border rounded-md bg-background outline-none focus:ring-1 focus:ring-ring w-44 placeholder:text-muted-foreground"
           placeholder="Search tasks…"
           value={filters.search}

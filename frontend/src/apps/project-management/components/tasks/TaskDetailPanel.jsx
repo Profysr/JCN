@@ -52,15 +52,12 @@ import {
   AttachmentsPanel,
   DependenciesPanel,
   LayoutPanel,
-  RequestApprovalDropdown
+  RequestApprovalDropdown,
 } from "./TaskDetailPanels";
-import {
-  ActivityTabsSection,
-} from "./TaskActivityTabs";
+import { ActivityTabsSection } from "./TaskActivityTabs";
 import { useBoard } from "@/apps/project-management/hooks/useBoards";
 import BoardTypeIcon from "@/shared/components/ui/BoardTypeIcon";
 import { workspaceUrl } from "@/shared/lib/navLinks";
-
 
 const DESC_SIZE_CLASSES = {
   compact: "min-h-[80px]",
@@ -120,11 +117,13 @@ export default function TaskDetailPanel({
   const [activePanel, setActivePanel] = useState(
     () => getLayoutPrefs().defaultPanel ?? "properties",
   );
+  // Incremented by the `e` keyboard shortcut to tell TaskTitle to enter edit mode.
+  const [editTitleSignal, setEditTitleSignal] = useState(0);
   const [approvalDropdown, setApprovalDropdown] = useState(false);
   const approvalBtnRef = useRef(null);
   const [conflict, setConflict] = useState(null);
-  const [typingUsers, setTypingUsers] = useState([]);
-  const typingTimers = useRef({});
+  // const [typingUsers, setTypingUsers] = useState([]);   // typing indicators — disabled
+  // const typingTimers = useRef({});
   const [confirmState, setConfirmState] = useState(null);
 
   const updateLayoutPrefs = (patch) => {
@@ -136,36 +135,56 @@ export default function TaskDetailPanel({
   const handlePanelSelect = (id) =>
     setActivePanel((cur) => (cur === id ? null : id));
 
+  // useEffect(() => {
+  //   const handler = (e) => {
+  //     const { task_id, user_id, user_name, is_typing } = e.detail;
+  //     if (task_id !== taskId || user_id === user?.id) return;
+  //     setTypingUsers((prev) => {
+  //       if (is_typing)
+  //         return prev.some((u) => u.id === user_id)
+  //           ? prev
+  //           : [...prev, { id: user_id, name: user_name }];
+  //       return prev.filter((u) => u.id !== user_id);
+  //     });
+  //     if (is_typing) {
+  //       clearTimeout(typingTimers.current[user_id]);
+  //       typingTimers.current[user_id] = setTimeout(
+  //         () => setTypingUsers((prev) => prev.filter((u) => u.id !== user_id)),
+  //         4000,
+  //       );
+  //     }
+  //   };
+  //   window.addEventListener("jcn:typing", handler);
+  //   return () => window.removeEventListener("jcn:typing", handler);
+  // }, [taskId, user?.id]);
+
+  // Escape is now handled centrally by useBoardShortcuts in KanbanPage.
+  // This panel only responds to task-action events dispatched from that hook.
   useEffect(() => {
-    const handler = (e) => {
-      const { task_id, user_id, user_name, is_typing } = e.detail;
-      if (task_id !== taskId || user_id === user?.id) return;
-      setTypingUsers((prev) => {
-        if (is_typing)
-          return prev.some((u) => u.id === user_id)
-            ? prev
-            : [...prev, { id: user_id, name: user_name }];
-        return prev.filter((u) => u.id !== user_id);
-      });
-      if (is_typing) {
-        clearTimeout(typingTimers.current[user_id]);
-        typingTimers.current[user_id] = setTimeout(
-          () => setTypingUsers((prev) => prev.filter((u) => u.id !== user_id)),
-          4000,
-        );
+    const handler = (ev) => {
+      const { action } = ev.detail ?? {};
+      switch (action) {
+        case "edit-title":
+          setEditTitleSignal((n) => n + 1);
+          break;
+        case "copy-link": {
+          const url = `${window.location.origin}${window.location.pathname}?task=${task?.id}`;
+          navigator.clipboard?.writeText(url);
+          break;
+        }
+        case "clone":
+          handleClone();
+          break;
+        case "open-approval":
+          setApprovalDropdown((v) => !v);
+          break;
+        default:
+          break;
       }
     };
-    window.addEventListener("jcn:typing", handler);
-    return () => window.removeEventListener("jcn:typing", handler);
-  }, [taskId, user?.id]);
-
-  useEffect(() => {
-    const handler = (e) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [onClose]);
+    window.addEventListener("jcn:task-action", handler);
+    return () => window.removeEventListener("jcn:task-action", handler);
+  }, [task?.id, handleClone]);
 
   if (isLoading || !task) {
     return (
@@ -176,9 +195,9 @@ export default function TaskDetailPanel({
         showFooter={false}
         flexBody={true}
         padding="p-0"
-        maxWidth="80rem"
+        maxWidth="90vw"
       >
-        <div className="flex items-center justify-center min-h-[480px]">
+        <div className="flex items-center justify-center min-h-[560px]">
           <button
             onClick={onClose}
             className="absolute top-3 right-3 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
@@ -202,7 +221,7 @@ export default function TaskDetailPanel({
       showFooter={false}
       flexBody={true}
       padding="p-0"
-      maxWidth="80rem"
+      maxWidth="90vw"
     >
       <PanelHeader
         task={task}
@@ -268,6 +287,7 @@ export default function TaskDetailPanel({
             canEdit={canEdit}
             update={update}
             setConflict={setConflict}
+            editSignal={editTitleSignal}
           />
 
           <div className="rounded-md border border-border bg-muted/20 overflow-hidden">
@@ -280,7 +300,8 @@ export default function TaskDetailPanel({
               <VoltEditor
                 value={task.description || ""}
                 onBlur={(md) => {
-                  if (md !== task.description) update.mutate({ description: md });
+                  if (md !== task.description)
+                    update.mutate({ description: md });
                 }}
                 readOnly={!canEdit}
                 placeholder="Add a description…"
@@ -319,7 +340,7 @@ export default function TaskDetailPanel({
               taskId={taskId}
               user={user}
               members={members}
-              typingUsers={typingUsers}
+              // typingUsers={typingUsers}
               focusCommentId={focusCommentId}
               commentCount={task.comment_count}
               approvals={approvals}
@@ -367,10 +388,7 @@ export default function TaskDetailPanel({
         )}
 
         {/* ── Icon strip ────────────────────────────────────────── */}
-        <IconStrip
-          activePanel={activePanel}
-          onSelect={handlePanelSelect}
-        />
+        <IconStrip activePanel={activePanel} onSelect={handlePanelSelect} />
       </div>
 
       {confirmState && (

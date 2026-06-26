@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { getShortcutDisplay } from "@/shared/lib/shortcutsRegistry";
 import { useParams } from "react-router-dom";
 import {
   X,
@@ -14,7 +15,7 @@ import {
 import { cn } from "@/shared/lib/utils";
 import { useTasks } from "@/apps/project-management/hooks/useTasks";
 
-export function TaskTitle({ task, canEdit, update, setConflict }) {
+export function TaskTitle({ task, canEdit, update, setConflict, editSignal = 0 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const ref = useRef(null);
@@ -22,6 +23,14 @@ export function TaskTitle({ task, canEdit, update, setConflict }) {
   useEffect(() => {
     if (editing && ref.current) ref.current.focus();
   }, [editing]);
+
+  // Triggered by the `e` keyboard shortcut via jcn:task-action
+  useEffect(() => {
+    if (editSignal > 0 && canEdit) {
+      setDraft(task.title);
+      setEditing(true);
+    }
+  }, [editSignal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSave = () => {
     if (draft.trim() && draft !== task.title)
@@ -56,15 +65,22 @@ export function TaskTitle({ task, canEdit, update, setConflict }) {
   }
 
   return (
-    <h2
-      onClick={() => canEdit && (setDraft(task.title), setEditing(true))}
-      className={cn(
-        "text-xl font-bold leading-snug rounded px-1 -mx-1 py-0.5",
-        canEdit && "cursor-text hover:bg-accent/40",
+    <div className="group relative">
+      <h2
+        onClick={() => canEdit && (setDraft(task.title), setEditing(true))}
+        className={cn(
+          "text-xl font-bold leading-snug rounded px-1 -mx-1 py-0.5",
+          canEdit && "cursor-text hover:bg-accent/40",
+        )}
+      >
+        {task.title}
+      </h2>
+      {canEdit && (
+        <kbd className="absolute -top-1 right-0 font-mono bg-muted/60 border border-border/60 rounded px-1 py-px leading-none text-[9px] text-muted-foreground/50 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+          {getShortcutDisplay("task:edit-title")}
+        </kbd>
       )}
-    >
-      {task.title}
-    </h2>
+    </div>
   );
 }
 
@@ -203,6 +219,16 @@ export function ChildTasksSection({
   useEffect(() => {
     if (addingNew) newInputRef.current?.focus();
   }, [addingNew]);
+
+  useEffect(() => {
+    const handler = (ev) => {
+      if (!canEdit) return;
+      if (ev.detail?.action === "child-new") setAddingNew(true);
+      if (ev.detail?.action === "child-attach") setShowPicker(true);
+    };
+    window.addEventListener("jcn:task-action", handler);
+    return () => window.removeEventListener("jcn:task-action", handler);
+  }, [canEdit]);
 
   const handleAdd = (e) => {
     e?.preventDefault();
@@ -390,6 +416,15 @@ export function ChecklistSection({
   useEffect(() => {
     if (adding) inputRef.current?.focus();
   }, [adding]);
+
+  useEffect(() => {
+    const handler = (ev) => {
+      if (!canEdit) return;
+      if (ev.detail?.action === "subtask-new") setAdding(true);
+    };
+    window.addEventListener("jcn:task-action", handler);
+    return () => window.removeEventListener("jcn:task-action", handler);
+  }, [canEdit]);
 
   const handleAdd = (e) => {
     e?.preventDefault();

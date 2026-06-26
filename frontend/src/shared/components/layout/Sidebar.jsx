@@ -8,6 +8,7 @@ import UserPanel from "@/shared/components/layout/UserPanel";
 import { ShortcutTooltip } from "@/shared/components/ui/ShortcutTooltip";
 import AppSwitcherDropdown from "@/shared/components/layout/AppSwitcherDropdown";
 import { useActiveApp } from "@/shared/hooks/useActiveApp";
+import { getNavShortcutDisplayMap } from "@/shared/lib/shortcutsRegistry";
 
 export default function Sidebar({
   workspace,
@@ -28,15 +29,7 @@ export default function Sidebar({
   const activeApp = useActiveApp();
   const navigate = useNavigate();
 
-  const NAV_SHORTCUTS = {
-    dashboards: "g d",
-    boards: "g p",
-    "my-work": "g w",
-    goals: "g g",
-    analytics: "g a",
-    settings: "g s",
-    members: "g m"
-  };
+  const NAV_SHORTCUTS = getNavShortcutDisplayMap();
 
   // Build filtered nav groups — gated only by workspace-level permissions (e.g. settings.manage)
   const allNavGroups = resolvedNavGroups()
