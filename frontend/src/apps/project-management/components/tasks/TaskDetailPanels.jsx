@@ -42,7 +42,7 @@ const PANEL_GROUPS = [
 export function IconStrip({ activePanel, onSelect }) {
   const itemsById = Object.fromEntries(PANEL_ITEMS.map((p) => [p.id, p]));
   return (
-    <div className="w-12 flex-shrink-0 border-l border-border flex flex-col items-center py-3 bg-background">
+    <div className="w-12 flex-shrink-0 border-l border-border flex flex-col items-center py-3 bg-muted/20">
       {PANEL_GROUPS.map((group, gi) => (
         <div
           key={gi}
@@ -88,7 +88,7 @@ export function PanelSectionHeader({ title }) {
 function PropCell({ label, children, className }) {
   return (
     <div className={cn("flex flex-col gap-0.5", className)}>
-      <span className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground/40 pl-2">
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 pl-2">
         {label}
       </span>
       {children}
@@ -154,231 +154,262 @@ export function PropertiesPanel({
   onCreateLabel,
 }) {
   return (
-    <div className="px-3 py-4 space-y-2">
+    <div className="px-3 py-4 space-y-3">
       {/* Status ── full width prominent */}
-      <PropCell label="Status">
-        <Dropdown
-          disabled={!canEdit}
-          value={task.status_detail?.id || ""}
-          options={projectStatuses.map((s) => ({
-            value: s.id,
-            label: s.name,
-            color: s.color,
-          }))}
-          onChange={(v) => update.mutate({ status_id: v })}
-          renderTrigger={(opt) =>
-            opt ? (
-              <div
-                className="w-full text-center font-semibold text-xs py-1 rounded-sm uppercase tracking-wide"
-                style={{ backgroundColor: opt.color + "10", color: opt.color }}
-              >
-                {opt.label}
-              </div>
-            ) : null
-          }
-          renderOption={(opt) => (
-            <span className="flex items-center gap-2 text-xs font-semibold uppercase">
-              <span
-                style={{ color: opt.color, backgroundColor: opt.color + "25" }}
-                className="px-2 py-0.5 rounded-sm"
-              >
-                {opt.label}
-              </span>
-            </span>
-          )}
-        />
-      </PropCell>
-
-      {/* Priority + Type ── 2 col */}
-      <div className="grid grid-cols-2 gap-1.5">
-        <PropCell label="Priority">
+      <div className="rounded-lg border border-border/50 bg-background/60 p-2.5 space-y-2">
+        <PropCell label="Status">
           <Dropdown
             disabled={!canEdit}
-            value={task.priority}
-            options={PRIORITY_OPTIONS}
-            onChange={(v) => update.mutate({ priority: v })}
-            placement="left"
-            renderTrigger={(opt) => {
-              if (!opt) return null;
-              const Icon = opt.icon;
-              return (
-                <span
-                  className={cn(
-                    "flex items-center gap-1 text-xs font-semibold truncate",
-                    opt.color,
-                  )}
+            value={task.status_detail?.id || ""}
+            options={projectStatuses.map((s) => ({
+              value: s.id,
+              label: s.name,
+              color: s.color,
+            }))}
+            onChange={(v) => update.mutate({ status_id: v })}
+            renderTrigger={(opt) =>
+              opt ? (
+                <div
+                  className="w-full text-center font-semibold text-xs py-1 rounded-sm uppercase tracking-wide"
+                  style={{ backgroundColor: opt.color + "10", color: opt.color }}
                 >
-                  {Icon && <Icon className="w-3 h-3 flex-shrink-0" />}
-                  <span className="truncate">{opt.label}</span>
-                </span>
-              );
-            }}
-            renderOption={(opt) => {
-              const Icon = opt.icon;
-              return (
-                <span
-                  className={cn(
-                    "flex items-center gap-1.5 text-xs font-semibold",
-                    opt.color,
-                  )}
-                >
-                  {Icon && <Icon className="w-3.5 h-3.5 flex-shrink-0" />}
                   {opt.label}
-                </span>
-              );
-            }}
-          />
-        </PropCell>
-
-        <PropCell label="Type">
-          <Dropdown
-            disabled={!canEdit}
-            value={task.task_type || "task"}
-            options={TASK_TYPES.map((t) => ({ ...t }))}
-            onChange={(v) => update.mutate({ task_type: v })}
-            placement="right"
-            renderTrigger={(opt) => {
-              if (!opt) return null;
-              const Icon = opt.icon;
-              return (
-                <span
-                  className={cn(
-                    "flex items-center gap-1 text-xs font-semibold truncate",
-                    opt.color,
-                  )}
-                >
-                  {Icon && <Icon className="w-3 h-3 flex-shrink-0" />}
-                  <span className="truncate">{opt.label}</span>
-                </span>
-              );
-            }}
-            renderOption={(opt) => {
-              const Icon = opt.icon;
-              return (
-                <span
-                  className={cn(
-                    "flex items-center gap-1.5 text-xs font-semibold",
-                    opt.color,
-                  )}
-                >
-                  {Icon && <Icon className="w-3.5 h-3.5 flex-shrink-0" />}
-                  {opt.label}
-                </span>
-              );
-            }}
-          />
-        </PropCell>
-      </div>
-
-      {/* Assignee ── full width */}
-      <PropCell label="Assignee">
-        <Dropdown
-          disabled={!canEdit}
-          value={task.assignee?.id || ""}
-          placeholder="Unassigned"
-          options={[
-            { value: "", label: "Unassigned" },
-            ...members.map((m) => ({
-              value: m.user?.id,
-              label: m.user?.full_name || m.user?.email,
-            })),
-          ]}
-          onChange={(v) => update.mutate({ assignee_id: v || null })}
-          renderTrigger={(opt) =>
-            opt && (
-              <span className="flex items-center gap-2">
-                <Avatar name={opt.label} size="xs" />
-                <span className="font-semibold text-xs truncate">
-                  {opt.label}
-                </span>
-              </span>
-            )
-          }
-          renderOption={(opt) => (
-            <span className="flex items-center gap-2">
-              {opt.value ? (
-                <Avatar name={opt.label} size="xs" />
-              ) : (
-                <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                  <User className="w-3 h-3 text-muted-foreground" />
                 </div>
-              )}
-              <span className="font-semibold text-xs">{opt.label}</span>
-            </span>
-          )}
-        />
-      </PropCell>
-
-      <div className="h-px bg-border/30 mx-1 my-0.5" />
-
-      {/* Dates ── 2 col */}
-      <div className="grid grid-cols-2 gap-1.5">
-        <PropCell label="Start Date">
-          <DateField
-            value={task.start_date || ""}
-            onChange={(e) =>
-              update.mutate({ start_date: e.target.value || null })
+              ) : null
             }
-            disabled={!canEdit}
+            renderOption={(opt) => (
+              <span className="flex items-center gap-2 text-xs font-semibold uppercase">
+                <span
+                  style={{ color: opt.color, backgroundColor: opt.color + "25" }}
+                  className="px-2 py-0.5 rounded-sm"
+                >
+                  {opt.label}
+                </span>
+              </span>
+            )}
           />
         </PropCell>
-        <PropCell label="Due Date">
-          <DateField
-            value={task.due_date || ""}
-            onChange={(e) =>
-              update.mutate({ due_date: e.target.value || null })
-            }
+
+        {/* Priority + Type ── 2 col */}
+        <div className="grid grid-cols-2 gap-1.5">
+          <PropCell label="Priority">
+            <Dropdown
+              disabled={!canEdit}
+              value={task.priority}
+              options={PRIORITY_OPTIONS}
+              onChange={(v) => update.mutate({ priority: v })}
+              placement="left"
+              renderTrigger={(opt) => {
+                if (!opt) return null;
+                const Icon = opt.icon;
+                return (
+                  <span
+                    className={cn(
+                      "flex items-center gap-1 text-xs font-semibold truncate",
+                      opt.color,
+                    )}
+                  >
+                    {Icon && <Icon className="w-3 h-3 flex-shrink-0" />}
+                    <span className="truncate">{opt.label}</span>
+                  </span>
+                );
+              }}
+              renderOption={(opt) => {
+                const Icon = opt.icon;
+                return (
+                  <span
+                    className={cn(
+                      "flex items-center gap-1.5 text-xs font-semibold",
+                      opt.color,
+                    )}
+                  >
+                    {Icon && <Icon className="w-3.5 h-3.5 flex-shrink-0" />}
+                    {opt.label}
+                  </span>
+                );
+              }}
+            />
+          </PropCell>
+
+          <PropCell label="Type">
+            <Dropdown
+              disabled={!canEdit}
+              value={task.task_type || "task"}
+              options={TASK_TYPES.map((t) => ({ ...t }))}
+              onChange={(v) => update.mutate({ task_type: v })}
+              placement="right"
+              renderTrigger={(opt) => {
+                if (!opt) return null;
+                const Icon = opt.icon;
+                return (
+                  <span
+                    className={cn(
+                      "flex items-center gap-1 text-xs font-semibold truncate",
+                      opt.color,
+                    )}
+                  >
+                    {Icon && <Icon className="w-3 h-3 flex-shrink-0" />}
+                    <span className="truncate">{opt.label}</span>
+                  </span>
+                );
+              }}
+              renderOption={(opt) => {
+                const Icon = opt.icon;
+                return (
+                  <span
+                    className={cn(
+                      "flex items-center gap-1.5 text-xs font-semibold",
+                      opt.color,
+                    )}
+                  >
+                    {Icon && <Icon className="w-3.5 h-3.5 flex-shrink-0" />}
+                    {opt.label}
+                  </span>
+                );
+              }}
+            />
+          </PropCell>
+        </div>
+
+        {/* Assignee ── full width */}
+        <PropCell label="Assignee">
+          <Dropdown
             disabled={!canEdit}
+            value={task.assignee?.id || ""}
+            placeholder="Unassigned"
+            options={[
+              { value: "", label: "Unassigned" },
+              ...members.map((m) => ({
+                value: m.user?.id,
+                label: m.user?.full_name || m.user?.email,
+              })),
+            ]}
+            onChange={(v) => update.mutate({ assignee_id: v || null })}
+            renderTrigger={(opt) =>
+              opt && (
+                <span className="flex items-center gap-2">
+                  <Avatar name={opt.label} size="xs" />
+                  <span className="font-semibold text-xs truncate">
+                    {opt.label}
+                  </span>
+                </span>
+              )
+            }
+            renderOption={(opt) => (
+              <span className="flex items-center gap-2">
+                {opt.value ? (
+                  <Avatar name={opt.label} size="xs" />
+                ) : (
+                  <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                    <User className="w-3 h-3 text-muted-foreground" />
+                  </div>
+                )}
+                <span className="font-semibold text-xs">{opt.label}</span>
+              </span>
+            )}
           />
+        </PropCell>
+
+        <div className="h-px bg-border/40 mx-1" />
+
+        {/* Created by ── read-only */}
+        <PropCell label="Created by">
+          <div className="flex items-center gap-2 px-2 py-1.5">
+            {task.created_by ? (
+              <>
+                <Avatar
+                  name={task.created_by.full_name || task.created_by.email}
+                  size="xs"
+                />
+                <span className="font-semibold text-xs truncate text-foreground">
+                  {task.created_by.full_name || task.created_by.email}
+                </span>
+              </>
+            ) : (
+              <span className="text-xs text-muted-foreground/50">Unknown</span>
+            )}
+            {task.created_at && (
+              <Tooltip content={format(new Date(task.created_at), "MMM d, yyyy · h:mm a")}>
+                <span className="text-[10px] text-muted-foreground/50 ml-auto flex-shrink-0">
+                  {format(new Date(task.created_at), "MMM d")}
+                </span>
+              </Tooltip>
+            )}
+          </div>
         </PropCell>
       </div>
 
-      {/* Estimates ── 2 col */}
-      <div className="grid grid-cols-2 gap-1.5">
-        <PropCell label="Story Points">
-          <div className="px-2 py-1.5 rounded-lg hover:bg-accent/50 transition-colors">
-            <input
-              type="number"
-              min="0"
-              placeholder="—"
-              className="w-full bg-transparent font-semibold text-xs outline-none disabled:opacity-50 [appearance:textfield]"
-              value={task.estimate_points ?? ""}
+      {/* Dates + Estimates ── grouped card */}
+      <div className="rounded-lg border border-border/50 bg-background/60 p-2.5 space-y-2">
+        {/* Dates ── 2 col */}
+        <div className="grid grid-cols-2 gap-1.5">
+          <PropCell label="Start Date">
+            <DateField
+              value={task.start_date || ""}
               onChange={(e) =>
-                update.mutate({
-                  estimate_points:
-                    e.target.value === "" ? null : parseInt(e.target.value),
-                })
+                update.mutate({ start_date: e.target.value || null })
               }
               disabled={!canEdit}
             />
-          </div>
-        </PropCell>
-        <PropCell label="Est. Hours">
-          <div className="px-2 py-1.5 rounded-lg hover:bg-accent/50 transition-colors">
-            <input
-              type="number"
-              min="0"
-              step="0.5"
-              placeholder="—"
-              className="w-full bg-transparent font-semibold text-xs outline-none disabled:opacity-50 [appearance:textfield]"
-              value={task.estimate_hours ?? ""}
+          </PropCell>
+          <PropCell label="Due Date">
+            <DateField
+              value={task.due_date || ""}
               onChange={(e) =>
-                update.mutate({
-                  estimate_hours:
-                    e.target.value === "" ? null : parseFloat(e.target.value),
-                })
+                update.mutate({ due_date: e.target.value || null })
               }
               disabled={!canEdit}
             />
-          </div>
-        </PropCell>
-      </div>
+          </PropCell>
+        </div>
 
-      <div className="h-px bg-border/30 mx-1 my-0.5" />
+        <div className="h-px bg-border/40 mx-1" />
+
+        {/* Estimates ── 2 col */}
+        <div className="grid grid-cols-2 gap-1.5">
+          <PropCell label="Story Points">
+            <div className="px-2 py-1.5 rounded-lg hover:bg-accent/50 transition-colors">
+              <input
+                type="number"
+                min="0"
+                placeholder="—"
+                className="w-full bg-transparent font-semibold text-xs outline-none disabled:opacity-50 [appearance:textfield]"
+                value={task.estimate_points ?? ""}
+                onChange={(e) =>
+                  update.mutate({
+                    estimate_points:
+                      e.target.value === "" ? null : parseInt(e.target.value),
+                  })
+                }
+                disabled={!canEdit}
+              />
+            </div>
+          </PropCell>
+          <PropCell label="Est. Hours">
+            <div className="px-2 py-1.5 rounded-lg hover:bg-accent/50 transition-colors">
+              <input
+                type="number"
+                min="0"
+                step="0.5"
+                placeholder="—"
+                className="w-full bg-transparent font-semibold text-xs outline-none disabled:opacity-50 [appearance:textfield]"
+                value={task.estimate_hours ?? ""}
+                onChange={(e) =>
+                  update.mutate({
+                    estimate_hours:
+                      e.target.value === "" ? null : parseFloat(e.target.value),
+                  })
+                }
+                disabled={!canEdit}
+              />
+            </div>
+          </PropCell>
+        </div>
+      </div>
 
       {/* Labels */}
       <div>
-        <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground/40 pl-2 mb-2">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 pl-2 mb-2">
           Labels
         </p>
         <div className="flex flex-wrap gap-1.5 items-center px-1">
@@ -419,7 +450,7 @@ export function PropertiesPanel({
 
       {task.key_result_links?.length > 0 && (
         <div className="pt-1">
-          <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground/40 pl-2 mb-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 pl-2 mb-2">
             Contributes to
           </p>
           <div className="flex flex-col gap-1 px-1">

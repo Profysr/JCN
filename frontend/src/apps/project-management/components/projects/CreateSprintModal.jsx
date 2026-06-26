@@ -51,7 +51,7 @@ export function CreateSprintModal({
           </label>
           <input
             autoFocus
-            className="w-full text-sm border rounded-lg px-3 py-2 bg-background outline-none focus:ring-2 focus:ring-ring"
+            className="w-full text-sm border rounded-sm px-3 py-2 bg-background outline-none focus:ring-2 focus:ring-ring"
             placeholder="e.g. Sprint 3"
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -64,7 +64,7 @@ export function CreateSprintModal({
             Goal <span className="text-muted-foreground/60">(optional)</span>
           </label>
           <input
-            className="w-full text-sm border rounded-lg px-3 py-2 bg-background outline-none focus:ring-2 focus:ring-ring"
+            className="w-full text-sm border rounded-sm px-3 py-2 bg-background outline-none focus:ring-2 focus:ring-ring"
             placeholder="What will this sprint accomplish?"
             value={form.goal}
             onChange={(e) => setForm({ ...form, goal: e.target.value })}
@@ -78,7 +78,7 @@ export function CreateSprintModal({
             </label>
             <input
               type="date"
-              className="w-full text-sm border rounded-lg px-3 py-2 bg-background outline-none focus:ring-2 focus:ring-ring"
+              className="w-full text-sm border rounded-sm px-3 py-2 bg-background outline-none focus:ring-2 focus:ring-ring"
               value={form.start_date}
               onChange={(e) => setForm({ ...form, start_date: e.target.value })}
             />
@@ -89,7 +89,7 @@ export function CreateSprintModal({
             </label>
             <input
               type="date"
-              className="w-full text-sm border rounded-lg px-3 py-2 bg-background outline-none focus:ring-2 focus:ring-ring"
+              className="w-full text-sm border rounded-sm px-3 py-2 bg-background outline-none focus:ring-2 focus:ring-ring"
               value={form.end_date}
               onChange={(e) => setForm({ ...form, end_date: e.target.value })}
             />

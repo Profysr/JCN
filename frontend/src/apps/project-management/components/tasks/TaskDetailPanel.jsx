@@ -270,19 +270,23 @@ export default function TaskDetailPanel({
             setConflict={setConflict}
           />
 
-          <div>
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-              Description
-            </p>
-            <VoltEditor
-              value={task.description || ""}
-              onBlur={(md) => {
-                if (md !== task.description) update.mutate({ description: md });
-              }}
-              readOnly={!canEdit}
-              placeholder="Add a description…"
-              className={descSizeClass}
-            />
+          <div className="rounded-md border border-border bg-muted/20 overflow-hidden">
+            <div className="px-3 pt-2.5 pb-1 border-b border-border/40">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                Description
+              </p>
+            </div>
+            <div className="px-1 py-1">
+              <VoltEditor
+                value={task.description || ""}
+                onBlur={(md) => {
+                  if (md !== task.description) update.mutate({ description: md });
+                }}
+                readOnly={!canEdit}
+                placeholder="Add a description…"
+                className={descSizeClass}
+              />
+            </div>
           </div>
 
           {layoutPrefs.showWorkItems !== false && (
@@ -308,24 +312,24 @@ export default function TaskDetailPanel({
             </>
           )}
 
-          <div className="h-px bg-border/30 -mx-6" />
-
-          <ActivityTabsSection
-            workspaceId={workspaceId}
-            boardId={boardId}
-            taskId={taskId}
-            user={user}
-            members={members}
-            typingUsers={typingUsers}
-            focusCommentId={focusCommentId}
-            commentCount={task.comment_count}
-            approvals={approvals}
-          />
+          <div className="-mx-6 px-6 pt-5 pb-4 bg-muted/15 border-t border-border">
+            <ActivityTabsSection
+              workspaceId={workspaceId}
+              boardId={boardId}
+              taskId={taskId}
+              user={user}
+              members={members}
+              typingUsers={typingUsers}
+              focusCommentId={focusCommentId}
+              commentCount={task.comment_count}
+              approvals={approvals}
+            />
+          </div>
         </div>
 
         {/* ── Side panel — only mounted when a panel is active ──── */}
         {activePanel && (
-          <div className="w-72 flex-shrink-0 border-l border-border overflow-y-auto bg-muted/10 flex flex-col">
+          <div className="w-72 flex-shrink-0 border-l border-border overflow-y-auto bg-muted/30 flex flex-col">
             <PanelSectionHeader
               title={PANEL_ITEMS.find((p) => p.id === activePanel)?.label ?? ""}
             />

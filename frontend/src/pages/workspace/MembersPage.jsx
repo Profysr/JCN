@@ -45,6 +45,11 @@ import { useWorkspace } from "@/shared/hooks/useWorkspace";
 import { useAuthStore } from "@/store/authStore";
 import { usePermission } from "@/contexts/PermissionsContext";
 import InviteModal from "@/shared/components/workspace/InviteModal";
+import {
+  Tabs,
+  TabsUnderlineList,
+  TabsUnderlineTrigger,
+} from "@/shared/components/ui/Tabs";
 import { ConfirmModal } from "@/shared/components/ui/ConfirmModal";
 import RolesSection from "@/shared/components/workspace/RolesSection";
 import PermissionsReferenceModal from "@/shared/components/workspace/PermissionsReferenceModal";
@@ -1091,33 +1096,21 @@ export default function MembersPage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-0.5 border-b">
-          {[
-            { key: "members", label: "Members" },
-            { key: "app-access", label: "App Access" },
-            { key: "roles", label: "Roles & Permissions", icon: Shield },
-          ].map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.key}
-                onClick={() => {
-                  setActiveTab(tab.key);
-                  setSelectedMemberId(null);
-                }}
-                className={cn(
-                  "flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px",
-                  activeTab === tab.key
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {Icon && <Icon className="w-3.5 h-3.5" />}
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
+        <Tabs
+          value={activeTab}
+          onChange={(key) => {
+            setActiveTab(key);
+            setSelectedMemberId(null);
+          }}
+        >
+          <TabsUnderlineList>
+            <TabsUnderlineTrigger value="members">Members</TabsUnderlineTrigger>
+            <TabsUnderlineTrigger value="app-access">App Access</TabsUnderlineTrigger>
+            <TabsUnderlineTrigger value="roles" icon={Shield}>
+              Roles & Permissions
+            </TabsUnderlineTrigger>
+          </TabsUnderlineList>
+        </Tabs>
 
         {/* ── Members tab ── */}
         {activeTab === "members" && (
