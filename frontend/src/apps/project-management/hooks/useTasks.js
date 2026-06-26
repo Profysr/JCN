@@ -6,7 +6,6 @@ import {
 } from "@tanstack/react-query";
 import api from "@/shared/lib/api";
 import { SOCKET_BACKED } from "@/shared/lib/queryClient";
-import { useInvalidatingMutation } from "@/shared/hooks/useInvalidatingMutation";
 import { useToast } from "@/shared/components/ui/toast";
 
 // ── Query key factories ───────────────────────────────────────────────────────
@@ -90,13 +89,14 @@ export const useTaskComments = (workspaceId, boardId, taskId) =>
     queryKey: commentsKey(workspaceId, boardId, taskId),
     queryFn: ({ pageParam }) => {
       const url = pageParam
-        ? pageParam // full cursor URL from `next`
+        ? pageParam
         : `/api/workspaces/${workspaceId}/boards/${boardId}/tasks/${taskId}/comments/`;
       return api.get(url).then((r) => r.data);
     },
     getNextPageParam: (lastPage) => lastPage.next ?? undefined,
     enabled: !!taskId,
-    // Live via board socket (comment.created/deleted); focus refetch would also reset the infinite scroll position, so disable it.
+    // Live via board socket (comment.created/deleted); focus refetch would also
+    // reset the infinite scroll position, so disable it.
     ...SOCKET_BACKED,
   });
 
@@ -117,17 +117,25 @@ export const useTaskActivities = (workspaceId, boardId, taskId) =>
 
 // ── Task CRUD ─────────────────────────────────────────────────────────────────
 
-export const useCreateTask = (workspaceId, boardId) =>
-  useInvalidatingMutation(
-    (data) =>
+// Explicit useMutation (not useInvalidatingMutation) so we can attach onError.
+export const useCreateTask = (workspaceId, boardId) => {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (data) =>
       api
         .post(`/api/workspaces/${workspaceId}/boards/${boardId}/tasks/`, data)
         .then((r) => r.data),
-    ["tasks", workspaceId, boardId],
-    ["sprint", workspaceId, boardId],
-  );
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tasks", workspaceId, boardId] });
+      qc.invalidateQueries({ queryKey: ["sprint", workspaceId, boardId] });
+    },
+    onError: () => toast({ title: "Failed to create task", type: "error" }),
+  });
+};
 
-// ── Cache-merge helpers ─────────────────────────────────────────────────────
+// ── Cache-merge helpers ───────────────────────────────────────────────────────
+
 const mergeTaskInLists = (qc, workspaceId, boardId, task) => {
   qc.setQueriesData({ queryKey: ["tasks", workspaceId, boardId] }, (old) =>
     Array.isArray(old)
@@ -143,36 +151,64 @@ const mergeTaskInLists = (qc, workspaceId, boardId, task) => {
   );
 };
 
-// Created custom invalidating sprint function
-const SPRINT_AFFECTING = ["status_id", "sprint_id", "sprint"];
-const maybeInvalidateSprint = (qc, workspaceId, boardId, changed) => {
+// Patches sprint task_count in-place: decrements the old sprint (if any) and
+// increments the new one. Falls back to a full invalidation for status changes
+// so the server can recompute sprint completion correctly.
+const SPRINT_AFFECTING = ["status_id", "sprint_id"];
+
+const maybeInvalidateSprint = (
+  qc,
+  workspaceId,
+  boardId,
+  changed,
+  oldSprintId,
+) => {
   if (!changed || !SPRINT_AFFECTING.some((k) => k in changed)) return;
 
-  const newSprintId = changed.sprint_id;
+  if ("sprint_id" in changed) {
+    const newSprintId = changed.sprint_id;
 
-  // Adding to a specific sprint: patch the counts in-place — no extra request
-  if ("sprint_id" in changed && newSprintId) {
-    qc.setQueryData(
-      ["sprint", workspaceId, boardId, newSprintId],
-      (old) => old ? { ...old, task_count: (old.task_count || 0) + 1 } : old,
-    );
-    qc.setQueryData(["sprints", workspaceId, boardId], (old) =>
-      Array.isArray(old)
-        ? old.map((s) =>
-            s.id === newSprintId
-              ? { ...s, task_count: (s.task_count || 0) + 1 }
-              : s,
-          )
-        : old,
-    );
+    // Decrement old sprint count when the task is leaving it
+    if (oldSprintId && oldSprintId !== newSprintId) {
+      const dec = (n) => Math.max(0, (n || 1) - 1);
+      qc.setQueryData(
+        ["sprint", workspaceId, boardId, oldSprintId],
+        (old) => (old ? { ...old, task_count: dec(old.task_count) } : old),
+      );
+      qc.setQueryData(["sprints", workspaceId, boardId], (old) =>
+        Array.isArray(old)
+          ? old.map((s) =>
+              s.id === oldSprintId ? { ...s, task_count: dec(s.task_count) } : s,
+            )
+          : old,
+      );
+    }
+
+    // Increment new sprint count when the task is entering one
+    if (newSprintId) {
+      qc.setQueryData(
+        ["sprint", workspaceId, boardId, newSprintId],
+        (old) =>
+          old ? { ...old, task_count: (old.task_count || 0) + 1 } : old,
+      );
+      qc.setQueryData(["sprints", workspaceId, boardId], (old) =>
+        Array.isArray(old)
+          ? old.map((s) =>
+              s.id === newSprintId
+                ? { ...s, task_count: (s.task_count || 0) + 1 }
+                : s,
+            )
+          : old,
+      );
+    }
     return;
   }
 
-  // Removing from sprint or status change — server recomputes counts; refetch
+  // Status change — server recomputes sprint completion; refetch
   qc.invalidateQueries({ queryKey: ["sprint", workspaceId, boardId] });
 };
 
-// Used by board-level views (Kanban, Calendar, Gantt, Sprint) — refreshes the task list
+// Used by board-level views (Kanban, Calendar, Gantt, Sprint)
 export const useUpdateTask = (workspaceId, boardId) => {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -185,12 +221,19 @@ export const useUpdateTask = (workspaceId, boardId) => {
         )
         .then((r) => r.data),
     onSuccess: (updated, { taskId, ...data }) => {
-      // Merge sent fields first so sprint_id (etc.) land even if the list serializer doesn't echo every field back; server response wins on conflicts.
+      // Read the old sprint_id from the cache BEFORE overwriting it so the
+      // sprint count delta (decrement old, increment new) is correct.
+      const cached = qc
+        .getQueriesData({ queryKey: ["tasks", workspaceId, boardId] })
+        .flatMap(([, list]) => (Array.isArray(list) ? list : []))
+        .find((t) => t.id === taskId);
+      const oldSprintId = cached?.sprint_id ?? null;
+
       mergeTaskInLists(qc, workspaceId, boardId, { id: taskId, ...data, ...updated });
       qc.setQueryData(detailKey(workspaceId, boardId, updated.id), (old) =>
         old ? { ...old, ...updated } : old,
       );
-      maybeInvalidateSprint(qc, workspaceId, boardId, data);
+      maybeInvalidateSprint(qc, workspaceId, boardId, data, oldSprintId);
     },
     onError: () => toast({ title: "Failed to update task", type: "error" }),
   });
@@ -209,12 +252,17 @@ export const useUpdateTaskDetail = (workspaceId, boardId, taskId) => {
         )
         .then((r) => r.data),
     onSuccess: (updated, data) => {
+      // Read old sprint_id BEFORE writing the new state.
+      const oldSprintId =
+        qc.getQueryData(detailKey(workspaceId, boardId, taskId))?.sprint_id ??
+        null;
+
       qc.setQueryData(detailKey(workspaceId, boardId, taskId), (old) => ({
         ...old,
         ...updated,
       }));
       mergeTaskInLists(qc, workspaceId, boardId, { id: taskId, ...data, ...updated });
-      maybeInvalidateSprint(qc, workspaceId, boardId, data);
+      maybeInvalidateSprint(qc, workspaceId, boardId, data, oldSprintId);
     },
     onError: () => toast({ title: "Failed to save changes", type: "error" }),
   });
@@ -248,15 +296,13 @@ export const useMoveTask = (workspaceId, boardId) => {
       api
         .patch(
           `/api/workspaces/${workspaceId}/boards/${boardId}/tasks/${taskId}/move/`,
-          {
-            status_id,
-            order,
-          },
+          { status_id, order },
         )
         .then((r) => r.data),
-    // Optimistic update — prefix-matched so it hits the 4-element key useTasks uses.
-    onMutate: ({ taskId, status_id, order }) => {
-      qc.cancelQueries({ queryKey: ["tasks", workspaceId, boardId] });
+    // FIX: async so cancelQueries is awaited before the snapshot is taken,
+    // preventing a race where an in-flight refetch overwrites the rollback data.
+    onMutate: async ({ taskId, status_id, order }) => {
+      await qc.cancelQueries({ queryKey: ["tasks", workspaceId, boardId] });
       const snapshots = qc.getQueriesData({
         queryKey: ["tasks", workspaceId, boardId],
       });
@@ -270,7 +316,7 @@ export const useMoveTask = (workspaceId, boardId) => {
       toast({ title: "Failed to move task", type: "error" });
     },
     onSuccess: (data) => {
-      // Merge full server response — fixes partial optimistic state (status_id + order only)
+      // Merge full server response — fixes partial optimistic state
       qc.setQueriesData({ queryKey: ["tasks", workspaceId, boardId] }, (old) =>
         Array.isArray(old)
           ? old.map((t) => (t.id === data.id ? { ...t, ...data } : t))
@@ -295,6 +341,7 @@ export const useMoveTask = (workspaceId, boardId) => {
 
 export const useCreateComment = (workspaceId, boardId, taskId) => {
   const qc = useQueryClient();
+  const { toast } = useToast();
   return useMutation({
     mutationFn: ({ body, mentioned_user_ids = [], parent_id = null }) =>
       api
@@ -334,12 +381,14 @@ export const useCreateComment = (workspaceId, boardId, taskId) => {
         );
       }
     },
+    onError: () => toast({ title: "Failed to send comment", type: "error" }),
   });
 };
 
 // mutate({ commentId, parentId? }) — parentId required when deleting a reply
 export const useDeleteComment = (workspaceId, boardId, taskId) => {
   const qc = useQueryClient();
+  const { toast } = useToast();
   return useMutation({
     mutationFn: ({ commentId }) =>
       api.delete(
@@ -355,9 +404,7 @@ export const useDeleteComment = (workspaceId, boardId, taskId) => {
               c.id === parentId
                 ? {
                     ...c,
-                    replies: (c.replies || []).filter(
-                      (r) => r.id !== commentId,
-                    ),
+                    replies: (c.replies || []).filter((r) => r.id !== commentId),
                   }
                 : c,
             ),
@@ -373,20 +420,19 @@ export const useDeleteComment = (workspaceId, boardId, taskId) => {
       if (!parentId) {
         qc.setQueryData(detailKey(workspaceId, boardId, taskId), (old) =>
           old
-            ? {
-                ...old,
-                comment_count: Math.max(0, (old.comment_count || 1) - 1),
-              }
+            ? { ...old, comment_count: Math.max(0, (old.comment_count || 1) - 1) }
             : old,
         );
       }
     },
+    onError: () => toast({ title: "Failed to delete comment", type: "error" }),
   });
 };
 
 // ── Subtasks ──────────────────────────────────────────────────────────────────
 
-// Patch subtask progress counts into the detail + every task-list variant from the authoritative subtasks array — no full task-list refetch per toggle. (Task list serializer exposes subtask_count + done_subtask_count per card.)
+// Patches subtask progress counts into the detail + every task-list variant from
+// the authoritative subtasks array — no full task-list refetch per toggle.
 const patchSubtaskCounts = (qc, workspaceId, boardId, taskId, subtasks) => {
   const subtask_count = subtasks.length;
   const done_subtask_count = subtasks.filter((s) => s.is_done).length;
