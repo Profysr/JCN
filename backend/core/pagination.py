@@ -19,3 +19,18 @@ class ActivityPagination(CursorPagination):
     page_size_query_param = "size"
     max_page_size = 100
     ordering = "-id"
+
+
+class HeatmapPagination(CursorPagination):
+    """Cursor pagination for the workload heatmap — pages through members alphabetically."""
+    page_size = 10
+    page_size_query_param = "size"
+    max_page_size = 50
+    ordering = ("full_name", "id")
+
+
+class AnalyticsPagination(PageNumberPagination):
+    """Page-based pagination for analytics list endpoints (overdue tasks, etc.)."""
+    page_size = 25
+    page_size_query_param = "page_size"
+    max_page_size = 100

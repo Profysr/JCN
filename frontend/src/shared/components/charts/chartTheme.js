@@ -10,6 +10,7 @@ export function chartColors() {
     mutedForeground: h('--muted-foreground'),
     popover:         h('--popover'),
     foreground:      h('--foreground'),
+    card:            h('--card'),
   };
 }
 

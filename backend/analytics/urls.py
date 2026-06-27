@@ -1,12 +1,11 @@
 from django.urls import path
-from .views import AnalyticsMetricView
+from .views import AnalyticsMetricView, WorkloadHeatmapView
 
 _ws = "workspaces/<str:workspace_id>"
 
 urlpatterns = [
-    # Single dynamic endpoint for all metrics.
-    # metric is one of: overview, velocity, cycle_time, lead_time, throughput,
-    # cfd, burnup, workload_heatmap, time_in_status, overdue_aging,
-    # completion_rate, estimation_accuracy, sprint_burndown
+    # Dedicated paginated view (cursor-based, members × days)
+    path(f"{_ws}/analytics/workload-heatmap/", WorkloadHeatmapView.as_view()),
+    # Single dynamic endpoint for all other metrics
     path(f"{_ws}/analytics/<str:metric>/", AnalyticsMetricView.as_view()),
 ]

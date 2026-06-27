@@ -435,23 +435,29 @@ Views live in `projects/views/comments.py` (extracted from `tasks.py`).
 |--------|------|-------------|
 | GET | `/api/workspaces/{ws}/analytics/{metric}/` | Compute metric on-the-fly |
 
-Available `{metric}` values:
+**Registered (live) `{metric}` values** — only these are in the `METRICS` dict and reachable; any other value returns 400:
 
 | Metric | What it computes |
 |--------|-----------------|
 | `overview` | Total/open/done/overdue counts + open by priority. `tasks` and `open_tasks` computed in a single `aggregate()` call. |
 | `velocity` | Completed story points or task count per sprint |
-| `cycle_time` | Avg time from In Progress → Done (median, p75, p90) |
-| `lead_time` | Avg time from Backlog → Done |
-| `throughput` | Tasks completed per week/day |
-| `cfd` | Cumulative flow — tasks in each status over time |
 | `burnup` | Scope vs completed over sprint timeline |
-| `workload_heatmap` | Task counts per assignee per week |
-| `time_in_status` | Avg hours each task spent in each status |
 | `overdue_aging` | Distribution of overdue tasks by days late |
 | `completion_rate` | % tasks completed on-time vs late vs overdue |
-| `estimation_accuracy` | Estimated vs actual hours deviation |
-| `sprint_burndown` | Ideal vs actual burndown for a single sprint. Requires `sprint_id` + `board_id`. Fetches all "first done" timestamps in one annotated query (`Min(created_at)` per task), then accumulates in Python — never issues a per-day COUNT query. |
+| `aggregate` | Universal group-by/filter endpoint (see `_metric_aggregate` docstring) |
+| `workload_heatmap` | Task counts per assignee per week (dedicated `WorkloadHeatmapView`, separate URL) |
+
+**Disabled metrics** — handler functions still exist in `analytics/views.py` but are **commented out of the `METRICS` registry** (no live frontend caller, verified against `frontend/src`). Calling them now returns `400 Unknown metric`. Uncomment the registry line to re-enable:
+
+| Metric | Why disabled |
+|--------|-------------|
+| `cycle_time` | no frontend caller |
+| `lead_time` | no frontend caller |
+| `throughput` | no frontend caller |
+| `cfd` | no frontend caller |
+| `time_in_status` | no frontend caller |
+| `estimation_accuracy` | no frontend caller |
+| `sprint_burndown` | `useSprintBurndown` imported in `SprintPanel.jsx` but the call is commented out — effectively unused |
 
 ### Miscellaneous
 
