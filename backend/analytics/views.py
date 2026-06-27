@@ -11,8 +11,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.fields import parse_id
-from core.pagination import HeatmapPagination
-from .serializers import HeatmapMemberSerializer
+from core.pagination import HeatmapPagination, TaskDrilldownPagination
+from .serializers import TaskDrilldownSerializer, TeamMemberSerializer
 from projects.models import Board, Sprint, Task, TaskActivity, TaskStatus
 from workspaces.models import Workspace
 
@@ -291,7 +291,8 @@ def _metric_cycle_time(workspace, params):
 #! Dead Code
 def _metric_lead_time(workspace, params):
     """Total elapsed time from task creation to done, bucketed into a histogram.
-    Example question: "From the moment a request comes in, how long until we ship it?" """
+    Example question: "From the moment a request comes in, how long until we ship it?"
+    """
     board_id = params.get("board_id")
     days = _parse_days(params, 90)
     cutoff = timezone.now() - datetime.timedelta(days=days)
@@ -408,7 +409,8 @@ def _metric_throughput(workspace, params):
 #! Dead Code
 def _metric_cfd(workspace, params):
     """Cumulative flow — how many tasks sit in each status on each day over time.
-    Example question: "Is work piling up in one column, e.g. Code Review (a bottleneck)?" """
+    Example question: "Is work piling up in one column, e.g. Code Review (a bottleneck)?"
+    """
     board_id = params.get("board_id")
     days = _parse_days(params, 30)
 
@@ -513,7 +515,8 @@ def _metric_cfd(workspace, params):
 
 def _metric_burnup(workspace, params):
     """Scope (total tasks) vs completed over a sprint/board timeline.
-    Example question: "Are we on track to finish this scope, and is scope creeping up?" """
+    Example question: "Are we on track to finish this scope, and is scope creeping up?"
+    """
     sprint_id = params.get("sprint_id")
     board_id = params.get("board_id")
     done_names = _done_status_names(workspace)
@@ -820,7 +823,8 @@ def _metric_estimation_accuracy(workspace, params):
 # ==============================================================================
 def _metric_sprint_burndown(workspace, params):
     """Ideal vs actual remaining-work line across a single sprint's days.
-    Example question: "Are we burning down fast enough to finish this sprint on time?" """
+    Example question: "Are we burning down fast enough to finish this sprint on time?"
+    """
     sprint_id = params.get("sprint_id")
     board_id = params.get("board_id")
 
@@ -887,7 +891,6 @@ def _metric_sprint_burndown(workspace, params):
 # ==============================================================================
 # ── DYNAMIC AGGREGATE ENDPOINT ────────────────────────────────────────────────
 # ==============================================================================
-
 _AGG_PAGE_SIZE_MAX = 50
 _AGG_PAGE_SIZE_DEFAULT = 25
 
@@ -955,55 +958,13 @@ def _parse_date_param(value):
         return None
 
 
-def _metric_aggregate(workspace, params):
+def _apply_task_filters(qs, params, workspace):
     """
-    Universal aggregate endpoint — answers any grouping/filter query in one call.
-    Example question: "How many open high-priority bugs does each person have?"
+    Apply the shared analytics filter set to a Task queryset.
 
-    group_by : assignee | status | priority | type | board | sprint | date
-    metric   : count (default) | story_points
-
-    Supported filters (all optional, all additive/AND):
-      board_id / filter[board]   — board UUID
-      filter[status]             — comma-separated status UUIDs
-      filter[priority]           — comma-separated priority values
-      filter[type]               — comma-separated task_type values
-      filter[assignee]           — single user UUID
-      filter[sprint]             — sprint UUID | "current" | "last"
-      filter[is_blocked]         — "true" | "false"
-      filter[open]               — "true" = not done, "false" = done
-      filter[created_before]     — "14d" or ISO date
-      filter[created_after]      — "30d" or ISO date
-      filter[due_before]         — ISO date (YYYY-MM-DD)
-
-    Pagination:
-      page      — default 1
-      page_size — default 25, max 50
+    Single source of truth for filtering, used by BOTH the dynamic aggregate
+    metric and the task drill-down view so the chart counts and the drilled-in task list always agree. All filters are optional and AND-combined, and only whitelisted keys are honoured — raw query values never reach a field path.
     """
-    group_by = params.get("group_by", "status")
-    if group_by not in _VALID_GROUP_BY:
-        group_by = "status"
-
-    agg_metric = params.get("metric", "count")
-    if agg_metric not in _VALID_METRIC:
-        agg_metric = "count"
-
-    try:
-        page = max(1, int(params.get("page", 1)))
-    except (ValueError, TypeError):
-        page = 1
-    try:
-        page_size = min(
-            _AGG_PAGE_SIZE_MAX,
-            max(1, int(params.get("page_size", _AGG_PAGE_SIZE_DEFAULT))),
-        )
-    except (ValueError, TypeError):
-        page_size = _AGG_PAGE_SIZE_DEFAULT
-
-    # ── Base queryset — workspace-scoped, no model hydration ──────────────────
-    qs = Task.objects.filter(board__workspace=workspace)
-
-    # ── Apply filters ─────────────────────────────────────────────────────────
     board_id = params.get("filter[board]") or params.get("board_id")
     if board_id:
         qs = qs.filter(board_id=_parse_pk(board_id))
@@ -1058,6 +1019,14 @@ def _metric_aggregate(workspace, params):
     elif f_open == "false":
         qs = qs.filter(status__is_done=True)
 
+    # Overdue = past due date AND still open — the drill-down's primary lens.
+    if (params.get("filter[overdue]") or "").lower() == "true":
+        qs = qs.filter(
+            due_date__isnull=False,
+            due_date__lt=datetime.date.today(),
+            status__is_done=False,
+        )
+
     dt_before = _parse_date_param(params.get("filter[created_before]"))
     if dt_before:
         qs = qs.filter(created_at__lte=dt_before)
@@ -1073,6 +1042,77 @@ def _metric_aggregate(workspace, params):
             )
         except (ValueError, TypeError):
             pass
+
+    if params.get("filter[due_after]"):
+        try:
+            qs = qs.filter(
+                due_date__gte=datetime.date.fromisoformat(params["filter[due_after]"])
+            )
+        except (ValueError, TypeError):
+            pass
+
+    search = (params.get("search") or "").strip()
+    if search:
+        qs = qs.filter(title__icontains=search)
+
+    return qs
+
+
+def _metric_aggregate(workspace, params):
+    """
+    Universal aggregate endpoint — answers any grouping/filter query in one call.
+    Example question: "How many open high-priority bugs does each person have?"
+
+    group_by : assignee | status | priority | type | board | sprint | date
+    metric   : count (default) | story_points
+
+    Supported filters (all optional, all additive/AND):
+      board_id / filter[board]   — board UUID
+      filter[status]             — comma-separated status UUIDs
+      filter[priority]           — comma-separated priority values
+      filter[type]               — comma-separated task_type values
+      filter[assignee]           — single user UUID
+      filter[sprint]             — sprint UUID | "current" | "last"
+      filter[is_blocked]         — "true" | "false"
+      filter[open]               — "true" = not done, "false" = done
+      filter[created_before]     — "14d" or ISO date
+      filter[created_after]      — "30d" or ISO date
+      filter[due_before]         — ISO date (YYYY-MM-DD)
+      filter[due_after]          — ISO date (YYYY-MM-DD)
+      filter[overdue]            — "true" = past due AND still open
+      search                     — case-insensitive title contains
+
+    (Filters are applied by the shared `_apply_task_filters` helper, which also
+    powers the task drill-down view.)
+
+    Pagination:
+      page      — default 1
+      page_size — default 25, max 50
+    """
+    group_by = params.get("group_by", "status")
+    if group_by not in _VALID_GROUP_BY:
+        group_by = "status"
+
+    agg_metric = params.get("metric", "count")
+    if agg_metric not in _VALID_METRIC:
+        agg_metric = "count"
+
+    try:
+        page = max(1, int(params.get("page", 1)))
+    except (ValueError, TypeError):
+        page = 1
+    try:
+        page_size = min(
+            _AGG_PAGE_SIZE_MAX,
+            max(1, int(params.get("page_size", _AGG_PAGE_SIZE_DEFAULT))),
+        )
+    except (ValueError, TypeError):
+        page_size = _AGG_PAGE_SIZE_DEFAULT
+
+    # ── Base queryset + shared filters (single source of truth) ──────────────
+    qs = _apply_task_filters(
+        Task.objects.filter(board__workspace=workspace), params, workspace
+    )
 
     # ── Build GROUP BY + aggregate ────────────────────────────────────────────
     cfg = _GROUP_CONFIG[group_by]
@@ -1136,11 +1176,11 @@ def _metric_aggregate(workspace, params):
 #   "time_in_status": _metric_time_in_status,
 #   "estimation_accuracy": _metric_estimation_accuracy,
 #   "sprint_burndown": _metric_sprint_burndown,  # hook is commented out in SprintPanel.jsx
+#   "overdue_aging": _metric_overdue_aging,       # replaced by SummaryView (count) + TaskDrilldownView (rows)
 METRICS = {
     "overview": _metric_overview,
     "velocity": _metric_velocity,
     "burnup": _metric_burnup,
-    "overdue_aging": _metric_overdue_aging,
     "completion_rate": _metric_completion_rate,
     "aggregate": _metric_aggregate,
 }
@@ -1164,75 +1204,198 @@ class AnalyticsMetricView(APIView):
         return Response(handler(workspace, request.query_params))
 
 
-class WorkloadHeatmapView(APIView):
-    """Task counts per assignee per day over a window — who's loaded, and when.
+# ==============================================================================
+# ── DEDICATED VIEWS (split by data grain, not by chart) ───────────────────────
+# ==============================================================================
+#
+# Why these live OUTSIDE the METRICS registry above:
+#
+# The `_metric_*` registry is for cheap, fully-aggregated payloads (counts and
+# group-bys) that fit in one JSON blob. The three views below have a different
+# *grain* and so each gets its own endpoint and its own pagination axis:
+#
+#   • WorkspaceSummaryView  — headline counts (no rows)        → no pagination
+#   • TeamWorkloadView      — one row PER MEMBER  (low growth) → cursor by USER
+#   • TaskDrilldownView     — one row PER TASK    (unbounded)  → cursor by TICKET
+#
+# Pagination axis follows cardinality: dates are bounded (we window + bucket
+# them), members grow slowly (cursor is housekeeping), but TICKETS are the only
+# unbounded axis — so the drill-down is the one that genuinely protects the DB,
+# and it uses keyset (cursor) pagination so deep pages stay O(page_size).
+#
+# Together these replaced the old `workload_heatmap` view and the `overdue_aging`
+# metric: instead of every chart re-implementing its own "tasks[]" block, ONE
+# drill-down (filtered via the shared `_apply_task_filters`) powers every chart's
+# click-through, and ONE team view merges assigned/open/overdue/done/heatmap.
+# ==============================================================================
+
+
+class WorkspaceSummaryView(APIView):
+    """Headline KPI counts — total / open / done / overdue — in one aggregate().
+    Board-aware (?board_id=). Replaces the overdue_aging total for the KPI cards.
+    Example question: "How many tasks are open, done, and overdue right now?" """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, workspace_id):
+        workspace = get_object_or_404(
+            Workspace, id=_parse_pk(workspace_id), members__user=request.user
+        )
+        today = datetime.date.today()
+        qs = Task.objects.filter(board__workspace=workspace)
+        board_id = request.query_params.get("board_id")
+        if board_id:
+            qs = qs.filter(board_id=_parse_pk(board_id))
+
+        agg = qs.aggregate(
+            total=Count("id"),
+            open=Count("id", filter=Q(status__is_done=False)),
+            done=Count("id", filter=Q(status__is_done=True)),
+            overdue=Count(
+                "id",
+                filter=Q(
+                    status__is_done=False,
+                    due_date__isnull=False,
+                    due_date__lt=today,
+                ),
+            ),
+        )
+        return Response(agg)
+
+
+# ── Team workload — per-member rollup, cursor-paginated by user ───────────────
+class TeamWorkloadView(APIView):
+    """Consolidated per-member workload — assigned / open / overdue / done /
+    points plus a per-day due heatmap, in ONE row per member. Merges the old
+    workload-heatmap, total-assigned and per-person overdue/completed charts.
+
+    Cursor-paginated by USER (members are a low, slowly-growing axis), so the
+    heavy per-cell work is bounded to one page of members at a time.
     Example question: "Who is overloaded right now and who has spare capacity?" """
 
     permission_classes = [permissions.IsAuthenticated]
-    pagination_class = HeatmapPagination
+    pagination_class = HeatmapPagination  # cursor by (full_name, id)
 
     def get(self, request, workspace_id):
         User = get_user_model()
         workspace = get_object_or_404(
             Workspace, id=_parse_pk(workspace_id), members__user=request.user
         )
-
-        # ── Filters ───────────────────────────────────────────────────────────
-        days = _parse_days(request.query_params, 14)
-        board_id = request.query_params.get("board_id")
-
-        # Build the ordered list of date column labels (ISO strings)
-        end_date = datetime.date.today()
-        start_date = end_date - datetime.timedelta(days=days - 1)
+        params = request.query_params
+        days = _parse_days(params, 14)
+        board_id = params.get("board_id")
+        today = datetime.date.today()
+        start_date = today - datetime.timedelta(days=days - 1)
         date_strs = [
             (start_date + datetime.timedelta(days=i)).isoformat() for i in range(days)
         ]
 
-        # ── Base task queryset ────────────────────────────────────────────────
-        # Only tasks that have an assignee and a due date within the window
-        tasks_qs = Task.objects.filter(
-            board__workspace=workspace,
-            assignee__isnull=False,
-            due_date__gte=start_date,
-            due_date__lte=end_date,
-        )
+        # Base = all assigned tasks in scope (board optional). Used both for the
+        # member list and the rollup so "assigned" counts every owned task.
+        base = Task.objects.filter(board__workspace=workspace, assignee__isnull=False)
         if board_id:
-            tasks_qs = tasks_qs.filter(board_id=board_id)
+            base = base.filter(board_id=_parse_pk(board_id))
 
-        # ── Member queryset (paginated) ───────────────────────────────────────
-        # Collect distinct assignee IDs first, then fetch only the fields we need — avoids inflating full User objects (password hash, perms, etc.)
-        member_ids = tasks_qs.values_list("assignee_id", flat=True).distinct()
+        # Distinct assignees → paginate the (low-cardinality) member axis.
+        member_ids = base.values_list("assignee_id", flat=True).distinct()
         member_qs = (
             User.objects.filter(id__in=member_ids)
-            .only("id", "full_name", "email")
-            .order_by(
-                "full_name", "id"
-            )  # compound: must match HeatmapPagination.ordering exactly
+            .only("id", "full_name", "email", "avatar", "avatar_type", "avatar_icon")
+            .order_by("full_name", "id")  # must match HeatmapPagination.ordering
         )
 
-        # HeatmapPagination (CursorPagination) slices member_qs and attaches next / previous cursor links to the response automatically
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(member_qs, request, view=self)
-
-        # ── Task counts for this page only ────────────────────────────────────
-        # Re-filter tasks to the members on this page to avoid a full-table scan
         page_ids = [m.id for m in page]
-        task_rows = tasks_qs.filter(assignee_id__in=page_ids).values(
-            "assignee_id", "due_date"
-        )
 
-        # Initialise every cell to 0, then increment from task rows
+        # Rollup counts for THIS page only — one query, conditional aggregation.
+        rollup = {
+            str(r["assignee_id"]): r
+            for r in (
+                base.filter(assignee_id__in=page_ids)
+                .values("assignee_id")
+                .annotate(
+                    assigned=Count("id"),
+                    open=Count("id", filter=Q(status__is_done=False)),
+                    overdue=Count(
+                        "id",
+                        filter=Q(
+                            status__is_done=False,
+                            due_date__isnull=False,
+                            due_date__lt=today,
+                        ),
+                    ),
+                    completed=Count("id", filter=Q(status__is_done=True)),
+                    points=Sum("estimate_points", filter=Q(status__is_done=False)),
+                )
+            )
+        }
+
+        # Per-day due heatmap cells for this page — one query.
         day_counts = {str(m.id): {d: 0 for d in date_strs} for m in page}
-        for t in task_rows:
+        for t in base.filter(
+            assignee_id__in=page_ids,
+            due_date__gte=start_date,
+            due_date__lte=today,
+        ).values("assignee_id", "due_date"):
             aid = str(t["assignee_id"])
             k = t["due_date"].isoformat()
             if k in day_counts.get(aid, {}):
                 day_counts[aid][k] += 1
 
-        serializer = HeatmapMemberSerializer(
-            page, many=True, context={"day_counts": day_counts}
+        serializer = TeamMemberSerializer(
+            page,
+            many=True,
+            context={"rollup": rollup, "day_counts": day_counts},
         )
+        # NOTE: the ordered date list is NOT sent separately — every member's
+        # `days` map already carries the full window as keys (0-filled), so the
+        # frontend derives the column order from Object.keys(days).sort(). Using
+        # the server's own keys also sidesteps any client/server timezone skew.
+        return paginator.get_paginated_response(serializer.data)
 
-        response = paginator.get_paginated_response(serializer.data)
-        response.data["dates"] = date_strs
-        return response
+
+# ── Task drill-down — the shared click-through engine, cursor by ticket ───────
+# Ordering whitelist for the drill-down — keys map to keyset-safe field tuples.
+# `id` is UUIDv7 (time-sortable + unique), so it doubles as the chronological
+# ordering and the tiebreak that cursor pagination requires.
+_DRILLDOWN_ORDER = {
+    "recent": ("-id",),  # newest first (default)
+    "oldest": ("id",),
+    "due": ("due_date", "id"),  # soonest / most-overdue first
+}
+
+
+class TaskDrilldownView(APIView):
+    """The shared click-through engine — a paginated, filterable flat list of
+    lightweight task rows with just enough metadata to open the detail panel.
+
+    Every chart click maps to a filtered query here (tasks?overdue=true,
+    tasks?filter[assignee]=X, tasks?filter[status]=Y, …). Cursor-paginated by
+    TICKET — the only unbounded-cardinality axis — so deep scrolling never
+    degrades and stays stable under inserts.
+    Example question: "Show me the actual tasks behind this chart segment." """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, workspace_id):
+        workspace = get_object_or_404(
+            Workspace, id=_parse_pk(workspace_id), members__user=request.user
+        )
+        params = request.query_params
+
+        qs = _apply_task_filters(
+            Task.objects.filter(board__workspace=workspace), params, workspace
+        ).select_related("status", "assignee", "board")
+
+        ordering = _DRILLDOWN_ORDER.get(params.get("order", "recent"), ("-id",))
+        if "due_date" in ordering:
+            # due-date ordering needs non-null due dates for a stable cursor
+            qs = qs.filter(due_date__isnull=False)
+        qs = qs.order_by(*ordering)
+
+        paginator = TaskDrilldownPagination()
+        paginator.ordering = ordering
+        page = paginator.paginate_queryset(qs, request, view=self)
+        data = TaskDrilldownSerializer(page, many=True).data
+        return paginator.get_paginated_response(data)

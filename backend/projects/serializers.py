@@ -44,6 +44,22 @@ class TaskStatusSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "color", "order", "is_done", "is_started"]
 
 
+class MiniTaskStatusSerializer(serializers.ModelSerializer):
+    """
+    Display-only status (id, name, color) for embedding in task payloads.
+
+    Omits order/is_done/is_started — board logic (column ordering, done
+    detection) reads those from the dedicated `/statuses/` endpoint, never from
+    a task's embedded status. Dropping them here trims every task row in lists,
+    detail, and analytics drill-downs.
+    """
+
+    class Meta:
+        model = TaskStatus
+        fields = ["id", "name", "color"]
+        read_only_fields = fields
+
+
 class BulkStatusItemSerializer(serializers.Serializer):
     # id is optional — omitted for new statuses, present for existing ones
     id = serializers.CharField(required=False, allow_null=True, allow_blank=True)
@@ -396,7 +412,7 @@ class TaskSerializer(serializers.ModelSerializer):
         write_only=True, required=False, allow_null=True
     )
     created_by = MiniUserSerializer(read_only=True)
-    status_detail = TaskStatusSerializer(source="status", read_only=True)
+    status_detail = MiniTaskStatusSerializer(source="status", read_only=True)
     status_id = serializers.UUIDField(write_only=True, required=False, allow_null=True)
     labels = LabelSerializer(many=True, read_only=True)
     label_ids = serializers.ListField(
@@ -638,7 +654,7 @@ class TaskAttachmentSerializer(serializers.ModelSerializer):
 
 
 class MinimalTaskSerializer(serializers.ModelSerializer):
-    status_detail = TaskStatusSerializer(source="status", read_only=True)
+    status_detail = MiniTaskStatusSerializer(source="status", read_only=True)
 
     class Meta:
         model = Task

@@ -431,21 +431,35 @@ Views live in `projects/views/comments.py` (extracted from `tasks.py`).
 
 ### Analytics
 
+The analytics surface is split **by data grain**. Cheap fully-aggregated payloads
+go through the dynamic `{metric}` registry; anything with a different grain or an
+unbounded row count gets its own dedicated view with grain-appropriate pagination.
+
+**Dedicated views** (each its own URL, must precede the `{metric}` catch-all in `urls.py`):
+
+| Method | Path | View | Grain / Pagination | Description |
+|--------|------|------|--------------------|-------------|
+| GET | `/api/workspaces/{ws}/analytics/summary/` | `WorkspaceSummaryView` | counts only, none | Headline KPIs `{total, open, done, overdue}` in one `aggregate()`. Board-aware (`?board_id=`). Replaces the `overdue_aging` total for the KPI cards. |
+| GET | `/api/workspaces/{ws}/analytics/team/` | `TeamWorkloadView` | per-member, **cursor by user** (`HeatmapPagination`) | One row per member: `assigned / open / overdue / completed / points` + per-day due `days` heatmap + `total_due`. `?days=` (default 14), `?board_id=`. Merges the old workload-heatmap + total-assigned + per-person overdue/completed charts. Row shape: `{ user: MiniUser, assigned, open, overdue, completed, points, days, total_due }`. The window's ordered date list is **not** sent separately — every row's `days` map is 0-filled across the full window, so the client derives column order from `Object.keys(days).sort()` (also avoids client/server TZ skew). |
+| GET | `/api/workspaces/{ws}/analytics/tasks/` | `TaskDrilldownView` | per-task, **cursor by ticket** (`TaskDrilldownPagination`) | The shared click-through engine — paginated, filterable flat task list with just enough metadata to open the detail panel (`board_id` is mandatory for the deep-link). Filters via the shared `_apply_task_filters` (same set as `aggregate`, incl. `filter[overdue]`, `search`). `?order=recent\|oldest\|due`. Row serializer: `TaskDrilldownSerializer` (id, board_id, board, title, priority, task_type, estimate_points, due_date, status, assignee, days_overdue). |
+
+> `_apply_task_filters(qs, params, workspace)` is the single source of truth for task filtering — used by **both** `aggregate` and `TaskDrilldownView`, so a chart's counts and its drilled-in rows always agree.
+
+**Dynamic metric endpoint:**
+
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/workspaces/{ws}/analytics/{metric}/` | Compute metric on-the-fly |
+| GET | `/api/workspaces/{ws}/analytics/{metric}/` | Compute a registered metric on-the-fly |
 
 **Registered (live) `{metric}` values** — only these are in the `METRICS` dict and reachable; any other value returns 400:
 
 | Metric | What it computes |
 |--------|-----------------|
-| `overview` | Total/open/done/overdue counts + open by priority. `tasks` and `open_tasks` computed in a single `aggregate()` call. |
+| `overview` | Workspace snapshot: counts + status/priority split + per-assignee workload + 30-day trend |
 | `velocity` | Completed story points or task count per sprint |
 | `burnup` | Scope vs completed over sprint timeline |
-| `overdue_aging` | Distribution of overdue tasks by days late |
-| `completion_rate` | % tasks completed on-time vs late vs overdue |
+| `completion_rate` | % of planned sprint tasks completed |
 | `aggregate` | Universal group-by/filter endpoint (see `_metric_aggregate` docstring) |
-| `workload_heatmap` | Task counts per assignee per week (dedicated `WorkloadHeatmapView`, separate URL) |
 
 **Disabled metrics** — handler functions still exist in `analytics/views.py` but are **commented out of the `METRICS` registry** (no live frontend caller, verified against `frontend/src`). Calling them now returns `400 Unknown metric`. Uncomment the registry line to re-enable:
 
@@ -458,6 +472,9 @@ Views live in `projects/views/comments.py` (extracted from `tasks.py`).
 | `time_in_status` | no frontend caller |
 | `estimation_accuracy` | no frontend caller |
 | `sprint_burndown` | `useSprintBurndown` imported in `SprintPanel.jsx` but the call is commented out — effectively unused |
+| `overdue_aging` | replaced by `summary` (count) + `tasks` drill-down (rows) |
+
+> The old `workload_heatmap` dedicated view was **replaced** by `TeamWorkloadView` (`/analytics/team/`); its URL is gone.
 
 ### Miscellaneous
 
@@ -659,11 +676,15 @@ All hr endpoints require `app_access["hr"] = true` on the user's role (enforced 
 
 ---
 
-## Serializers — Avatar Fields
+## Serializers — Shared Mini Serializers
 
 `MiniUserSerializer` (embedded in tasks, members, comments, presence): exposes `avatar`, `avatar_type`, `avatar_icon` — all read-only. Every context that renders a user avatar receives the full avatar data without extra queries.
 
 `UserSerializer` (GET/PATCH `/api/users/me/`): same three fields; `avatar_type` and `avatar_icon` are writable; `avatar` is read-only.
+
+**Status serializers** (`projects/serializers.py`):
+- `TaskStatusSerializer` — full status: `id, name, color, order, is_done, is_started`. Used **only** by the board `/statuses/` endpoint, where column ordering + done detection need the flags.
+- `MiniTaskStatusSerializer` — display-only `id, name, color`. Used for status **embedded in task payloads** (`status_detail` on `TaskSerializer` / `MinimalTaskSerializer`, and `status` on the analytics `TaskDrilldownSerializer`). The frontend never reads `order`/`is_done`/`is_started` off an embedded status (it reads those from the statuses list), so the mini form trims every task row. Don't swap it back unless an embed site starts needing the flags.
 
 ---
 
