@@ -12,6 +12,7 @@ import {
   LayoutGrid,
 } from "lucide-react";
 import { Tooltip } from "@/shared/components/ui/tooltip";
+import { ShortcutHint, TooltipLabel } from "@/shared/components/ui/Kbd";
 import { Loader } from "@/shared/components/ui/Loader";
 import { ConfirmModal } from "@/shared/components/ui/ConfirmModal";
 import Modal from "@/shared/components/ui/Modal";
@@ -117,8 +118,14 @@ export default function TaskDetailPanel({
   const [activePanel, setActivePanel] = useState(
     () => getLayoutPrefs().defaultPanel ?? "properties",
   );
-  // Incremented by the `e` keyboard shortcut to tell TaskTitle to enter edit mode.
+  // Incremented by the ⇧T keyboard shortcut to tell TaskTitle to enter edit mode.
   const [editTitleSignal, setEditTitleSignal] = useState(0);
+  // Incremented by ⇧E to move focus into the description editor.
+  const [descFocusSignal, setDescFocusSignal] = useState(0);
+  // Bumped by the property shortcuts (⇧S/⇧P/⇧A/⇧L/⇧D) to open the matching
+  // dropdown in the Properties side panel. `field` selects which one.
+  const [propFocus, setPropFocus] = useState({ field: null, tick: 0 });
+  const descEditorRef = useRef(null);
   const [approvalDropdown, setApprovalDropdown] = useState(false);
   const approvalBtnRef = useRef(null);
   const [conflict, setConflict] = useState(null);
@@ -158,6 +165,11 @@ export default function TaskDetailPanel({
   //   return () => window.removeEventListener("jcn:typing", handler);
   // }, [taskId, user?.id]);
 
+  // Move focus into the description editor when ⇧E fires.
+  useEffect(() => {
+    if (descFocusSignal > 0) descEditorRef.current?.focus();
+  }, [descFocusSignal]);
+
   // Escape is now handled centrally by useBoardShortcuts in KanbanPage.
   // This panel only responds to task-action events dispatched from that hook.
   useEffect(() => {
@@ -167,16 +179,38 @@ export default function TaskDetailPanel({
         case "edit-title":
           setEditTitleSignal((n) => n + 1);
           break;
+        case "edit-description":
+          setDescFocusSignal((n) => n + 1);
+          break;
         case "copy-link": {
           const url = `${window.location.origin}${window.location.pathname}?task=${task?.id}`;
           navigator.clipboard?.writeText(url);
+          toast.success("Link copied");
           break;
         }
         case "clone":
-          handleClone();
+          if (canEdit) handleClone();
           break;
         case "open-approval":
-          setApprovalDropdown((v) => !v);
+          if (canEdit) setApprovalDropdown((v) => !v);
+          break;
+        case "delete":
+          if (canEdit)
+            setConfirmState({
+              message: "Delete this task? This cannot be undone.",
+              onConfirm: () =>
+                deleteTask.mutate(taskId, { onSuccess: onClose }),
+            });
+          break;
+        // Property shortcuts — open the Properties panel and pop the dropdown.
+        case "status":
+        case "priority":
+        case "assign":
+        case "label":
+        case "due-date":
+          if (!canEdit) break;
+          setActivePanel("properties");
+          setPropFocus((p) => ({ field: action, tick: p.tick + 1 }));
           break;
         default:
           break;
@@ -184,7 +218,7 @@ export default function TaskDetailPanel({
     };
     window.addEventListener("jcn:task-action", handler);
     return () => window.removeEventListener("jcn:task-action", handler);
-  }, [task?.id, handleClone]);
+  }, [task?.id, handleClone, canEdit, deleteTask, taskId, onClose, toast]);
 
   if (isLoading || !task) {
     return (
@@ -221,7 +255,7 @@ export default function TaskDetailPanel({
       showFooter={false}
       flexBody={true}
       padding="p-0"
-      maxWidth="90vw"
+      maxWidth="98vw"
     >
       <PanelHeader
         task={task}
@@ -259,7 +293,7 @@ export default function TaskDetailPanel({
 
       <div className="flex flex-1 overflow-hidden min-h-0">
         {/* ── Main body ─────────────────────────────────────────── */}
-        <div className="flex-1 min-w-0 overflow-y-auto px-6 py-5 space-y-4">
+        <div className="flex-1 min-w-0 overflow-y-auto px-2 py-5 space-y-4">
           {task.ancestors?.length > 0 && (
             <div className="flex items-center gap-1 flex-wrap">
               {task.ancestors.map((a, i) => (
@@ -298,6 +332,7 @@ export default function TaskDetailPanel({
             </div>
             <div className="px-1 py-1">
               <VoltEditor
+                ref={descEditorRef}
                 value={task.description || ""}
                 onBlur={(md) => {
                   if (md !== task.description)
@@ -308,6 +343,13 @@ export default function TaskDetailPanel({
                 className={descSizeClass}
               />
             </div>
+            {canEdit && (
+              <ShortcutHint
+                id="task:edit-description"
+                label="edit the description"
+                className="px-3 pb-1.5"
+              />
+            )}
           </div>
 
           {layoutPrefs.showWorkItems !== false && (
@@ -364,6 +406,10 @@ export default function TaskDetailPanel({
                   taskLabels={taskLabels}
                   members={members}
                   onCreateLabel={onCreateLabel}
+                  focusField={propFocus.field}
+                  focusTick={propFocus.tick}
+                  childCount={childTasks.length}
+                  subtaskCount={subtasks.length}
                 />
               )}
               {activePanel === "attachments" && (
@@ -475,7 +521,7 @@ function PanelHeader({
 
       {/* ── Action buttons ──────────────────────────────────────── */}
       <div className="flex items-center gap-1 flex-shrink-0">
-        <Tooltip content="Copy link">
+        <Tooltip content={<TooltipLabel label="Copy link" id="task:copy-link" />}>
           <button
             onClick={() => {
               navigator.clipboard.writeText(window.location.href);
@@ -488,7 +534,7 @@ function PanelHeader({
         </Tooltip>
 
         {canEdit && (
-          <Tooltip content="Duplicate task">
+          <Tooltip content={<TooltipLabel label="Duplicate task" id="task:clone" />}>
             <button
               onClick={onClone}
               disabled={isCloning}
@@ -501,7 +547,7 @@ function PanelHeader({
 
         {canEdit && (
           <div className="relative" ref={approvalBtnRef}>
-            <Tooltip content="Request approval">
+            <Tooltip content={<TooltipLabel label="Request approval" id="task:open-approval" />}>
               <button
                 onClick={() => setApprovalDropdown((v) => !v)}
                 className={cn(
@@ -529,7 +575,7 @@ function PanelHeader({
         )}
 
         {canEdit && (
-          <Tooltip content="Delete task">
+          <Tooltip content={<TooltipLabel label="Delete task" id="task:delete" />}>
             <button
               onClick={() =>
                 onDeleteConfirm({
@@ -547,12 +593,14 @@ function PanelHeader({
 
         <div className="w-px h-4 bg-border mx-0.5" />
 
-        <button
-          onClick={onClose}
-          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors active:scale-[0.97]"
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
+        <Tooltip content={<TooltipLabel label="Close" id="board:close" />}>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors active:scale-[0.97]"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </Tooltip>
       </div>
     </div>
   );

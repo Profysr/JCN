@@ -9,6 +9,7 @@ import {
   User,
   X,
   Calendar,
+  Sparkles,
 } from "lucide-react";
 import { format } from "date-fns";
 import { Avatar } from "@/shared/components/ui/avatar";
@@ -86,13 +87,15 @@ export function PanelSectionHeader({ title }) {
 }
 
 // ── Properties ────────────────────────────────────────────────────────────────
+// `shortcut` is revealed only on hover (group-hover) — shortcuts shouldn't
+// clutter the resting layout.
 function PropCell({ label, shortcut, children, className }) {
   return (
-    <div className={cn("flex flex-col gap-0.5", className)}>
+    <div className={cn("group flex flex-col gap-0.5", className)}>
       <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 pl-2 flex items-center gap-1.5">
         {label}
         {shortcut && (
-          <kbd className="font-mono normal-case tracking-normal bg-muted/60 border border-border/60 rounded px-1 py-px leading-none text-[9px] text-muted-foreground/50">
+          <kbd className="font-mono normal-case tracking-normal bg-muted/60 border border-border/60 rounded px-1 py-px leading-none text-[9px] text-muted-foreground/50 opacity-0 group-hover:opacity-100 transition-opacity">
             {shortcut}
           </kbd>
         )}
@@ -102,7 +105,13 @@ function PropCell({ label, shortcut, children, className }) {
   );
 }
 
-function DateField({ value, onChange, disabled, placeholder = "Not set" }) {
+function DateField({
+  value,
+  onChange,
+  disabled,
+  placeholder = "Not set",
+  openSignal = 0,
+}) {
   const inputRef = useRef(null);
 
   let display = placeholder;
@@ -119,6 +128,11 @@ function DateField({ value, onChange, disabled, placeholder = "Not set" }) {
       inputRef.current?.click();
     }
   };
+
+  // Opened by the ⇧D shortcut.
+  useEffect(() => {
+    if (openSignal > 0 && !disabled) handleClick();
+  }, [openSignal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="relative">
@@ -150,6 +164,111 @@ function DateField({ value, onChange, disabled, placeholder = "Not set" }) {
   );
 }
 
+// ── Estimate suggestion (heuristic) ──────────────────────────────────────────
+// Derives a story-point / hours suggestion from signals already on the task —
+// no backend, no AI. Description length is the dominant signal; child tasks,
+// checklist items, priority and task type nudge it. Mapped onto the Fibonacci
+// scale teams use for planning poker.
+function suggestEstimate({
+  description,
+  childCount,
+  subtaskCount,
+  priority,
+  taskType,
+}) {
+  const text = (description || "")
+    .replace(/<[^>]*>/g, " ") // strip any html
+    .replace(/[#>*_`~\-]/g, " ") // strip markdown punctuation
+    .trim();
+  const words = text ? text.split(/\s+/).filter(Boolean).length : 0;
+
+  let score = 0;
+  score += Math.min(words / 40, 5); // longer specs ⇒ more work (cap 5)
+  score += childCount * 1.5; // each child task is real scope
+  score += subtaskCount * 0.5; // checklist items are smaller
+  if (priority === "urgent") score += 2;
+  else if (priority === "high") score += 1;
+  if (taskType === "bug") score += 0.5; // bugs carry investigation overhead
+
+  const points =
+    score <= 1
+      ? 1
+      : score <= 2.5
+        ? 2
+        : score <= 4.5
+          ? 3
+          : score <= 7.5
+            ? 5
+            : score <= 11
+              ? 8
+              : 13;
+
+  return { points, hours: points * 2 };
+}
+
+function EstimateSuggestion({ task, childCount, subtaskCount, update }) {
+  const [suggestion, setSuggestion] = useState(null);
+
+  const compute = () =>
+    setSuggestion(
+      suggestEstimate({
+        description: task.description,
+        childCount,
+        subtaskCount,
+        priority: task.priority,
+        taskType: task.task_type,
+      }),
+    );
+
+  const apply = () => {
+    update.mutate({
+      estimate_points: suggestion.points,
+      estimate_hours: suggestion.hours,
+    });
+    setSuggestion(null);
+  };
+
+  return (
+    <div className="pt-1">
+      {!suggestion ? (
+        <button
+          type="button"
+          onClick={compute}
+          className="flex items-center gap-1.5 text-[11px] font-medium text-primary/80 hover:text-primary px-2 py-1 rounded-md hover:bg-primary/10 transition-colors"
+        >
+          <Sparkles className="w-3 h-3" />
+          Suggest estimate
+        </button>
+      ) : (
+        <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-primary/8 border border-primary/20">
+          <Sparkles className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+          <span className="text-xs font-semibold text-foreground flex-1">
+            {suggestion.points} pts
+            <span className="text-muted-foreground font-normal">
+              {" "}
+              · ~{suggestion.hours}h
+            </span>
+          </span>
+          <button
+            type="button"
+            onClick={apply}
+            className="text-[11px] font-semibold text-primary hover:underline"
+          >
+            Apply
+          </button>
+          <button
+            type="button"
+            onClick={() => setSuggestion(null)}
+            className="text-muted-foreground/60 hover:text-foreground"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function PropertiesPanel({
   task,
   canEdit,
@@ -158,7 +277,14 @@ export function PropertiesPanel({
   taskLabels,
   members,
   onCreateLabel,
+  focusField = null,
+  focusTick = 0,
+  childCount = 0,
+  subtaskCount = 0,
 }) {
+  // Per-field open signal — increments only for the field a shortcut targeted.
+  const sig = (field) => (focusField === field ? focusTick : 0);
+
   return (
     <div className="px-3 py-4 space-y-3">
       {/* Status ── full width prominent */}
@@ -166,6 +292,7 @@ export function PropertiesPanel({
         <PropCell label="Status" shortcut={getShortcutDisplay("task:status")}>
           <Dropdown
             disabled={!canEdit}
+            openSignal={sig("status")}
             value={task.status_detail?.id || ""}
             options={projectStatuses.map((s) => ({
               value: s.id,
@@ -177,7 +304,10 @@ export function PropertiesPanel({
               opt ? (
                 <div
                   className="w-full text-center font-semibold text-xs py-1 rounded-sm uppercase tracking-wide"
-                  style={{ backgroundColor: opt.color + "10", color: opt.color }}
+                  style={{
+                    backgroundColor: opt.color + "10",
+                    color: opt.color,
+                  }}
                 >
                   {opt.label}
                 </div>
@@ -186,7 +316,10 @@ export function PropertiesPanel({
             renderOption={(opt) => (
               <span className="flex items-center gap-2 text-xs font-semibold uppercase">
                 <span
-                  style={{ color: opt.color, backgroundColor: opt.color + "25" }}
+                  style={{
+                    color: opt.color,
+                    backgroundColor: opt.color + "25",
+                  }}
                   className="px-2 py-0.5 rounded-sm"
                 >
                   {opt.label}
@@ -198,9 +331,13 @@ export function PropertiesPanel({
 
         {/* Priority + Type ── 2 col */}
         <div className="grid grid-cols-2 gap-1.5">
-          <PropCell label="Priority" shortcut={getShortcutDisplay("task:priority")}>
+          <PropCell
+            label="Priority"
+            shortcut={getShortcutDisplay("task:priority")}
+          >
             <Dropdown
               disabled={!canEdit}
+              openSignal={sig("priority")}
               value={task.priority}
               options={PRIORITY_OPTIONS}
               onChange={(v) => update.mutate({ priority: v })}
@@ -281,6 +418,7 @@ export function PropertiesPanel({
         <PropCell label="Assignee" shortcut={getShortcutDisplay("task:assign")}>
           <Dropdown
             disabled={!canEdit}
+            openSignal={sig("assign")}
             value={task.assignee?.id || ""}
             placeholder="Unassigned"
             options={[
@@ -335,7 +473,12 @@ export function PropertiesPanel({
               <span className="text-xs text-muted-foreground/50">Unknown</span>
             )}
             {task.created_at && (
-              <Tooltip content={format(new Date(task.created_at), "MMM d, yyyy · h:mm a")}>
+              <Tooltip
+                content={format(
+                  new Date(task.created_at),
+                  "MMM d, yyyy · h:mm a",
+                )}
+              >
                 <span className="text-[10px] text-muted-foreground/50 ml-auto flex-shrink-0">
                   {format(new Date(task.created_at), "MMM d")}
                 </span>
@@ -358,13 +501,17 @@ export function PropertiesPanel({
               disabled={!canEdit}
             />
           </PropCell>
-          <PropCell label="Due Date" shortcut={getShortcutDisplay("task:due-date")}>
+          <PropCell
+            label="Due Date"
+            shortcut={getShortcutDisplay("task:due-date")}
+          >
             <DateField
               value={task.due_date || ""}
               onChange={(e) =>
                 update.mutate({ due_date: e.target.value || null })
               }
               disabled={!canEdit}
+              openSignal={sig("due-date")}
             />
           </PropCell>
         </div>
@@ -411,13 +558,22 @@ export function PropertiesPanel({
             </div>
           </PropCell>
         </div>
+
+        {canEdit && (
+          <EstimateSuggestion
+            task={task}
+            childCount={childCount}
+            subtaskCount={subtaskCount}
+            update={update}
+          />
+        )}
       </div>
 
       {/* Labels */}
-      <div>
+      <div className="group">
         <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 pl-2 mb-2 flex items-center gap-1.5">
           Labels
-          <kbd className="font-mono normal-case tracking-normal bg-muted/60 border border-border/60 rounded px-1 py-px leading-none text-[9px] text-muted-foreground/50">
+          <kbd className="font-mono normal-case tracking-normal bg-muted/60 border border-border/60 rounded px-1 py-px leading-none text-[9px] text-muted-foreground/50 opacity-0 group-hover:opacity-100 transition-opacity">
             {getShortcutDisplay("task:label")}
           </kbd>
         </p>
@@ -441,6 +597,7 @@ export function PropertiesPanel({
           ))}
           {canEdit && (
             <LabelPicker
+              openSignal={sig("label")}
               currentLabels={task.labels || []}
               taskLabels={taskLabels}
               onToggle={(label) => {

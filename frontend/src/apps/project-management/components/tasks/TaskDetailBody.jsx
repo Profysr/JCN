@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { getShortcutDisplay } from "@/shared/lib/shortcutsRegistry";
+import { ShortcutHint } from "@/shared/components/ui/Kbd";
 import { useParams } from "react-router-dom";
 import {
   X,
@@ -24,7 +24,7 @@ export function TaskTitle({ task, canEdit, update, setConflict, editSignal = 0 }
     if (editing && ref.current) ref.current.focus();
   }, [editing]);
 
-  // Triggered by the `e` keyboard shortcut via jcn:task-action
+  // Triggered by the ⇧T keyboard shortcut via jcn:task-action
   useEffect(() => {
     if (editSignal > 0 && canEdit) {
       setDraft(task.title);
@@ -65,7 +65,7 @@ export function TaskTitle({ task, canEdit, update, setConflict, editSignal = 0 }
   }
 
   return (
-    <div className="group relative">
+    <div>
       <h2
         onClick={() => canEdit && (setDraft(task.title), setEditing(true))}
         className={cn(
@@ -76,9 +76,11 @@ export function TaskTitle({ task, canEdit, update, setConflict, editSignal = 0 }
         {task.title}
       </h2>
       {canEdit && (
-        <kbd className="absolute -top-1 right-0 font-mono bg-muted/60 border border-border/60 rounded px-1 py-px leading-none text-[9px] text-muted-foreground/50 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-          {getShortcutDisplay("task:edit-title")}
-        </kbd>
+        <ShortcutHint
+          id="task:edit-title"
+          label="edit the title"
+          className="mt-1 pl-1"
+        />
       )}
     </div>
   );
@@ -390,6 +392,12 @@ export function ChildTasksSection({
           </p>
         )}
       </div>
+      {canEdit && (
+        <div className="flex items-center gap-3 px-3.5 pb-2">
+          <ShortcutHint id="task:child-new" label="add a child" />
+          <ShortcutHint id="task:child-attach" label="attach one" />
+        </div>
+      )}
     </div>
   );
 }
@@ -547,6 +555,11 @@ export function ChecklistSection({
           </p>
         )}
       </div>
+      {canEdit && (
+        <div className="px-3.5 pb-2">
+          <ShortcutHint id="task:subtask-new" label="add a checklist item" />
+        </div>
+      )}
     </div>
   );
 }

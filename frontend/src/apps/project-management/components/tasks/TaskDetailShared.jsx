@@ -31,6 +31,7 @@ export function Dropdown({
   renderTrigger,
   renderOption,
   placement = "right",
+  openSignal = 0,
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -43,6 +44,11 @@ export function Dropdown({
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
+
+  // Opened programmatically by a keyboard shortcut (openSignal increments).
+  useEffect(() => {
+    if (openSignal > 0 && !disabled) setOpen(true);
+  }, [openSignal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const selected = options.find((o) => o.value === value);
 
@@ -147,6 +153,7 @@ export function LabelPicker({
   taskLabels,
   onToggle,
   onCreateLabel,
+  openSignal = 0,
 }) {
   const [open, setOpen] = useState(false);
   const [newName, setNewName] = useState("");
@@ -160,6 +167,11 @@ export function LabelPicker({
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  // Opened programmatically by the ⇧L shortcut.
+  useEffect(() => {
+    if (openSignal > 0) setOpen(true);
+  }, [openSignal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const currentIds = new Set(currentLabels.map((l) => l.id));
 

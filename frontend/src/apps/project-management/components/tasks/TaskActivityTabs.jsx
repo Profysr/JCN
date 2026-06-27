@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { getShortcutDisplay } from "@/shared/lib/shortcutsRegistry";
+import { ShortcutHint } from "@/shared/components/ui/Kbd";
 import {
   Trash2,
   Check,
@@ -100,6 +101,11 @@ function CommentsPanel({
         createComment={createComment}
         focusCommentTick={focusCommentTick}
       />
+      <ShortcutHint
+        id="panel:focus-comment"
+        label="jump here from anywhere"
+        className="pl-[2.85rem] -mt-2.5"
+      />
 
       {/* typing indicator — disabled
       {typingUsers?.length > 0 && (
@@ -160,7 +166,7 @@ function CommentComposer({
   const [focused, setFocused] = useState(isReply);
   const editorRef = useRef(null);
 
-  // Triggered by the `i` keyboard shortcut via jcn:task-action → focusCommentTick signal
+  // Triggered by the ⇧M keyboard shortcut via jcn:task-action → focusCommentTick signal
   useEffect(() => {
     if (focusCommentTick > 0) {
       editorRef.current?.focus();
@@ -717,14 +723,14 @@ export function ActivityTabsSection({
     <div className="space-y-4">
       <Tabs value={tab} onChange={setTab}>
         <TabsList>
-          <TabsTrigger value="comments" icon={MessageSquare} badge={commentCount}>
-            Comments <kbd className="font-mono normal-case tracking-normal bg-muted/60 border border-border/60 rounded px-1 py-px leading-none text-[9px] opacity-60">{getShortcutDisplay("panel:tab-comments")}</kbd>
+          <TabsTrigger value="comments" icon={MessageSquare} badge={commentCount} className="group">
+            Comments <kbd className="font-mono normal-case tracking-normal bg-muted/60 border border-border/60 rounded px-1 py-px leading-none text-[9px] opacity-0 group-hover:opacity-100 transition-opacity">{getShortcutDisplay("panel:tab-comments")}</kbd>
           </TabsTrigger>
-          <TabsTrigger value="activity" icon={History}>
-            Activity <kbd className="font-mono normal-case tracking-normal bg-muted/60 border border-border/60 rounded px-1 py-px leading-none text-[9px] opacity-60">{getShortcutDisplay("panel:tab-activity")}</kbd>
+          <TabsTrigger value="activity" icon={History} className="group">
+            Activity <kbd className="font-mono normal-case tracking-normal bg-muted/60 border border-border/60 rounded px-1 py-px leading-none text-[9px] opacity-0 group-hover:opacity-100 transition-opacity">{getShortcutDisplay("panel:tab-activity")}</kbd>
           </TabsTrigger>
-          <TabsTrigger value="approvals" icon={ShieldCheck} badge={approvals.length || null}>
-            Approvals <kbd className="font-mono normal-case tracking-normal bg-muted/60 border border-border/60 rounded px-1 py-px leading-none text-[9px] opacity-60">{getShortcutDisplay("panel:tab-approvals")}</kbd>
+          <TabsTrigger value="approvals" icon={ShieldCheck} badge={approvals.length || null} className="group">
+            Approvals <kbd className="font-mono normal-case tracking-normal bg-muted/60 border border-border/60 rounded px-1 py-px leading-none text-[9px] opacity-0 group-hover:opacity-100 transition-opacity">{getShortcutDisplay("panel:tab-approvals")}</kbd>
           </TabsTrigger>
         </TabsList>
       </Tabs>

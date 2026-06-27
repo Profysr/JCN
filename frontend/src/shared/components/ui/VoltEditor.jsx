@@ -52,6 +52,8 @@ import {
   useState,
   useRef,
   useLayoutEffect,
+  useImperativeHandle,
+  forwardRef,
 } from "react";
 
 // ── Non-inclusive marks — reset at paragraph boundary (Enter key) ────────────
@@ -61,14 +63,17 @@ const NiStrike = StrikeExt.extend({ inclusive: false });
 const NiCode = CodeExt.extend({ inclusive: false });
 const NiUnderline = Underline.extend({ inclusive: false });
 
-export default function VoltEditor({
-  value = "",
-  onChange,
-  onBlur,
-  placeholder = "Write something…",
-  readOnly = false,
-  className,
-}) {
+const VoltEditor = forwardRef(function VoltEditor(
+  {
+    value = "",
+    onChange,
+    onBlur,
+    placeholder = "Write something…",
+    readOnly = false,
+    className,
+  },
+  ref,
+) {
   const [linkInputOpen, setLinkInputOpen] = useState(false);
   const [linkDraft, setLinkDraft] = useState("");
   const linkRef = useRef(null);
@@ -122,6 +127,16 @@ export default function VoltEditor({
       },
     },
   });
+
+  // Expose an imperative focus() so parents (e.g. the ⇧E description shortcut)
+  // can move the caret into the editor.
+  useImperativeHandle(
+    ref,
+    () => ({
+      focus: () => editor?.chain().focus("end").run(),
+    }),
+    [editor],
+  );
 
   // Sync editor content only when the value comes from an external source
   // (e.g. switching tasks). Skip when the editor itself triggered the change.
@@ -434,7 +449,11 @@ export default function VoltEditor({
       </div>
     </div>
   );
-}
+});
+
+VoltEditor.displayName = "VoltEditor";
+
+export default VoltEditor;
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
