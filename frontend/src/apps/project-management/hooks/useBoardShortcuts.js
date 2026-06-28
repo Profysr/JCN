@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useShortcutBindings } from "@/shared/hooks/useShortcutBindings";
 import { getShortcutsByGroup } from "@/shared/lib/shortcutsRegistry";
 
@@ -15,7 +15,8 @@ function isTypingTarget(e) {
 /**
  * Returns true when the keyboard event matches a binding definition.
  * Supports plain keys ("ArrowDown") and modifier combos ("Shift+F").
- * Chord shortcuts (["g", "then", "p"]) are excluded — those live in the global hook.
+ * Chord shortcuts (["z", "then", "t"]) are excluded — handled by the chord
+ * state machine in useBoardShortcuts.
  */
 function matchesBinding(e, keys) {
   if (!keys?.length || keys.includes("then")) return false;
@@ -65,10 +66,39 @@ export function useBoardShortcuts({
   onCloseTask,
 }) {
   const bindings = useShortcutBindings();
+  const chordRef = useRef(null);
+  const chordTimerRef = useRef(null);
 
   useEffect(() => {
+    // Build second-key → shortcut-id map for all "z then X" task shortcuts
+    const taskChordMap = {};
+    for (const { id } of PANEL_OPEN_SHORTCUTS) {
+      const keys = bindings[id];
+      if (keys?.length >= 3 && keys[1] === "then") {
+        taskChordMap[keys[2].toLowerCase()] = id;
+      }
+    }
+
     const handler = (e) => {
       if (isTypingTarget(e) || e.ctrlKey || e.metaKey || e.altKey) return;
+
+      // ── Resolve pending "z ..." chord ────────────────────────────────────
+      if (chordRef.current === "z") {
+        clearTimeout(chordTimerRef.current);
+        chordRef.current = null;
+        if (selectedTaskId) {
+          const id = taskChordMap[e.key.toLowerCase()];
+          if (id) {
+            e.preventDefault();
+            window.dispatchEvent(
+              new CustomEvent("jcn:task-action", {
+                detail: { action: id.split(":")[1] },
+              }),
+            );
+          }
+        }
+        return;
+      }
 
       // ── Arrow navigation ─────────────────────────────────────────────────
       const isDown = matchesBinding(e, bindings["board:focus-down"]);
@@ -101,26 +131,22 @@ export function useBoardShortcuts({
         return;
       }
 
-      // ── Panel shortcuts (fire only while task panel is open) ─────────────
-      // Iterates registry groups task_actions + task_panel — no IDs hardcoded.
-      // Action name = id suffix: "task:status" → "status", "panel:tab-comments" → "tab-comments".
-      if (selectedTaskId) {
-        for (const { id } of PANEL_OPEN_SHORTCUTS) {
-          if (matchesBinding(e, bindings[id])) {
-            e.preventDefault();
-            window.dispatchEvent(
-              new CustomEvent("jcn:task-action", {
-                detail: { action: id.split(":")[1] },
-              }),
-            );
-            return;
-          }
-        }
+      // ── "z" — start task-action chord (panel must be open) ───────────────
+      if (e.key === "z" && !e.shiftKey && selectedTaskId) {
+        e.preventDefault();
+        chordRef.current = "z";
+        chordTimerRef.current = setTimeout(() => {
+          chordRef.current = null;
+        }, 1500);
       }
     };
 
     window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    return () => {
+      window.removeEventListener("keydown", handler);
+      clearTimeout(chordTimerRef.current);
+      chordRef.current = null;
+    };
   }, [
     bindings,
     tasks,
