@@ -431,50 +431,59 @@ Views live in `projects/views/comments.py` (extracted from `tasks.py`).
 
 ### Analytics
 
-The analytics surface is split **by data grain**. Cheap fully-aggregated payloads
-go through the dynamic `{metric}` registry; anything with a different grain or an
-unbounded row count gets its own dedicated view with grain-appropriate pagination.
+Four dedicated views replace the old `AnalyticsMetricView` dynamic router. All filter params are **flat** (no bracket notation) and applied by a single shared helper so chart counts and drill-down rows always agree.
 
-**Dedicated views** (each its own URL, must precede the `{metric}` catch-all in `urls.py`):
+**Filter params (all optional, accepted by every view):**
 
-| Method | Path | View | Grain / Pagination | Description |
-|--------|------|------|--------------------|-------------|
-| GET | `/api/workspaces/{ws}/analytics/summary/` | `WorkspaceSummaryView` | counts only, none | Headline KPIs `{total, open, done, overdue}` in one `aggregate()`. Board-aware (`?board_id=`). Replaces the `overdue_aging` total for the KPI cards. |
-| GET | `/api/workspaces/{ws}/analytics/team/` | `TeamWorkloadView` | per-member, **cursor by user** (`HeatmapPagination`) | One row per member: `assigned / open / overdue / completed / points` + per-day due `days` heatmap + `total_due`. `?days=` (default 14), `?board_id=`. Merges the old workload-heatmap + total-assigned + per-person overdue/completed charts. Row shape: `{ user: MiniUser, assigned, open, overdue, completed, points, days, total_due }`. The window's ordered date list is **not** sent separately — every row's `days` map is 0-filled across the full window, so the client derives column order from `Object.keys(days).sort()` (also avoids client/server TZ skew). |
-| GET | `/api/workspaces/{ws}/analytics/tasks/` | `TaskDrilldownView` | per-task, **cursor by ticket** (`TaskDrilldownPagination`) | The shared click-through engine — paginated, filterable flat task list with just enough metadata to open the detail panel (`board_id` is mandatory for the deep-link). Filters via the shared `_apply_task_filters` (same set as `aggregate`, incl. `filter[overdue]`, `search`). `?order=recent\|oldest\|due`. Row serializer: `TaskDrilldownSerializer` (id, board_id, board, title, priority, task_type, estimate_points, due_date, status, assignee, days_overdue). |
+| Param | Values | Notes |
+|-------|--------|-------|
+| `board` | UUID | scope to one board |
+| `status` | id1,id2,… | comma-separated status IDs |
+| `priority` | lowest,low,medium,high,highest | comma-separated |
+| `type` | task,bug,feature,story,epic,improvement,question | comma-separated |
+| `assignee` | id1,id2,… | comma-separated user IDs |
+| `label` | id1,id2,… | comma-separated label IDs |
+| `due` | overdue,today,this_week,no_date | OR within dimension |
+| `open` | true\|false | open vs done tasks |
+| `overdue` | true | open AND past due_date |
+| `blocked` | true\|false | has / has no blocking dep |
+| `search` | text | title icontains |
+| `created_before` | `14d` or ISO datetime | relative or absolute cutoff |
+| `created_after` | `30d` or ISO datetime | relative or absolute cutoff |
+| `due_before` | YYYY-MM-DD | |
+| `due_after` | YYYY-MM-DD | |
+| `sprint` | current\|last\|uuid | filter by sprint (group_by sprint is disabled) |
 
-> `_apply_task_filters(qs, params, workspace)` is the single source of truth for task filtering — used by **both** `aggregate` and `TaskDrilldownView`, so a chart's counts and its drilled-in rows always agree.
+**Views:**
 
-**Dynamic metric endpoint:**
+| Method | Path | View | Pagination | Description |
+|--------|------|------|------------|-------------|
+| GET | `/api/workspaces/{ws}/analytics/summary/` | `WorkspaceSummaryView` | none | Headline KPIs: `{total, open, done, overdue}` in one `aggregate()` call. Use for top-of-page KPI cards. |
+| GET | `/api/workspaces/{ws}/analytics/aggregate/` | `AnalyticsAggregateView` | offset per dim | **Jira-style rich response.** Returns a `summary` block (total/open/done/overdue/stale/blocked) plus a `groups` map keyed by dimension — one request powers all board-level charts. `group_by` accepts comma-separated dims: `status,priority,type,assignee,board,date`. `metric=count\|story_points`. `stale_days=N` (default 30). `page` + `page_size` (max 50) per dimension. |
+| GET | `/api/workspaces/{ws}/analytics/team/` | `TeamWorkloadView` | cursor by user | Per-member rollup: `{ user, assigned, open, overdue, completed, points, days, total_due }`. `days=N` (default 14) controls heatmap window. Only members with assigned tasks appear. |
+| GET | `/api/workspaces/{ws}/analytics/tasks/` | `TaskDrilldownView` | cursor by ticket | Flat paginated task list — the click-through engine for every chart segment. `order=recent\|oldest\|due`. Row: `id, board_id, board, title, priority, task_type, estimate_points, due_date, status, assignee, days_overdue`. Cursor pagination: no `count` key — use `next` link to load more. |
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/workspaces/{ws}/analytics/{metric}/` | Compute a registered metric on-the-fly |
+**`aggregate/` response shape:**
+```json
+{
+  "summary": { "total": 120, "open": 45, "done": 75, "overdue": 12, "blocked": 8, "stale": 20 },
+  "group_by": ["status", "priority"],
+  "metric": "count",
+  "groups": {
+    "status":   { "results": [{"key": "uuid", "label": "In Progress", "color": "#6366f1", "value": 23}], "total_groups": 4, "page": 1, "page_size": 25, "has_more": false },
+    "priority": { "results": [...], "total_groups": 5, ... }
+  }
+}
+```
 
-**Registered (live) `{metric}` values** — only these are in the `METRICS` dict and reachable; any other value returns 400:
+**`team/` row shape:**
+```json
+{ "user": { "id": "uuid", "email": "...", "full_name": "..." }, "assigned": 4, "open": 3, "overdue": 1, "completed": 1, "points": 8, "days": { "2026-06-22": 0, "2026-06-23": 2 }, "total_due": 2 }
+```
 
-| Metric | What it computes |
-|--------|-----------------|
-| `overview` | Workspace snapshot: counts + status/priority split + per-assignee workload + 30-day trend |
-| `velocity` | Completed story points or task count per sprint |
-| `burnup` | Scope vs completed over sprint timeline |
-| `completion_rate` | % of planned sprint tasks completed |
-| `aggregate` | Universal group-by/filter endpoint (see `_metric_aggregate` docstring) |
+> `_apply_task_filters(qs, params, workspace)` in `analytics/views.py` is the single source of truth for task filtering — applied identically across all four views. Sprint `group_by` is disabled; sprint filter param is still accepted. All sprint metric functions (`velocity`, `burnup`, `completion_rate`) have been removed.
 
-**Disabled metrics** — handler functions still exist in `analytics/views.py` but are **commented out of the `METRICS` registry** (no live frontend caller, verified against `frontend/src`). Calling them now returns `400 Unknown metric`. Uncomment the registry line to re-enable:
-
-| Metric | Why disabled |
-|--------|-------------|
-| `cycle_time` | no frontend caller |
-| `lead_time` | no frontend caller |
-| `throughput` | no frontend caller |
-| `cfd` | no frontend caller |
-| `time_in_status` | no frontend caller |
-| `estimation_accuracy` | no frontend caller |
-| `sprint_burndown` | `useSprintBurndown` imported in `SprintPanel.jsx` but the call is commented out — effectively unused |
-| `overdue_aging` | replaced by `summary` (count) + `tasks` drill-down (rows) |
-
-> The old `workload_heatmap` dedicated view was **replaced** by `TeamWorkloadView` (`/analytics/team/`); its URL is gone.
+> **Old `AnalyticsMetricView` catch-all removed.** The `/analytics/{metric}/` dynamic route no longer exists. Any frontend code using `filter[X]` bracket params or the old metric names (`overview`, `velocity`, `burnup`, `completion_rate`) must be updated to the flat param names and new URLs above.
 
 ### Miscellaneous
 

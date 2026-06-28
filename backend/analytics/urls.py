@@ -1,6 +1,6 @@
 from django.urls import path
 from .views import (
-    AnalyticsMetricView,
+    AnalyticsAggregateView,
     TaskDrilldownView,
     TeamWorkloadView,
     WorkspaceSummaryView,
@@ -9,10 +9,8 @@ from .views import (
 _ws = "workspaces/<str:workspace_id>"
 
 urlpatterns = [
-    # Dedicated views (must precede the generic <metric> catch-all)
     path(f"{_ws}/analytics/summary/", WorkspaceSummaryView.as_view()),
     path(f"{_ws}/analytics/team/", TeamWorkloadView.as_view()),
     path(f"{_ws}/analytics/tasks/", TaskDrilldownView.as_view()),
-    # Single dynamic endpoint for all remaining metrics
-    path(f"{_ws}/analytics/<str:metric>/", AnalyticsMetricView.as_view()),
+    path(f"{_ws}/analytics/aggregate/", AnalyticsAggregateView.as_view()),
 ]
