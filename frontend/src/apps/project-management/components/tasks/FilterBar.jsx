@@ -199,7 +199,7 @@ function AdvancedFilters({ filters = {}, onChange, labels = [], currentUserId })
 
   // Returns full constant objects so chips get icon + color metadata
   const getOptions = (key) => {
-    if (key === "priorities") return PRIORITIES.filter((p) => p.value !== "no_priority");
+    if (key === "priorities") return PRIORITIES;
     if (key === "types") return TASK_TYPES;
     if (key === "due") return DUE_OPTIONS;
     if (key === "labels") return labels.map((l) => ({ value: l.id, label: l.name, color: l.color }));

@@ -129,26 +129,25 @@ def _get_subtask(workspace_id, board_id, task_id, subtask_id, user):
 def _task_list_qs():
     """Queryset for task card/list endpoints.
 
-    Annotations compute all five count fields that TaskCardSerializer renders
-    so no per-task COUNT queries fire. prefetch_related("subtasks") and
-    ("comments") are intentionally absent — .count() bypasses the prefetch
-    cache and would fire anyway.
+    select_related("assignee") only — sprint_id is a stored FK column (no join
+    needed), status_id same. blocked_by_deps and sprint dropped: TaskCardSerializer
+    only exposes their IDs, which come from stored FK columns.
+
+    Annotations cover exactly what TaskCardSerializer reads. _done_child_count
+    and _comment_count are omitted — they are not fields on TaskCardSerializer,
+    so annotating them was wasted DB work on every list GET.
     """
     from django.db.models import Count, Q as DQ
 
     return (
-        Task.objects.select_related("assignee", "sprint")
-        .prefetch_related("labels", "blocked_by_deps")
+        Task.objects.select_related("assignee")
+        .prefetch_related("labels")
         .annotate(
             _child_count=Count("children", distinct=True),
-            _done_child_count=Count(
-                "children", filter=DQ(children__status__is_done=True), distinct=True
-            ),
             _subtask_count=Count("subtasks", distinct=True),
             _done_subtask_count=Count(
                 "subtasks", filter=DQ(subtasks__is_done=True), distinct=True
             ),
-            _comment_count=Count("comments", distinct=True),
             _pending_approval_count=Count(
                 "approvals",
                 filter=DQ(approvals__status__in=["pending", "changes_requested"]),

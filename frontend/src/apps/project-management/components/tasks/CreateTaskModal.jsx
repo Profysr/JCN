@@ -24,7 +24,7 @@ export default function CreateTaskModal({
   const { toast } = useToast();
 
   const [title, setTitle] = useState("");
-  const [priority, setPriority] = useState("no_priority");
+  const [priority, setPriority] = useState("medium");
   const [taskType, setTaskType] = useState("task");
   const [statusId, setStatusId] = useState("");
   const [assigneeId, setAssigneeId] = useState("");
@@ -43,7 +43,7 @@ export default function CreateTaskModal({
 
   const reset = () => {
     setTitle("");
-    setPriority("no_priority");
+    setPriority("medium");
     setTaskType("task");
     setStatusId("");
     setAssigneeId("");

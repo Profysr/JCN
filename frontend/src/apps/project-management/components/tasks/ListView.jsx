@@ -89,7 +89,7 @@ function getGroupKey(task, groupBy, statuses, sprintsById) {
         color: "#6366f1",
       };
     case "priority": {
-      const key = task.priority || "no_priority";
+      const key = task.priority || "lowest";
       return {
         id: key,
         label: key.replace(/_/g, " "),
@@ -247,7 +247,7 @@ function renderBodyCell(col, task, ctx) {
   } = ctx;
 
   if (col === "title") {
-    const p = PRI[task.priority] || PRI.no_priority;
+    const p = PRI[task.priority] || PRI.lowest;
     return (
       <td
         key="title"
@@ -314,7 +314,7 @@ function renderBodyCell(col, task, ctx) {
   }
 
   if (col === "priority") {
-    const p = PRI[task.priority] || PRI.no_priority;
+    const p = PRI[task.priority] || PRI.lowest;
     const Icon = p.icon;
     return (
       <td key="priority" className="px-3 py-2">

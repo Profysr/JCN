@@ -116,11 +116,11 @@ class Task(models.Model):
     PREFIX = "tsk"
 
     class Priority(models.TextChoices):
-        NO_PRIORITY = "no_priority", "No Priority"
+        LOWEST = "lowest", "Lowest"
         LOW = "low", "Low"
         MEDIUM = "medium", "Medium"
         HIGH = "high", "High"
-        URGENT = "urgent", "Urgent"
+        HIGHEST = "highest", "Highest"
 
     class TaskType(models.TextChoices):
         TASK = "task", "Task"
@@ -146,7 +146,7 @@ class Task(models.Model):
         related_name="tasks",
     )
     priority = models.CharField(
-        max_length=20, choices=Priority.choices, default=Priority.NO_PRIORITY
+        max_length=20, choices=Priority.choices, default=Priority.MEDIUM
     )
     assignee = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -521,7 +521,7 @@ class TaskTemplate(models.Model):
         max_length=20, choices=Task.TaskType.choices, default=Task.TaskType.TASK
     )
     priority = models.CharField(
-        max_length=20, choices=Task.Priority.choices, default=Task.Priority.NO_PRIORITY
+        max_length=20, choices=Task.Priority.choices, default=Task.Priority.MEDIUM
     )
     default_subtasks = models.JSONField(default=list)
     created_by = models.ForeignKey(

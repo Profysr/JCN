@@ -190,7 +190,7 @@ function suggestEstimate({
   score += Math.min(words / 40, 5); // longer specs ⇒ more work (cap 5)
   score += childCount * 1.5; // each child task is real scope
   score += subtaskCount * 0.5; // checklist items are smaller
-  if (priority === "urgent") score += 2;
+  if (priority === "highest") score += 2;
   else if (priority === "high") score += 1;
   if (taskType === "bug") score += 0.5; // bugs carry investigation overhead
 

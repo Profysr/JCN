@@ -16,12 +16,6 @@ import { NAV_ITEMS, workspaceUrl } from "@/shared/lib/navLinks";
 import { cn } from "@/shared/lib/utils";
 import { getPriority } from "@/shared/lib/constants";
 
-const PRIORITY_COLOR = Object.fromEntries(
-  ["urgent", "high", "medium", "low", "no_priority"].map((v) => [
-    v,
-    getPriority(v).textCls,
-  ]),
-);
 
 // ── Recently viewed (localStorage) ────────────────────────────────────────────
 const RV_KEY = "jcn_recently_viewed";
@@ -385,7 +379,7 @@ export default function CommandPalette({ open, onClose, workspaceId }) {
           <input
             ref={inputRef}
             className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-            placeholder="Search, or try #bug  @name  !urgent  >overdue"
+            placeholder="Search, or try #bug  @name  !highest  >overdue"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -414,7 +408,7 @@ export default function CommandPalette({ open, onClose, workspaceId }) {
             {[
               ["#bug", "Filter type"],
               ["@", "By assignee"],
-              ["!urgent", "By priority"],
+              ["!highest", "By priority"],
               [">overdue", "Overdue"],
             ].map(([key, label]) => (
               <button
@@ -483,8 +477,7 @@ export default function CommandPalette({ open, onClose, workspaceId }) {
                             className={cn(
                               "w-4 h-4 flex-shrink-0",
                               item.type === "task"
-                                ? PRIORITY_COLOR[item.priority] ||
-                                    "text-primary"
+                                ? getPriority(item.priority).textCls
                                 : item.type === "action"
                                   ? "text-emerald-500"
                                   : "text-muted-foreground",

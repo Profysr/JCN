@@ -68,7 +68,7 @@ export default function TaskCard({
             className="absolute left-0 top-0 bottom-0 w-[3px]"
             style={{
               backgroundColor: priority.hex,
-              opacity: task.priority === "no_priority" ? 0.2 : 0.7,
+              opacity: 0.7,
             }}
           />
 
@@ -173,9 +173,7 @@ export default function TaskCard({
             )}
 
             {/* Row 4: labels | right-side meta + priority icon */}
-            {(labels.length > 0 ||
-              task.priority !== "no_priority" ||
-              hasMeta) && (
+            {(labels.length > 0 || task.priority || hasMeta) && (
               <div className="flex items-center gap-1">
                 {labels.slice(0, 2).map((l) => (
                   <span
@@ -222,7 +220,7 @@ export default function TaskCard({
                   </span>
                 )}
 
-                {task.priority && task.priority !== "no_priority" && (
+                {task.priority && (
                   <span
                     className="inline-flex items-center gap-0.5 px-1.5 py-0 rounded-sm text-[10px] font-semibold leading-[1.4rem] flex-shrink-0"
                     style={{
