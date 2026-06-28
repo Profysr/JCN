@@ -114,7 +114,7 @@ export default function StackedBarChart({
       scales: {
         x: {
           stacked: true,
-          grid: { display: horizontal, color: c.border, drawBorder: false },
+          grid: { display: horizontal, color: c.grid, drawBorder: false },
           ticks: {
             font: { size: 10 },
             color: c.mutedForeground,
@@ -135,7 +135,7 @@ export default function StackedBarChart({
           beginAtZero: true,
           grid: {
             display: !horizontal,
-            color: c.border,
+            color: c.grid,
             borderDash: [4, 4],
             drawBorder: false,
           },

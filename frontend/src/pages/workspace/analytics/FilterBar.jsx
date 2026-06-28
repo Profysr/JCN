@@ -154,7 +154,7 @@ export default function FilterBar({
           <select
             value={boardId || ""}
             onChange={(e) => onBoardChange(e.target.value || undefined)}
-            className="text-xs appearance-none bg-transparent border border-border rounded-md pl-2.5 pr-6 py-1 focus:outline-none focus:ring-1 focus:ring-ring text-foreground cursor-pointer"
+            className="text-xs appearance-none bg-popover border border-border rounded-md pl-2.5 pr-6 py-1 focus:outline-none focus:ring-1 focus:ring-ring text-foreground cursor-pointer"
           >
             <option value="">All boards</option>
             {projects.map((p) => (
@@ -180,6 +180,7 @@ export default function FilterBar({
           members={members}
           labels={labels}
           inline
+          hideSearch
         />
 
         {/* Refresh */}

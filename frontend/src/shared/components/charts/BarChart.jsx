@@ -4,6 +4,7 @@ import ChartDataLabels from 'chartjs-plugin-datalabels';
 import './chartSetup';
 import { chartColors } from './chartTheme';
 import { getChartColor } from './chartPalette';
+import { useThemeKey } from './useThemeKey';
 
 /**
  * Generic bar chart — handles every bar-based use case:
@@ -42,6 +43,7 @@ export default function BarChart({
 }) {
   const [hiddenSeries, setHiddenSeries] = useState(new Set());
   const [currentPage, setCurrentPage] = useState(0);
+  const themeKey = useThemeKey();
   const c = chartColors();
 
   const barSeries = series.filter((s) => (s.type ?? 'bar') === 'bar');
@@ -138,32 +140,50 @@ export default function BarChart({
       scales: {
         x: {
           stacked,
-          grid: { display: horizontal, color: c.border, drawBorder: false },
-          ticks: {
-            font: { size: 10 },
-            color: c.mutedForeground,
-            maxRotation: paginatedCats.length > 8 ? 45 : 0,
-            minRotation: paginatedCats.length > 8 ? 45 : 0,
-            autoSkip: false,
-            callback(value) {
-              const label = this.getLabelForValue(value);
-              return typeof label === 'string' && label.length > 14
-                ? label.slice(0, 14) + '…'
-                : label;
-            },
-          },
+          grid: { display: horizontal, color: c.grid, drawBorder: false },
+          ticks: horizontal
+            ? {
+                font: { size: 10 },
+                color: c.mutedForeground,
+                callback: (v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v),
+              }
+            : {
+                font: { size: 10 },
+                color: c.mutedForeground,
+                maxRotation: paginatedCats.length > 8 ? 45 : 0,
+                minRotation: paginatedCats.length > 8 ? 45 : 0,
+                autoSkip: false,
+                callback(value) {
+                  const label = this.getLabelForValue(value);
+                  return typeof label === 'string' && label.length > 14
+                    ? label.slice(0, 14) + '…'
+                    : label;
+                },
+              },
           border: { display: false },
         },
         y: {
           stacked,
           beginAtZero: true,
           ...(yMax != null ? { max: yMax } : {}),
-          grid: { display: !horizontal, color: c.border, borderDash: [4, 4], drawBorder: false },
-          ticks: {
-            font: { size: 10 },
-            color: c.mutedForeground,
-            callback: (v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v),
-          },
+          grid: { display: !horizontal, color: c.grid, borderDash: [4, 4], drawBorder: false },
+          ticks: horizontal
+            ? {
+                font: { size: 10 },
+                color: c.mutedForeground,
+                autoSkip: false,
+                callback(value) {
+                  const label = this.getLabelForValue(value);
+                  return typeof label === 'string' && label.length > 14
+                    ? label.slice(0, 14) + '…'
+                    : label;
+                },
+              }
+            : {
+                font: { size: 10 },
+                color: c.mutedForeground,
+                callback: (v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v),
+              },
           ...(yTitle && {
             title: {
               display: true,
@@ -234,7 +254,7 @@ export default function BarChart({
         className="w-full relative"
         style={{ height: totalPages > 1 ? height - 36 : height }}
       >
-        <Bar data={chartData} options={options} plugins={[ChartDataLabels]} />
+        <Bar key={themeKey} data={chartData} options={options} plugins={[ChartDataLabels]} />
       </div>
 
       {/* Pagination */}

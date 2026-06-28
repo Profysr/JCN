@@ -443,6 +443,7 @@ export default function FilterBar({
   onSaveView,
   onDeleteView,
   inline = false,
+  hideSearch = false,
   currentUserId,
 }) {
   const [savingName, setSavingName] = useState("");
@@ -494,18 +495,22 @@ export default function FilterBar({
       )}
     >
       {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-        <input
-          ref={searchRef}
-          className="pl-8 pr-3 py-1.5 text-xs border rounded-md bg-background outline-none focus:ring-1 focus:ring-ring w-44 placeholder:text-muted-foreground"
-          placeholder="Search tasks…"
-          value={filters.search}
-          onChange={(e) => onChange({ ...filters, search: e.target.value })}
-        />
-      </div>
+      {!hideSearch && (
+        <>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+            <input
+              ref={searchRef}
+              className="pl-8 pr-3 py-1.5 text-xs border rounded-md bg-background outline-none focus:ring-1 focus:ring-ring w-44 placeholder:text-muted-foreground"
+              placeholder="Search tasks…"
+              value={filters.search}
+              onChange={(e) => onChange({ ...filters, search: e.target.value })}
+            />
+          </div>
 
-      <div className="w-px h-4 bg-border" />
+          <div className="w-px h-4 bg-border" />
+        </>
+      )}
 
       {/* Assignee avatar stack */}
       {members.length > 0 && (

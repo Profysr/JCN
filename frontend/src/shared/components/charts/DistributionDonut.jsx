@@ -3,6 +3,7 @@ import { Doughnut } from 'react-chartjs-2';
 import './chartSetup';
 import { chartColors } from './chartTheme';
 import { getChartColor } from './chartPalette';
+import { useThemeKey } from './useThemeKey';
 
 // Draws label + value in the donut hole; syncs with hover state.
 const centerTextPlugin = {
@@ -76,6 +77,7 @@ export function toDonutData(raw) {
 
 function BaseDonut({ data, hoveredIndex, onHover, onSliceClick, height }) {
   const chartRef = useRef(null);
+  const themeKey = useThemeKey();
   const c = chartColors();
   const { slices, total } = data;
 
@@ -173,7 +175,7 @@ function BaseDonut({ data, hoveredIndex, onHover, onSliceClick, height }) {
 
   return (
     <div className="w-full relative" style={{ height }}>
-      <Doughnut ref={chartRef} data={chartData} options={options} plugins={[centerTextPlugin]} />
+      <Doughnut key={themeKey} ref={chartRef} data={chartData} options={options} plugins={[centerTextPlugin]} />
     </div>
   );
 }
@@ -289,7 +291,6 @@ function SideLegend({ slices, total, hoveredIdx, onHover, height }) {
                     style={{
                       width: `${barWidth}%`,
                       backgroundColor: slice.color,
-                      opacity: isHovered ? 1 : 0.55,
                     }}
                   />
                 </div>

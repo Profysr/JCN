@@ -3,6 +3,7 @@ import { Scatter } from 'react-chartjs-2';
 import './chartSetup';
 import { chartColors } from './chartTheme';
 import { getChartColor } from './chartPalette';
+import { useThemeKey } from './useThemeKey';
 
 /**
  * Scatter plot with optional stat pills and a horizontal reference line.
@@ -28,6 +29,7 @@ export default function ScatterChart({
   height = 300,
   tooltipFormatter,
 }) {
+  const themeKey = useThemeKey();
   const c = chartColors();
 
   // ── Reference line plugin ─────────────────────────────────────────────────
@@ -110,7 +112,7 @@ export default function ScatterChart({
       },
       scales: {
         x: {
-          grid: { color: c.border, borderDash: [4, 4], drawBorder: false },
+          grid: { color: c.grid, borderDash: [4, 4], drawBorder: false },
           ticks: { color: c.mutedForeground, font: { size: 10 } },
           border: { display: false },
           ...(xTitle && {
@@ -119,7 +121,7 @@ export default function ScatterChart({
         },
         y: {
           beginAtZero: true,
-          grid: { color: c.border, borderDash: [4, 4], drawBorder: false },
+          grid: { color: c.grid, borderDash: [4, 4], drawBorder: false },
           ticks: { color: c.mutedForeground, font: { size: 10 }, precision: 0 },
           border: { display: false },
           ...(yTitle && {
@@ -158,7 +160,7 @@ export default function ScatterChart({
 
       {/* Canvas */}
       <div className="w-full relative" style={{ height }}>
-        <Scatter data={chartData} options={options} plugins={plugins} />
+        <Scatter key={themeKey} data={chartData} options={options} plugins={plugins} />
       </div>
     </div>
   );

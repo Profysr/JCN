@@ -28,55 +28,65 @@ export const PRIORITIES = [
     label: "Lowest",
     order: 4,
     icon: ChevronsDown,
-    textCls: "text-blue-500",
-    dotCls: "bg-blue-500",
-    hex: "#3b82f6",
-    filterActiveCls: "text-blue-600 bg-blue-500/10 border-blue-400/50",
-    modalBtnCls: "border-blue-300 text-blue-600 bg-blue-50",
+    textCls: "text-slate-500 dark:text-slate-400",
+    dotCls: "bg-slate-500 dark:bg-slate-400",
+    hex: "#64748b",
+    filterActiveCls:
+      "text-slate-600 bg-slate-500/10 border-slate-400/40 dark:text-slate-300 dark:bg-slate-500/20 dark:border-slate-500/40",
+    modalBtnCls:
+      "border-slate-300 text-slate-600 bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:bg-slate-800",
   },
   {
     value: "low",
     label: "Low",
     order: 3,
     icon: ChevronDown,
-    textCls: "text-blue-500",
-    dotCls: "bg-blue-500",
+    textCls: "text-blue-500 dark:text-blue-400",
+    dotCls: "bg-blue-500 dark:bg-blue-400",
     hex: "#3b82f6",
-    filterActiveCls: "text-blue-600 bg-blue-500/10 border-blue-400/50",
-    modalBtnCls: "border-blue-300 text-blue-600 bg-blue-50",
+    filterActiveCls:
+      "text-blue-600 bg-blue-500/10 border-blue-400/50 dark:text-blue-300 dark:bg-blue-500/20 dark:border-blue-500/40",
+    modalBtnCls:
+      "border-blue-300 text-blue-600 bg-blue-50 dark:border-blue-700 dark:text-blue-300 dark:bg-blue-950",
   },
   {
     value: "medium",
     label: "Medium",
     order: 2,
     icon: Equal,
-    textCls: "text-amber-600",
-    dotCls: "bg-amber-600",
-    hex: "#d97706",
-    filterActiveCls: "text-amber-700 bg-amber-600/10 border-amber-500/50",
-    modalBtnCls: "border-amber-300 text-amber-700 bg-amber-50",
+    textCls: "text-amber-500 dark:text-amber-400",
+    dotCls: "bg-amber-500 dark:bg-amber-400",
+    hex: "#f59e0b",
+    filterActiveCls:
+      "text-amber-600 bg-amber-500/10 border-amber-400/50 dark:text-amber-300 dark:bg-amber-500/20 dark:border-amber-500/40",
+    modalBtnCls:
+      "border-amber-300 text-amber-700 bg-amber-50 dark:border-amber-700 dark:text-amber-300 dark:bg-amber-950",
   },
   {
     value: "high",
     label: "High",
     order: 1,
     icon: ChevronUp,
-    textCls: "text-orange-600",
-    dotCls: "bg-orange-600",
-    hex: "#ea580c",
-    filterActiveCls: "text-orange-700 bg-orange-600/10 border-orange-500/50",
-    modalBtnCls: "border-orange-300 text-orange-700 bg-orange-50",
+    textCls: "text-orange-500 dark:text-orange-400",
+    dotCls: "bg-orange-500 dark:bg-orange-400",
+    hex: "#f97316",
+    filterActiveCls:
+      "text-orange-600 bg-orange-500/10 border-orange-400/50 dark:text-orange-300 dark:bg-orange-500/20 dark:border-orange-500/40",
+    modalBtnCls:
+      "border-orange-300 text-orange-700 bg-orange-50 dark:border-orange-700 dark:text-orange-300 dark:bg-orange-950",
   },
   {
     value: "highest",
     label: "Highest",
     order: 0,
     icon: ChevronsUp,
-    textCls: "text-orange-600",
-    dotCls: "bg-orange-600",
-    hex: "#ea580c",
-    filterActiveCls: "text-orange-700 bg-orange-600/10 border-orange-500/50",
-    modalBtnCls: "border-orange-300 text-orange-700 bg-orange-50",
+    textCls: "text-red-500 dark:text-red-400",
+    dotCls: "bg-red-500 dark:bg-red-400",
+    hex: "#ef4444",
+    filterActiveCls:
+      "text-red-600 bg-red-500/10 border-red-400/50 dark:text-red-300 dark:bg-red-500/20 dark:border-red-500/40",
+    modalBtnCls:
+      "border-red-300 text-red-700 bg-red-50 dark:border-red-700 dark:text-red-300 dark:bg-red-950",
   },
 ];
 
@@ -135,6 +145,7 @@ export const TASK_TYPES = [
     icon: CheckSquare,
     color: "text-slate-500 dark:text-slate-400",
     bg: "bg-slate-500/15",
+    hex: "#6366f1",
   },
   {
     value: "epic",
@@ -142,6 +153,7 @@ export const TASK_TYPES = [
     icon: Layers,
     color: "text-purple-500 dark:text-purple-400",
     bg: "bg-purple-500/15",
+    hex: "#f59e0b",
   },
   {
     value: "bug",
@@ -149,6 +161,7 @@ export const TASK_TYPES = [
     icon: Bug,
     color: "text-red-500 dark:text-red-400",
     bg: "bg-red-500/15",
+    hex: "#ef4444",
   },
   {
     value: "feature",
@@ -156,6 +169,7 @@ export const TASK_TYPES = [
     icon: Sparkles,
     color: "text-violet-500 dark:text-violet-400",
     bg: "bg-violet-500/15",
+    hex: "#10b981",
   },
   {
     value: "story",
@@ -163,6 +177,7 @@ export const TASK_TYPES = [
     icon: BookOpen,
     color: "text-blue-500 dark:text-blue-400",
     bg: "bg-blue-500/15",
+    hex: "#8b5cf6",
   },
   {
     value: "improvement",
@@ -170,6 +185,7 @@ export const TASK_TYPES = [
     icon: TrendingUp,
     color: "text-emerald-500 dark:text-emerald-400",
     bg: "bg-emerald-500/15",
+    hex: "#0ea5e9",
   },
   {
     value: "question",
@@ -177,6 +193,7 @@ export const TASK_TYPES = [
     icon: HelpCircle,
     color: "text-orange-500 dark:text-orange-400",
     bg: "bg-orange-500/15",
+    hex: "#64748b",
   },
 ];
 

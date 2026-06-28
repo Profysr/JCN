@@ -3,9 +3,11 @@
 export function chartColors() {
   const s = getComputedStyle(document.documentElement);
   const h = (v) => `hsl(${s.getPropertyValue(v).trim()})`;
+  const ha = (v, a) => `hsl(${s.getPropertyValue(v).trim()} / ${a})`;
   return {
     primary:         h('--primary'),
     border:          h('--border'),
+    grid:            ha('--border', 0.45),
     muted:           h('--muted'),
     mutedForeground: h('--muted-foreground'),
     popover:         h('--popover'),

@@ -1,37 +1,30 @@
 import { useMemo, useState } from "react";
-import { cn } from "@/shared/lib/utils";
 import { useAggregate } from "@/shared/hooks/useAnalyticsV2";
 import ChartCard from "@/shared/components/charts/ChartCard";
 import BarChart from "@/shared/components/charts/BarChart";
-import { getChartColor } from "@/shared/components/charts/chartPalette";
 import TaskDrilldownTable, { TaskDrilldownModal } from "./TaskDrilldownTable";
 
 // The three lenses on the overdue backlog — one chart, switchable. Each maps to
 // a group_by dimension + the drill-down filter key used when a bar is clicked.
 const DIMENSIONS = [
-  { key: "assignee", label: "By assignee", filterKey: "filter[assignee]" },
-  { key: "priority", label: "By priority", filterKey: "filter[priority]" },
-  { key: "board", label: "By board", filterKey: "filter[board]" },
+  { key: "assignee", label: "By assignee", filterKey: "assignee" },
+  { key: "priority", label: "By priority", filterKey: "priority" },
+  { key: "board", label: "By board", filterKey: "board" },
 ];
 
 function DimensionToggle({ value, onChange }) {
   return (
-    <div className="flex items-center bg-muted rounded-lg p-0.5 gap-0.5">
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="text-[11px] font-medium bg-popover border border-border rounded-md px-2 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
+    >
       {DIMENSIONS.map((d) => (
-        <button
-          key={d.key}
-          onClick={() => onChange(d.key)}
-          className={cn(
-            "px-2 py-1 rounded-md text-[11px] font-medium transition-all",
-            value === d.key
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-        >
+        <option key={d.key} value={d.key}>
           {d.label}
-        </button>
+        </option>
       ))}
-    </div>
+    </select>
   );
 }
 
@@ -40,18 +33,19 @@ function OverdueBreakdown({ workspaceId, filterParams, onSegmentClick }) {
   const active = DIMENSIONS.find((d) => d.key === dim);
 
   const { data, isLoading } = useAggregate(workspaceId, {
-    params: { group_by: dim, "filter[overdue]": "true", ...filterParams },
+    params: { group_by: dim, overdue: "true", ...filterParams },
   });
 
   const bar = useMemo(() => {
-    if (!data?.results?.length) return null;
-    const sorted = [...data.results].sort((a, b) => b.value - a.value);
+    const results = data?.groups?.[dim]?.results;
+    if (!results?.length) return null;
+    const sorted = [...results].sort((a, b) => b.value - a.value);
     return {
       series: [{ name: "Overdue", data: sorted.map((r) => r.value) }],
       categories: sorted.map((r) => r.label),
       keys: sorted.map((r) => r.key),
     };
-  }, [data]);
+  }, [data, dim]);
 
   return (
     <ChartCard
@@ -97,12 +91,12 @@ export default function OverdueSection({ workspaceId, filterParams = {} }) {
   const [drill, setDrill] = useState(null);
 
   const tableParams = useMemo(
-    () => ({ "filter[overdue]": "true", order: "due", ...filterParams }),
+    () => ({ overdue: "true", order: "due", ...filterParams }),
     [filterParams],
   );
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 xl:grid-cols-3 gap-2">
       <div className="xl:col-span-1">
         <OverdueBreakdown
           workspaceId={workspaceId}
@@ -111,7 +105,7 @@ export default function OverdueSection({ workspaceId, filterParams = {} }) {
         />
       </div>
 
-      <div className="xl:col-span-2 bg-card border border-border rounded-xl p-5 shadow-sm">
+      <div className="xl:col-span-2 bg-card border border-border rounded-md p-5 shadow-sm">
         <TaskDrilldownTable
           workspaceId={workspaceId}
           params={tableParams}
@@ -125,7 +119,7 @@ export default function OverdueSection({ workspaceId, filterParams = {} }) {
         onClose={() => setDrill(null)}
         workspaceId={workspaceId}
         title={drill?.title || "Overdue tasks"}
-        params={{ "filter[overdue]": "true", ...filterParams, ...(drill?.params || {}) }}
+        params={{ overdue: "true", ...filterParams, ...(drill?.params || {}) }}
         showOverdue
       />
     </div>

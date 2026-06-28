@@ -1,674 +1,188 @@
-import { useState } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useParams } from "react-router-dom";
-import { BarChart2, Activity, Users, Layers } from "lucide-react";
-import { Bar as ChartBar } from "react-chartjs-2";
-import "@/shared/components/charts/chartSetup";
-import { chartColors } from "@/shared/components/charts/chartTheme";
-import { cn } from "@/shared/lib/utils";
+import { useQueryClient } from "@tanstack/react-query";
+import { BarChart2, LayoutGrid, Layers, Users } from "lucide-react";
+import { useBoards } from "@/apps/project-management/hooks/useBoards";
+import { useLabels } from "@/apps/project-management/hooks/useLabels";
+import { useMembers } from "@/shared/hooks/useMembers";
+import { buildTaskParams } from "@/shared/hooks/useAnalyticsV2";
 import {
-  useWorkspaceOverview,
-  useVelocity,
-  useCycleTime,
-  useLeadTime,
-  useThroughput,
-  useCFD,
-  useBurnup,
-  useWorkloadHeatmap,
-  useTimeInStatus,
-  useOverdueAging,
-  useCompletionRate,
-  useEstimationAccuracy,
-} from "@/shared/hooks/useAnalyticsV2";
-import { useBoards } from "@/apps/project-management/hooks/useProjects";
-import { getPriority } from "@/shared/lib/constants";
-import VelocityChart from "@/shared/components/charts/VelocityChart";
-import CFDChart from "@/shared/components/charts/CFDChart";
-import CycleTimeChart from "@/shared/components/charts/CycleTimeChart";
-import LeadTimeChart from "@/shared/components/charts/LeadTimeChart";
-import ThroughputChart from "@/shared/components/charts/ThroughputChart";
-import BurnupChart from "@/shared/components/charts/BurnupChart";
-import WorkloadHeatmap from "@/shared/components/charts/WorkloadHeatmap";
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "@/shared/components/ui/Tabs";
+import FilterBar from "./analytics/FilterBar";
+import KpiSection from "./analytics/KpiSection";
+import OverdueSection from "./analytics/OverdueSection";
+import BoardTab from "./analytics/BoardTab";
+import SprintsTab from "./analytics/SprintsTab";
+import TeamsTab from "./analytics/TeamsTab";
 
-// ── Shared primitives ─────────────────────────────────────────────────────────
+const TABS = [
+  { id: "board", label: "Board", icon: LayoutGrid },
+  { id: "sprints", label: "Sprints", icon: Layers },
+  { id: "teams", label: "Teams", icon: Users },
+];
 
-const PRIORITY_BADGE = {
-  urgent: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
-  high: "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300",
-  medium:
-    "bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300",
-  low: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
-  no_priority: "bg-muted text-muted-foreground",
+// Kanban-style filter state, minus the board-only `pendingMyApproval` toggle.
+const EMPTY_FILTERS = {
+  search: "",
+  priorities: [],
+  assignees: [],
+  labels: [],
+  types: [],
+  due: [],
 };
 
-function StatCard({
-  label,
-  value,
-  color = "bg-primary/10 text-primary",
-  icon: Icon,
-}) {
+function toISODate(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function buildDatesFromDays(days) {
+  const end = new Date();
+  const start = new Date();
+  start.setDate(end.getDate() - (days - 1));
+  return { startDate: toISODate(start), endDate: toISODate(end) };
+}
+
+function SectionHeader({ label, description }) {
   return (
-    <div className="bg-card border border-border rounded-md p-4 shadow-card flex items-start gap-3">
-      {Icon && (
-        <div
-          className={cn(
-            "w-10 h-10 rounded-md flex items-center justify-center flex-shrink-0",
-            color,
-          )}
-        >
-          <Icon className="w-5 h-5" />
-        </div>
-      )}
-      <div>
-        <p className="text-2xl font-bold tabular-nums">{value ?? "—"}</p>
-        <p className="text-xs text-muted-foreground">{label}</p>
+    <div className="space-y-0.5">
+      <div className="flex items-center gap-3">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">
+          {label}
+        </p>
+        <div className="flex-1 h-px bg-border" />
       </div>
-    </div>
-  );
-}
-
-function HBar({ label, value, max, color }) {
-  const pct = max > 0 ? Math.round((value / max) * 100) : 0;
-  return (
-    <div className="flex items-center gap-3">
-      <span className="text-xs text-muted-foreground w-28 truncate flex-shrink-0 text-right">
-        {label}
-      </span>
-      <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all duration-500"
-          style={{
-            width: `${pct}%`,
-            backgroundColor: color || "hsl(var(--primary))",
-          }}
-        />
-      </div>
-      <span className="text-xs font-semibold tabular-nums w-6 text-right">
-        {value}
-      </span>
-    </div>
-  );
-}
-
-function Card({ title, subtitle, children, className }) {
-  return (
-    <div
-      className={cn(
-        "bg-card border border-border rounded-md p-5 shadow-card",
-        className,
+      {description && (
+        <p className="text-xs text-muted-foreground pl-0.5">{description}</p>
       )}
-    >
-      {(title || subtitle) && (
-        <div className="mb-4">
-          {title && <p className="text-sm font-semibold">{title}</p>}
-          {subtitle && (
-            <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
-          )}
-        </div>
-      )}
-      {children}
     </div>
   );
 }
 
-function Empty({ msg = "No data yet" }) {
-  return (
-    <p className="text-xs text-muted-foreground py-8 text-center">{msg}</p>
-  );
-}
-
-function SectionDivider({ label }) {
-  return (
-    <div className="flex items-center gap-3">
-      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">
-        {label}
-      </p>
-      <div className="flex-1 h-px bg-border" />
-    </div>
-  );
-}
-
-function CompletionSparkline({ data }) {
-  if (!data || data.length < 2) return <Empty msg="Not enough data yet" />;
-  const counts = data.map((d) => d.count);
-  const max = Math.max(...counts, 1);
-  const W = 400,
-    H = 80;
-  const step = W / (data.length - 1);
-  const points = data
-    .map((d, i) => `${i * step},${H - (d.count / max) * (H - 10)}`)
-    .join(" ");
-  return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      className="w-full h-20"
-      preserveAspectRatio="none"
-    >
-      <polyline
-        points={points}
-        fill="none"
-        stroke="hsl(var(--primary))"
-        strokeWidth="2"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-      {data.map((d, i) => (
-        <circle
-          key={i}
-          cx={i * step}
-          cy={H - (d.count / max) * (H - 10)}
-          r="3"
-          fill="hsl(var(--primary))"
-        />
-      ))}
-    </svg>
-  );
-}
-
-// ── Existing sections ─────────────────────────────────────────────────────────
-function KpiSection({ workspaceId, boardId }) {
-  const { data } = useWorkspaceOverview(workspaceId, { boardId });
-  return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-      <StatCard
-        label="Boards"
-        value={data?.boards}
-        icon={Layers}
-        color="bg-indigo-100 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300"
-      />
-      <StatCard
-        label="Total Tasks"
-        value={data?.tasks}
-        icon={BarChart2}
-        color="bg-violet-100 text-violet-600 dark:bg-violet-950 dark:text-violet-300"
-      />
-      <StatCard
-        label="Members"
-        value={data?.members}
-        icon={Users}
-        color="bg-emerald-100 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-300"
-      />
-      <StatCard
-        label="Open Tasks"
-        value={data?.open_tasks}
-        icon={Activity}
-        color="bg-orange-100 text-orange-600 dark:bg-orange-950 dark:text-orange-300"
-      />
-    </div>
-  );
-}
-
-function TaskBreakdownSection({ workspaceId, boardId }) {
-  const { data } = useWorkspaceOverview(workspaceId, { boardId });
-  const byStatus = data?.tasks_by_status || [];
-  const byPriority = data?.tasks_by_priority || [];
-  const maxS = Math.max(1, ...byStatus.map((s) => s.count));
-  const maxP = Math.max(1, ...byPriority.map((p) => p.count));
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <Card title="Tasks by Status">
-        {!byStatus.length ? (
-          <Empty />
-        ) : (
-          <div className="space-y-2.5">
-            {byStatus.map((s) => (
-              <HBar
-                key={s.status__name}
-                label={s.status__name || "None"}
-                value={s.count}
-                max={maxS}
-                color={s.status__color}
-              />
-            ))}
-          </div>
-        )}
-      </Card>
-      <Card title="Tasks by Priority">
-        {!byPriority.length ? (
-          <Empty />
-        ) : (
-          <div className="space-y-2.5">
-            {byPriority.map((p) => {
-              const cfg = getPriority(p.priority);
-              return (
-                <HBar
-                  key={p.priority}
-                  label={cfg.label || p.priority}
-                  value={p.count}
-                  max={maxP}
-                  color={cfg.hex}
-                />
-              );
-            })}
-          </div>
-        )}
-      </Card>
-    </div>
-  );
-}
-
-function ActivitySection({ workspaceId, boardId }) {
-  const { data } = useWorkspaceOverview(workspaceId, { boardId });
-  return (
-    <Card title="Activity — Last 30 Days">
-      <CompletionSparkline data={data?.completion_trend} />
-    </Card>
-  );
-}
-
-function WorkloadSection({ workspaceId, boardId, days }) {
-  const { data: hmData = [] } = useWorkloadHeatmap(workspaceId, {
-    boardId,
-    days,
-  });
-  const active = hmData.filter?.((w) => w.assigned > 0) || [];
-  const maxW = Math.max(1, ...active.map((w) => w.assigned));
-  return (
-    <Card title="Workload by Member">
-      {!active.length ? (
-        <Empty msg="No assigned tasks yet" />
-      ) : (
-        <div className="space-y-2.5">
-          {active.map((w) => (
-            <HBar
-              key={w.email}
-              label={w.name || w.email}
-              value={w.assigned}
-              max={maxW}
-            />
-          ))}
-        </div>
-      )}
-    </Card>
-  );
-}
-
-function VelocitySection({ workspaceId, boardId, days }) {
-  const { data: vData, isLoading: vLoad } = useVelocity(workspaceId, {
-    boardId,
-  });
-  const { data: tData, isLoading: tLoad } = useThroughput(workspaceId, {
-    boardId,
-    period: "week",
-    days,
-  });
-  const { data: bData, isLoading: bLoad } = useBurnup(workspaceId, {
-    boardId,
-    days,
-  });
-  return (
-    <div className="space-y-4">
-      <VelocityChart
-        data={vData}
-        avgSP={vData?.avg_story_points}
-        loading={vLoad}
-      />
-      <ThroughputChart data={tData} period="week" loading={tLoad} />
-      {boardId && <BurnupChart data={bData} loading={bLoad} />}
-    </div>
-  );
-}
-
-function FlowSection({ workspaceId, boardId, days }) {
-  const { data: cfdData, isLoading: cfdLoad } = useCFD(workspaceId, {
-    boardId,
-    days,
-  });
-  const { data: ltData, isLoading: ltLoad } = useLeadTime(workspaceId, {
-    boardId,
-    days,
-  });
-  const { data: ctData, isLoading: ctLoad } = useCycleTime(workspaceId, {
-    boardId,
-    days,
-  });
-  return (
-    <div className="space-y-4">
-      <CFDChart data={cfdData} loading={cfdLoad} />
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <LeadTimeChart data={ltData} loading={ltLoad} />
-        <CycleTimeChart data={ctData} loading={ctLoad} />
-      </div>
-    </div>
-  );
-}
-
-function TeamSection({ workspaceId, boardId, days }) {
-  const { data: hmData, isLoading: hmLoad } = useWorkloadHeatmap(workspaceId, {
-    boardId,
-    days,
-  });
-  return <WorkloadHeatmap data={hmData} loading={hmLoad} />;
-}
-
-// ── New differentiating sections ──────────────────────────────────────────────
-
-function TimeInStatusSection({ workspaceId, boardId, days }) {
-  const { data = [] } = useTimeInStatus(workspaceId, { boardId, days });
-  const max = Math.max(1, ...data.map((d) => d.avg_days));
-  return (
-    <Card
-      title="Time Spent in Each Status"
-      subtitle="Historical avg — where work slowed down before moving forward"
-    >
-      {!data.length ? (
-        <Empty />
-      ) : (
-        <div className="space-y-3">
-          {data.map((d) => (
-            <div key={d.status} className="flex items-center gap-3">
-              <span className="text-xs text-muted-foreground w-28 truncate flex-shrink-0 text-right">
-                {d.status}
-              </span>
-              <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-500"
-                  style={{
-                    width: `${(d.avg_days / max) * 100}%`,
-                    backgroundColor: "hsl(var(--primary))",
-                  }}
-                />
-              </div>
-              <span className="text-xs font-semibold tabular-nums w-14 text-right text-muted-foreground">
-                {d.avg_days}d avg
-              </span>
-              <span className="text-[10px] text-muted-foreground/60 w-16 text-right">
-                {d.sample_count} tasks
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-    </Card>
-  );
-}
-
-function OverdueAgingSection({ workspaceId, boardId }) {
-  const { data } = useOverdueAging(workspaceId, { boardId });
-  const buckets = data?.buckets || [];
-  const tasks = data?.tasks || [];
-  const total = data?.total ?? 0;
-  const maxCount = Math.max(1, ...buckets.map((b) => b.count));
-
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <Card
-        title={`Overdue Tasks — ${total} open`}
-        subtitle="Tasks past their due date, still not done"
-      >
-        {!buckets.some((b) => b.count > 0) ? (
-          <Empty msg="No overdue tasks — great work!" />
-        ) : (
-          <div className="space-y-2.5">
-            {buckets.map((b) => (
-              <HBar
-                key={b.label}
-                label={b.label}
-                value={b.count}
-                max={maxCount}
-                color="#ef4444"
-              />
-            ))}
-          </div>
-        )}
-      </Card>
-
-      <Card title="Most Overdue" subtitle="Sorted by days past due date">
-        {!tasks.length ? (
-          <Empty msg="Nothing overdue" />
-        ) : (
-          <div className="divide-y divide-border">
-            {tasks.slice(0, 8).map((t) => (
-              <div key={t.id} className="flex items-start gap-2 py-2.5 text-xs">
-                <span
-                  className={cn(
-                    "px-1.5 py-0.5 rounded text-[10px] font-medium flex-shrink-0 mt-0.5",
-                    PRIORITY_BADGE[t.priority] || PRIORITY_BADGE.no_priority,
-                  )}
-                >
-                  {getPriority(t.priority).label || t.priority}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="truncate font-medium">{t.title}</p>
-                  <p className="text-muted-foreground mt-0.5 truncate">
-                    {t.project} · {t.assignee}
-                  </p>
-                </div>
-                <span className="text-destructive font-bold flex-shrink-0">
-                  {t.days_overdue}d
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
-    </div>
-  );
-}
-
-function CompletionRateSection({ workspaceId, boardId }) {
-  const { data = [] } = useCompletionRate(workspaceId, { boardId });
-  if (!data.length) return null;
-
-  const c = chartColors();
-  const chartData = {
-    labels: data.map((d) => d.sprint_name),
-    datasets: [
-      {
-        data: data.map((d) => d.rate),
-        backgroundColor: data.map((d) =>
-          d.rate >= 80 ? "#22c55e" : d.rate >= 50 ? "#f59e0b" : "#ef4444",
-        ),
-        borderRadius: 4,
-        maxBarThickness: 56,
-      },
-    ],
-  };
-
-  const options = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { display: false },
-      tooltip: {
-        backgroundColor: c.popover,
-        borderColor: c.border,
-        borderWidth: 1,
-        titleColor: c.foreground,
-        bodyColor: c.mutedForeground,
-        padding: 10,
-        cornerRadius: 8,
-        callbacks: {
-          label: (ctx) => {
-            const d = data[ctx.dataIndex];
-            return ` ${ctx.raw}% (${d.done}/${d.total} tasks)`;
-          },
-        },
-      },
-    },
-    scales: {
-      x: {
-        grid: { display: false },
-        ticks: { color: c.mutedForeground, font: { size: 10 } },
-        border: { display: false },
-      },
-      y: {
-        max: 100,
-        grid: { color: c.border },
-        ticks: {
-          color: c.mutedForeground,
-          font: { size: 10 },
-          callback: (v) => `${v}%`,
-        },
-        border: { display: false },
-      },
-    },
-  };
-
-  return (
-    <Card
-      title="Sprint Completion Rate"
-      subtitle="% of planned tasks actually finished each sprint"
-    >
-      <div style={{ height: 200, position: "relative" }}>
-        <ChartBar data={chartData} options={options} />
-      </div>
-    </Card>
-  );
-}
-
-function EstimationAccuracySection({ workspaceId, boardId }) {
-  const { data = [] } = useEstimationAccuracy(workspaceId, { boardId });
-  if (!data.length) return null;
-
-  return (
-    <Card
-      title="Estimation Accuracy"
-      subtitle="Story points estimated vs actual avg cycle time per sprint"
-    >
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="border-b border-border">
-              <th className="text-left py-2 pr-4 font-semibold text-muted-foreground">
-                Sprint
-              </th>
-              <th className="text-right py-2 px-4 font-semibold text-muted-foreground">
-                Story Points
-              </th>
-              <th className="text-right py-2 pl-4 font-semibold text-muted-foreground">
-                Avg Cycle Time
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((row) => (
-              <tr
-                key={row.sprint_name}
-                className="border-b border-border last:border-0 hover:bg-muted/30"
-              >
-                <td className="py-2.5 pr-4 font-medium">{row.sprint_name}</td>
-                <td className="py-2.5 px-4 text-right tabular-nums">
-                  {row.estimated_sp > 0 ? (
-                    `${row.estimated_sp} SP`
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
-                </td>
-                <td className="py-2.5 pl-4 text-right tabular-nums">
-                  {row.avg_cycle_days != null ? (
-                    <span
-                      className={
-                        row.avg_cycle_days > 7
-                          ? "text-destructive font-semibold"
-                          : ""
-                      }
-                    >
-                      {row.avg_cycle_days}d
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </Card>
-  );
-}
-
-// ── Section registry ──────────────────────────────────────────────────────────
-// To add a new section: write a Component above, then add one entry here.
-// Each Component receives: workspaceId, boardId, days
-const SECTIONS = [
-  // { id: "kpis",       Component: KpiSection },
-  { id: "tasks", label: "Task Breakdown", Component: TaskBreakdownSection },
-  { id: "activity", Component: ActivitySection },
-  { id: "workload", Component: WorkloadSection },
-  { id: "overdue", label: "Risk & Health", Component: OverdueAgingSection },
-  { id: "time-in-status", Component: TimeInStatusSection },
-  {
-    id: "completion",
-    label: "Sprint Performance",
-    Component: CompletionRateSection,
-  },
-  { id: "estimation", Component: EstimationAccuracySection },
-  {
-    id: "velocity",
-    label: "Velocity & Throughput",
-    Component: VelocitySection,
-  },
-  { id: "flow", label: "Flow Metrics", Component: FlowSection },
-  { id: "team", label: "Team Heatmap", Component: TeamSection },
-];
-
-const DATE_OPTIONS = [
-  { value: "14", label: "Last 14 days" },
-  { value: "30", label: "Last 30 days" },
-  { value: "60", label: "Last 60 days" },
-  { value: "90", label: "Last 90 days" },
-];
-
-// ── Main page ─────────────────────────────────────────────────────────────────
 export default function AnalyticsPage() {
   const { workspaceId } = useParams();
+  const queryClient = useQueryClient();
+
+  const [activeTab, setActiveTab] = useState("board");
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Filter state
+  const [activeDays, setActiveDays] = useState(30);
+  const initialDates = buildDatesFromDays(30);
+  const [startDate, setStartDate] = useState(initialDates.startDate);
+  const [endDate, setEndDate] = useState(initialDates.endDate);
   const [boardId, setBoardId] = useState(undefined);
-  const [days, setDays] = useState(30);
+  const [kfilters, setKFilters] = useState(EMPTY_FILTERS);
 
   const { data: projects = [] } = useBoards(workspaceId);
-  const sharedProps = { workspaceId, boardId, days };
+  const { data: members = [] } = useMembers(workspaceId);
+  // Labels are board-scoped — only available once a board is picked.
+  const { data: labels = [] } = useLabels(workspaceId, boardId);
+
+  // Shared flat filter params forwarded to every tab/chart/drill-down.
+  const filterParams = useMemo(
+    () => buildTaskParams(kfilters, boardId),
+    [kfilters, boardId],
+  );
+
+  function handlePresetClick(days) {
+    setActiveDays(days);
+    const { startDate: s, endDate: e } = buildDatesFromDays(days);
+    setStartDate(s);
+    setEndDate(e);
+  }
+
+  function handleStartDateChange(val) {
+    setStartDate(val);
+    setActiveDays(null);
+  }
+
+  function handleEndDateChange(val) {
+    setEndDate(val);
+    setActiveDays(null);
+  }
+
+  // Refresh Button
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await queryClient.invalidateQueries({ queryKey: ["analytics"] });
+    setRefreshing(false);
+  }, [queryClient]);
+
+  
+  const filters = { workspaceId, boardId, startDate, endDate, filterParams };
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Header */}
+      {/* Page header */}
       <div className="border-b border-border bg-card px-6 py-4 flex-shrink-0">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h1 className="text-lg font-bold tracking-tight flex items-center gap-2">
-              <BarChart2 className="w-5 h-5 text-primary" />
-              Analytics
-            </h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Insights across your workspace
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <select
-              value={boardId || ""}
-              onChange={(e) => setBoardId(e.target.value || undefined)}
-              className="text-xs bg-background border border-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring text-foreground"
-            >
-              <option value="">All projects</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-            <select
-              value={String(days)}
-              onChange={(e) => setDays(Number(e.target.value))}
-              className="text-xs bg-background border border-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring text-foreground"
-            >
-              {DATE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
+        <h1 className="text-lg font-bold tracking-tight flex items-center gap-2">
+          <BarChart2 className="w-5 h-5 text-primary" />
+          Analytics
+        </h1>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Workspace insights — tasks, people, delivery
+        </p>
       </div>
 
-      {/* All sections */}
-      <div className="flex-1 overflow-auto p-6 space-y-6">
-        {SECTIONS.map(({ id, label, Component }) => (
-          <div key={id} className="space-y-3">
-            {label && <SectionDivider label={label} />}
-            <Component {...sharedProps} />
-          </div>
-        ))}
+      <FilterBar
+        activeDays={activeDays}
+        startDate={startDate}
+        endDate={endDate}
+        boardId={boardId}
+        projects={projects}
+        refreshing={refreshing}
+        kfilters={kfilters}
+        onKFiltersChange={setKFilters}
+        members={members}
+        labels={labels}
+        onPresetClick={handlePresetClick}
+        onStartDateChange={handleStartDateChange}
+        onEndDateChange={handleEndDateChange}
+        onBoardChange={setBoardId}
+        onRefresh={handleRefresh}
+      />
+
+      {/* Body */}
+      <div className="flex-1 overflow-auto py-6 px-4">
+        <div className="max-w-7xl mx-auto space-y-8">
+        {/* <KpiSection workspaceId={workspaceId} filterParams={filterParams} /> */}
+
+        <div className="space-y-3">
+          <SectionHeader
+            label="Overdue Tasks"
+            description="Tasks past their due date that are still open — needs immediate attention"
+          />
+          <OverdueSection workspaceId={workspaceId} filterParams={filterParams} />
+        </div>
+
+        <div className="space-y-4">
+          <SectionHeader label="Deep Dive" />
+
+          <Tabs value={activeTab} onChange={setActiveTab}>
+            <TabsList className="w-fit">
+              {TABS.map(({ id, label, icon }) => (
+                <TabsTrigger key={id} value={id} icon={icon}>
+                  {label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+
+            <TabsContent value="board" className="mt-4">
+              <BoardTab {...filters} />
+            </TabsContent>
+            <TabsContent value="sprints" className="mt-4">
+              <SprintsTab {...filters} />
+            </TabsContent>
+            <TabsContent value="teams" className="mt-4">
+              <TeamsTab {...filters} />
+            </TabsContent>
+          </Tabs>
+        </div>
+        </div>
       </div>
     </div>
   );

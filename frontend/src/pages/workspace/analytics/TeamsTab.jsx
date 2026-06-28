@@ -17,12 +17,8 @@ function rangeDays(startDate, endDate) {
 
 function getStripColorClass(v) {
   if (!v || v === 0) return "bg-primary";
-  if (v > 5)
-    return v >= 8
-      ? "bg-red-800"
-      : "bg-red-600";
-  if (v >= 2)
-    return v >= 4 ? "bg-orange-600" : "bg-orange-500";
+  if (v > 5) return v >= 8 ? "bg-red-800" : "bg-red-600";
+  if (v >= 2) return v >= 4 ? "bg-orange-600" : "bg-orange-500";
   return "bg-amber-400";
 }
 
@@ -49,9 +45,9 @@ function WorkloadHeader({ days }) {
   return (
     <div className="flex items-start justify-between mb-4">
       <div>
-        <p className="text-sm font-semibold">Team Workload</p>
+        <p className="text-sm font-semibold">Delivery Breakdown</p>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Assigned, open, overdue and delivered per member — plus a {days}-day
+          Open, overdue and completed tasks per member — plus a {days}-day
           due-date heatmap. Click a member to see their tasks.
         </p>
       </div>
@@ -235,7 +231,12 @@ function TableRowItem({ row, dates, stripMax, onDrill }) {
 
 // ── 3. MAIN COMPONENT ────────────────────────────────────────────────────────
 
-export default function TeamsTab({ workspaceId, startDate, endDate, filterParams = {} }) {
+export default function TeamsTab({
+  workspaceId,
+  startDate,
+  endDate,
+  filterParams = {},
+}) {
   const days = useMemo(
     () => rangeDays(startDate, endDate),
     [startDate, endDate],
@@ -274,14 +275,15 @@ export default function TeamsTab({ workspaceId, startDate, endDate, filterParams
     [rows, dates],
   );
 
-  // Stacked Done-vs-Open per member — total bar = assigned, green portion = done.
+  // Grouped Open / Overdue / Done per member — shows delivery health at a glance.
   const workloadBars = useMemo(() => {
     if (!rows.length) return null;
     return {
       categories: rows.map((r) => r.user.full_name || r.user.email),
       series: [
+        { name: "Open", data: rows.map((r) => r.open), color: "#6366f1" },
+        { name: "Overdue", data: rows.map((r) => r.overdue), color: "#ef4444" },
         { name: "Done", data: rows.map((r) => r.completed), color: "#22c55e" },
-        { name: "Open", data: rows.map((r) => r.open), color: "#f59e0b" },
       ],
     };
   }, [rows]);
@@ -306,18 +308,18 @@ export default function TeamsTab({ workspaceId, startDate, endDate, filterParams
         </p>
       ) : (
         <>
-          {/* Done vs open per member — bar height = assigned, green = delivered */}
+          {/* Open / Overdue / Done grouped per member */}
           {workloadBars && (
             <div className="mb-5">
               <p className="text-[11px] font-semibold text-muted-foreground mb-2">
-                Delivered vs remaining per member — click a bar to see the tasks
+                Open, overdue and done per member — click a bar to see their
+                tasks
               </p>
               <BarChart
                 series={workloadBars.series}
                 categories={workloadBars.categories}
                 stacked
-                horizontal
-                height={Math.max(160, rows.length * 40)}
+                height={260}
                 onBarClick={(i) => setDrill({ member: rows[i] })}
               />
             </div>
@@ -378,7 +380,7 @@ export default function TeamsTab({ workspaceId, startDate, endDate, filterParams
         description="All tasks assigned to this member"
         params={{
           ...filterParams,
-          "filter[assignee]": drill?.member.user.id,
+          assignee: drill?.member.user.id,
         }}
       />
     </div>

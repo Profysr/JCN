@@ -216,7 +216,7 @@ export default function ChartCard({
 
   return (
     <>
-      <div className={cn("bg-card border border-border rounded-xl shadow-sm flex flex-col", className)}>
+      <div className={cn("bg-card border border-border rounded-md shadow-sm flex flex-col", className)}>
         {(title || actions || allowExpand) && (
           <div className="flex items-start justify-between px-5 pt-4 pb-2 flex-shrink-0">
             <div>

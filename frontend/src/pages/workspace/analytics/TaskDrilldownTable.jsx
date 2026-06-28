@@ -9,14 +9,6 @@ import Modal from "@/shared/components/ui/Modal";
 
 // ── Shared styling ──────────────────────────────────────────────────────────
 
-const PRIORITY_BADGE = {
-  urgent: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
-  high: "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300",
-  medium:
-    "bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300",
-  low: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
-  no_priority: "bg-muted text-muted-foreground",
-};
 
 function fmtDate(iso) {
   if (!iso) return "—";
@@ -191,8 +183,7 @@ export default function TaskDrilldownTable({
                         <span
                           className={cn(
                             "px-1.5 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap",
-                            PRIORITY_BADGE[t.priority] ||
-                              PRIORITY_BADGE.no_priority,
+                            pri.filterActiveCls,
                           )}
                         >
                           {pri?.label || t.priority}
@@ -214,11 +205,11 @@ export default function TaskDrilldownTable({
                       <td className="py-2.5 px-3 text-muted-foreground whitespace-nowrap">
                         {fmtDate(t.due_date)}
                       </td>
-                      {/* {showOverdue && (
+                      {showOverdue && (
                         <td className="py-2.5 px-3 whitespace-nowrap">
                           {overdueBadge(t.days_overdue)}
                         </td>
-                      )} */}
+                      )}
                       <td className="py-2.5 px-2 text-right">
                         <ExternalLink className="w-3.5 h-3.5 text-muted-foreground/0 group-hover:text-muted-foreground transition-colors inline" />
                       </td>

@@ -1,137 +1,90 @@
-﻿import { useQuery } from "@tanstack/react-query";
+import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
 import api from "@/shared/lib/api";
 
-const STALE = 60_000; // 1 min
+// Data never goes stale automatically — use the Refresh button in AnalyticsPage to invalidate all ["analytics", ...] queries and get fresh data on demand.
+const STALE = Infinity;
 
-function metric(workspaceId, name, params = {}) {
-  return api
-    .get(`/api/workspaces/${workspaceId}/analytics/${name}/`, { params })
-    .then((r) => r.data);
+async function metric(workspaceId, name, params = {}) {
+  const r = await api.get(`/api/workspaces/${workspaceId}/analytics/${name}/`, { params });
+  return r.data;
 }
 
-export function useWorkspaceOverview(workspaceId, { boardId } = {}) {
+/**
+ * Convert the Kanban-style filter state ({ search, priorities, assignees,
+ * labels, types, due }) + a board id into the flat params the analytics
+ * endpoints accept (multi-value → comma-separated). One source of truth so
+ * every tab/chart/drill-down filters identically.
+ */
+export function buildTaskParams(filters = {}, boardId) {
+  const p = {};
+  if (boardId) p.board = boardId;
+  if (filters.search) p.search = filters.search;
+  if (filters.priorities?.length) p.priority = filters.priorities.join(",");
+  if (filters.assignees?.length) p.assignee = filters.assignees.join(",");
+  if (filters.types?.length) p.type = filters.types.join(",");
+  if (filters.labels?.length) p.label = filters.labels.join(",");
+  if (filters.due?.length) p.due = filters.due.join(",");
+  return p;
+}
+
+// ── Headline KPI counts (summary view) ─────────────────────────────────────────
+export function useWorkspaceSummary(workspaceId, { params = {} } = {}) {
   return useQuery({
-    queryKey: ["analytics", "overview", workspaceId, boardId],
-    queryFn: () => metric(workspaceId, "overview", { board_id: boardId }),
+    queryKey: ["analytics", "summary", workspaceId, params],
+    queryFn: () => metric(workspaceId, "summary", params),
     enabled: !!workspaceId,
     staleTime: STALE,
   });
 }
 
-export function useVelocity(workspaceId, { boardId, limit = 8 } = {}) {
+// ── Consolidated team workload (per-member rollup + heatmap) ────────────────────
+export function useTeamWorkload(workspaceId, { days = 14, params = {}, pageUrl = null } = {}) {
+  const query = { days, ...params };
   return useQuery({
-    queryKey: ["analytics", "velocity", workspaceId, boardId, limit],
+    queryKey: ["analytics", "team", workspaceId, query, pageUrl],
     queryFn: () =>
-      metric(workspaceId, "velocity", { board_id: boardId, limit }),
+      pageUrl
+        ? api.get(pageUrl).then((r) => r.data)
+        : api
+            .get(`/api/workspaces/${workspaceId}/analytics/team/`, { params: query })
+            .then((r) => r.data),
     enabled: !!workspaceId,
     staleTime: STALE,
   });
 }
 
-export function useCycleTime(workspaceId, { boardId, days = 90 } = {}) {
+// ── Task drill-down — cursor-paginated infinite query ───────────────────────────
+// Flat filter params: overdue=true, assignee=id, status=id1,id2, blocked=true, etc.
+export function useTaskDrilldown(workspaceId, { params = {}, pageSize = 25, enabled = true } = {}) {
+  const query = { page_size: pageSize, ...params };
+  return useInfiniteQuery({
+    queryKey: ["analytics", "tasks", workspaceId, query],
+    queryFn: ({ pageParam }) =>
+      pageParam
+        ? api.get(pageParam).then((r) => r.data)
+        : api
+            .get(`/api/workspaces/${workspaceId}/analytics/tasks/`, { params: query })
+            .then((r) => r.data),
+    initialPageParam: null,
+    getNextPageParam: (last) => last?.next || undefined,
+    enabled: !!workspaceId && enabled,
+    staleTime: STALE,
+  });
+}
+
+// ── Universal dynamic aggregate hook (group-by counts) ─────────────────────────
+// Accepts comma-separated group_by dims; response shape:
+//   { summary: { total, open, done, overdue, blocked, stale }, groups: { [dim]: { results, ... } } }
+// Flat filter params: board=uuid, status=id, priority=high, assignee=id, overdue=true, etc.
+export function useAggregate(workspaceId, { params = {}, enabled = true } = {}) {
+  const query = { metric: "count", ...params };
   return useQuery({
-    queryKey: ["analytics", "cycle-time", workspaceId, boardId, days],
+    queryKey: ["analytics", "aggregate", workspaceId, query],
     queryFn: () =>
-      metric(workspaceId, "cycle_time", { board_id: boardId, days }),
-    enabled: !!workspaceId,
-    staleTime: STALE,
-  });
-}
-
-export function useLeadTime(workspaceId, { boardId, days = 90 } = {}) {
-  return useQuery({
-    queryKey: ["analytics", "lead-time", workspaceId, boardId, days],
-    queryFn: () =>
-      metric(workspaceId, "lead_time", { board_id: boardId, days }),
-    enabled: !!workspaceId,
-    staleTime: STALE,
-  });
-}
-
-export function useThroughput(
-  workspaceId,
-  { boardId, period = "week", days = 90 } = {},
-) {
-  return useQuery({
-    queryKey: ["analytics", "throughput", workspaceId, boardId, period, days],
-    queryFn: () =>
-      metric(workspaceId, "throughput", { board_id: boardId, period, days }),
-    enabled: !!workspaceId,
-    staleTime: STALE,
-  });
-}
-
-export function useCFD(workspaceId, { boardId, days = 30 } = {}) {
-  return useQuery({
-    queryKey: ["analytics", "cfd", workspaceId, boardId, days],
-    queryFn: () => metric(workspaceId, "cfd", { board_id: boardId, days }),
-    enabled: !!workspaceId,
-    staleTime: STALE,
-  });
-}
-
-export function useBurnup(workspaceId, { sprintId, boardId, days = 30 } = {}) {
-  return useQuery({
-    queryKey: ["analytics", "burnup", workspaceId, sprintId, boardId, days],
-    queryFn: () =>
-      metric(workspaceId, "burnup", {
-        sprint_id: sprintId,
-        board_id: boardId,
-        days,
-      }),
-    enabled: !!workspaceId && !!(sprintId || boardId),
-    staleTime: STALE,
-  });
-}
-
-export function useWorkloadHeatmap(workspaceId, { boardId, days = 14 } = {}) {
-  return useQuery({
-    queryKey: ["analytics", "workload-heatmap", workspaceId, boardId, days],
-    queryFn: () =>
-      metric(workspaceId, "workload_heatmap", { board_id: boardId, days }),
-    enabled: !!workspaceId,
-    staleTime: STALE,
-  });
-}
-
-export function useTimeInStatus(workspaceId, { boardId, days = 30 } = {}) {
-  return useQuery({
-    queryKey: ["analytics", "time-in-status", workspaceId, boardId, days],
-    queryFn: () =>
-      metric(workspaceId, "time_in_status", { board_id: boardId, days }),
-    enabled: !!workspaceId,
-    staleTime: STALE,
-  });
-}
-
-export function useOverdueAging(workspaceId, { boardId } = {}) {
-  return useQuery({
-    queryKey: ["analytics", "overdue-aging", workspaceId, boardId],
-    queryFn: () => metric(workspaceId, "overdue_aging", { board_id: boardId }),
-    enabled: !!workspaceId,
-    staleTime: STALE,
-  });
-}
-
-export function useCompletionRate(workspaceId, { boardId, limit = 8 } = {}) {
-  return useQuery({
-    queryKey: ["analytics", "completion-rate", workspaceId, boardId, limit],
-    queryFn: () =>
-      metric(workspaceId, "completion_rate", { board_id: boardId, limit }),
-    enabled: !!workspaceId,
-    staleTime: STALE,
-  });
-}
-
-export function useEstimationAccuracy(
-  workspaceId,
-  { boardId, limit = 8 } = {},
-) {
-  return useQuery({
-    queryKey: ["analytics", "estimation-accuracy", workspaceId, boardId, limit],
-    queryFn: () =>
-      metric(workspaceId, "estimation_accuracy", { board_id: boardId, limit }),
-    enabled: !!workspaceId,
+      api
+        .get(`/api/workspaces/${workspaceId}/analytics/aggregate/`, { params: query })
+        .then((r) => r.data),
+    enabled: !!workspaceId && enabled,
     staleTime: STALE,
   });
 }

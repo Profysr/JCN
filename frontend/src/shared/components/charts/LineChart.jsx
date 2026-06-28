@@ -3,6 +3,7 @@ import { Line } from 'react-chartjs-2';
 import './chartSetup';
 import { chartColors, hexAlpha } from './chartTheme';
 import { getChartColor } from './chartPalette';
+import { useThemeKey } from './useThemeKey';
 
 /**
  * Multi-series line / area chart.
@@ -30,6 +31,7 @@ export default function LineChart({
   xFormatter,
   showLegend,
 }) {
+  const themeKey = useThemeKey();
   const c = chartColors();
   const autoShowLegend = showLegend ?? series.length > 1;
 
@@ -124,7 +126,7 @@ export default function LineChart({
         y: {
           stacked,
           beginAtZero: true,
-          grid: { color: c.border, borderDash: [4, 4], drawBorder: false },
+          grid: { color: c.grid, borderDash: [4, 4], drawBorder: false },
           ticks: {
             color: c.mutedForeground,
             font: { size: 10 },
@@ -178,7 +180,7 @@ export default function LineChart({
 
       {/* Canvas */}
       <div className="w-full relative" style={{ height }}>
-        <Line data={chartData} options={options} plugins={plugins} />
+        <Line key={themeKey} data={chartData} options={options} plugins={plugins} />
       </div>
     </div>
   );
