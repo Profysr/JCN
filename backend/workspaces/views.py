@@ -59,12 +59,16 @@ def _get_workspace(workspace_id, user):
 def _is_workspace_admin(workspace, user) -> bool:
     """Returns True if the user is the workspace owner or has admin-level permissions."""
     from .rbac import has_workspace_permission
-    return workspace.owner_id == user.pk or has_workspace_permission(user, workspace, "settings.manage")
+
+    return workspace.owner_id == user.pk or has_workspace_permission(
+        user, workspace, "settings.manage"
+    )
 
 
 def _require_admin(workspace, user):
     """Raises PermissionDenied if the user is not the owner or does not have admin permissions."""
     from .rbac import has_workspace_permission
+
     if workspace.owner_id == user.pk:
         return
     if not has_workspace_permission(user, workspace, "settings.manage"):
@@ -190,6 +194,7 @@ class InviteMemberView(APIView):
 
     def post(self, request, workspace_id):
         from .tasks import send_invite_email
+
         workspace = _get_workspace(workspace_id, request.user)
         _require_admin(workspace, request.user)
         serializer = WorkspaceInviteSerializer(
@@ -269,6 +274,7 @@ class AcceptInviteView(APIView):
         if created:
             # Assign the matching system role to put the new member in the RBAC system.
             from .models import CustomRole, RoleAssignment
+
             system_role_name = invite.role
             role = CustomRole.objects.filter(
                 workspace=invite.workspace,
@@ -383,7 +389,9 @@ class InboxBulkUpdateView(APIView):
                     {"detail": "snoozed_until required."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            updated = qs.update(status=InboxItem.Status.SNOOZED, snoozed_until=snooze_until)
+            updated = qs.update(
+                status=InboxItem.Status.SNOOZED, snoozed_until=snooze_until
+            )
 
         return Response({"updated": updated})
 
@@ -570,6 +578,7 @@ class WebhookEventsView(APIView):
 
     def get(self, request, workspace_id):
         from .constants import WEBHOOK_EVENTS
+
         _get_workspace(workspace_id, request.user)
         return Response(WEBHOOK_EVENTS)
 
@@ -726,16 +735,20 @@ class ImportJobRollbackView(APIView):
 
 # ── Module System ─────────────────────────────────────────────────────────────
 
+
 class WorkspaceModuleListView(APIView):
     """List all modules with their enabled/disabled status for a workspace."""
+
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_id):
         from core.modules import MODULE_REGISTRY
+
         workspace = _get_workspace(workspace_id, request.user)
         enabled_keys = set(
-            WorkspaceModule.objects.filter(workspace=workspace, is_enabled=True)
-            .values_list("module_key", flat=True)
+            WorkspaceModule.objects.filter(
+                workspace=workspace, is_enabled=True
+            ).values_list("module_key", flat=True)
         )
         result = [
             {
@@ -755,32 +768,47 @@ class WorkspaceModuleListView(APIView):
 
 class WorkspaceModuleToggleView(APIView):
     """Enable or disable a module for a workspace. Admin only."""
+
     permission_classes = [permissions.IsAuthenticated]
 
     def patch(self, request, workspace_id, module_key):
         from core.modules import MODULE_REGISTRY
+
         workspace = _get_workspace(workspace_id, request.user)
         _require_admin(workspace, request.user)
 
         module_def = MODULE_REGISTRY.get(module_key)
         if not module_def:
-            return Response({"detail": "Unknown module."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"detail": "Unknown module."}, status=status.HTTP_404_NOT_FOUND
+            )
         if module_def.get("always_on"):
-            return Response({"detail": "This module cannot be toggled."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "This module cannot be toggled."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         is_enabled = request.data.get("is_enabled")
         if is_enabled is None:
-            return Response({"detail": "is_enabled is required."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "is_enabled is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         if is_enabled:
             for dep_key in module_def.get("depends_on", []):
                 dep_meta = MODULE_REGISTRY.get(dep_key, {})
-                already_on = dep_meta.get("always_on") or WorkspaceModule.objects.filter(
-                    workspace=workspace, module_key=dep_key, is_enabled=True
-                ).exists()
+                already_on = (
+                    dep_meta.get("always_on")
+                    or WorkspaceModule.objects.filter(
+                        workspace=workspace, module_key=dep_key, is_enabled=True
+                    ).exists()
+                )
                 if not already_on:
                     return Response(
-                        {"detail": f"Module '{dep_meta.get('name', dep_key)}' must be enabled first."},
+                        {
+                            "detail": f"Module '{dep_meta.get('name', dep_key)}' must be enabled first."
+                        },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
@@ -789,7 +817,13 @@ class WorkspaceModuleToggleView(APIView):
             module_key=module_key,
             defaults={"is_enabled": is_enabled, "enabled_by": request.user},
         )
-        return Response({"key": module_key, "name": module_def["name"], "is_enabled": obj.is_enabled})
+        return Response(
+            {
+                "key": module_key,
+                "name": module_def["name"],
+                "is_enabled": obj.is_enabled,
+            }
+        )
 
 
 # ==============================================================================
@@ -812,10 +846,12 @@ class WorkspacePermissionsView(APIView):
         from .permissions import get_enabled_apps, get_enabled_permissions
 
         workspace = _get_workspace(workspace_id, request.user)
-        return Response({
-            "apps": get_enabled_apps(workspace, request.user),
-            "permissions": get_enabled_permissions(workspace, request.user),
-        })
+        return Response(
+            {
+                "apps": get_enabled_apps(workspace, request.user),
+                "permissions": get_enabled_permissions(workspace, request.user),
+            }
+        )
 
 
 class CustomRoleListCreateView(APIView):
@@ -828,15 +864,30 @@ class CustomRoleListCreateView(APIView):
 
     def _get_serializer_imports(self):
         from .serializers import CustomRoleSerializer
+
         return CustomRoleSerializer
 
     def get(self, request, workspace_id):
         from .serializers import CustomRoleSerializer
 
         workspace = _get_workspace(workspace_id, request.user)
-        roles = (
-            workspace.custom_roles.prefetch_related("assignments").all()
-        )
+
+        if _is_workspace_admin(workspace, request.user):
+            roles = workspace.custom_roles.prefetch_related("assignments").all()
+        else:
+            # Non-admins only receive their own role.
+            member = workspace.members.select_related("role_assignment__role").get(
+                user=request.user
+            )
+            assignment = getattr(member, "role_assignment", None)
+            roles = (
+                workspace.custom_roles.prefetch_related("assignments").filter(
+                    pk=assignment.role_id
+                )
+                if assignment and assignment.role_id
+                else workspace.custom_roles.none()
+            )
+
         return Response(CustomRoleSerializer(roles, many=True).data)
 
     def post(self, request, workspace_id):
@@ -849,8 +900,14 @@ class CustomRoleListCreateView(APIView):
         serializer = CustomRoleSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         role = serializer.save(workspace=workspace, is_system=False)
-        log_audit(request.user, workspace, "role.created", "CustomRole", str(role.id),
-                  after={"name": role.name, "permissions": role.permissions})
+        log_audit(
+            request.user,
+            workspace,
+            "role.created",
+            "CustomRole",
+            str(role.id),
+            after={"name": role.name, "permissions": role.permissions},
+        )
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
@@ -867,9 +924,7 @@ class CustomRoleDetailView(APIView):
         from .models import CustomRole
 
         workspace = _get_workspace(workspace_id, user)
-        role = get_object_or_404(
-            CustomRole, workspace=workspace, id=_parse_pk(role_id)
-        )
+        role = get_object_or_404(CustomRole, workspace=workspace, id=_parse_pk(role_id))
         return role, workspace
 
     def get(self, request, workspace_id, role_id):
@@ -889,8 +944,15 @@ class CustomRoleDetailView(APIView):
         serializer = CustomRoleSerializer(role, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        log_audit(request.user, workspace, "role.updated", "CustomRole", str(role.id),
-                  before=before, after={"name": role.name, "permissions": role.permissions})
+        log_audit(
+            request.user,
+            workspace,
+            "role.updated",
+            "CustomRole",
+            str(role.id),
+            before=before,
+            after={"name": role.name, "permissions": role.permissions},
+        )
         return Response(serializer.data)
 
     def delete(self, request, workspace_id, role_id):
@@ -906,11 +968,19 @@ class CustomRoleDetailView(APIView):
             )
         if role.assignments.exists():
             return Response(
-                {"detail": "Cannot delete a role that is currently assigned to members. Re-assign those members first."},
+                {
+                    "detail": "Cannot delete a role that is currently assigned to members. Re-assign those members first."
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        log_audit(request.user, workspace, "role.deleted", "CustomRole", str(role.id),
-                  before={"name": role.name})
+        log_audit(
+            request.user,
+            workspace,
+            "role.deleted",
+            "CustomRole",
+            str(role.id),
+            before={"name": role.name},
+        )
         role.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -957,10 +1027,18 @@ class MemberAssignRoleView(APIView):
         )
 
         from projects.permissions import log_audit
+
         log_audit(
-            request.user, workspace, "role.assigned", "WorkspaceMember", str(member.id),
+            request.user,
+            workspace,
+            "role.assigned",
+            "WorkspaceMember",
+            str(member.id),
             before={"role": old_role_name} if old_role_name else None,
-            after={"role": role.name, "member": member.user.email if member.user else str(member.id)},
+            after={
+                "role": role.name,
+                "member": member.user.email if member.user else str(member.id),
+            },
         )
 
         return Response(
@@ -992,13 +1070,22 @@ class MemberBulkAssignRoleView(APIView):
         member_ids = request.data.get("member_ids", [])
 
         if not role_id:
-            return Response({"detail": "role is required."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "role is required."}, status=status.HTTP_400_BAD_REQUEST
+            )
         if not member_ids or not isinstance(member_ids, list):
-            return Response({"detail": "member_ids must be a non-empty list."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "member_ids must be a non-empty list."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         if len(member_ids) > 200:
-            return Response({"detail": "Cannot bulk-assign more than 200 members at once."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "Cannot bulk-assign more than 200 members at once."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         from .models import CustomRole
+
         role = get_object_or_404(CustomRole, workspace=workspace, id=_parse_pk(role_id))
 
         parsed_ids = []
@@ -1006,11 +1093,15 @@ class MemberBulkAssignRoleView(APIView):
             try:
                 parsed_ids.append(_parse_pk(mid))
             except Exception:
-                return Response({"detail": f"Invalid member id: {mid}"}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"detail": f"Invalid member id: {mid}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
         members = list(
-            WorkspaceMember.objects.filter(workspace=workspace, id__in=parsed_ids)
-            .select_related("user")
+            WorkspaceMember.objects.filter(
+                workspace=workspace, id__in=parsed_ids
+            ).select_related("user")
         )
         if len(members) != len(parsed_ids):
             return Response(
@@ -1034,7 +1125,11 @@ class MemberBulkAssignRoleView(APIView):
                 update_fields=["role", "assigned_by"],
             )
             log_audit(
-                request.user, workspace, "role.bulk_assigned", "CustomRole", str(role.id),
+                request.user,
+                workspace,
+                "role.bulk_assigned",
+                "CustomRole",
+                str(role.id),
                 after={
                     "role": role.name,
                     "member_count": len(members),

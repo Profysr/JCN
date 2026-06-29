@@ -15,7 +15,12 @@ export default function AppLauncherPage() {
   const { workspaceId } = useParams();
   const navigate = useNavigate();
   const { data: registry, isLoading } = usePermissions(workspaceId);
-  const { can, isOwner, hasAppAccess, isLoading: permsLoading } = usePermission();
+  const {
+    can,
+    isOwner,
+    hasAppAccess,
+    isLoading: permsLoading,
+  } = usePermission();
 
   // Combine backend app registry (name, description) with frontend APP_DEFS (icon, colors, landing)
   const apps = Object.entries(registry?.apps ?? {})
@@ -54,8 +59,8 @@ export default function AppLauncherPage() {
             isLoading || apps.length > 2
               ? "grid-cols-2"
               : apps.length === 1
-              ? "grid-cols-1 max-w-sm"
-              : "grid-cols-2",
+                ? "grid-cols-1 max-w-sm"
+                : "grid-cols-2",
           )}
         >
           {isLoading
@@ -70,7 +75,9 @@ export default function AppLauncherPage() {
                 return (
                   <button
                     key={app.key}
-                    onClick={() => navigate(workspaceUrl(workspaceId, app.landing))}
+                    onClick={() =>
+                      navigate(workspaceUrl(workspaceId, app.landing))
+                    }
                     className="relative group text-left p-5 rounded-md border transition-all duration-150 cursor-pointer border-border/50 bg-card hover:shadow-md hover:-translate-y-0.5 hover:border-border"
                   >
                     <div
@@ -103,7 +110,9 @@ export default function AppLauncherPage() {
                 <Sparkles className="w-5 h-5 text-muted-foreground/30" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-muted-foreground/40 mb-1">More on the way</p>
+                <p className="text-sm font-semibold text-muted-foreground/40 mb-1">
+                  More on the way
+                </p>
                 <p className="text-xs text-muted-foreground/30 leading-relaxed">
                   We're actively expanding the platform. Stay tuned.
                 </p>
@@ -113,26 +122,32 @@ export default function AppLauncherPage() {
         </div>
 
         {/* Workspace utility pages */}
-        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-          Workspace
-        </h2>
-        <div className="grid grid-cols-4 gap-2">
-          {visibleWorkspaceItems.map((page) => {
-            const Icon = page.icon;
-            return (
-              <button
-                key={page.key}
-                onClick={() => navigate(workspaceUrl(workspaceId, page.path))}
-                className="flex flex-col items-center gap-2 p-4 rounded-xl border border-border/50 bg-card hover:bg-accent hover:border-border transition-all text-center group"
-              >
-                <Icon className="w-5 h-5 text-muted-foreground group-hover:text-foreground transition-colors" />
-                <span className="text-xs font-medium text-muted-foreground group-hover:text-foreground transition-colors leading-tight">
-                  {page.label}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+        {!isLoading && visibleWorkspaceItems.length > 0 && (
+          <>
+            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+              Workspace
+            </h2>
+            <div className="grid grid-cols-4 gap-2">
+              {visibleWorkspaceItems.map((page) => {
+                const Icon = page.icon;
+                return (
+                  <button
+                    key={page.key}
+                    onClick={() =>
+                      navigate(workspaceUrl(workspaceId, page.path))
+                    }
+                    className="flex flex-col items-center gap-2 p-4 rounded-xl border border-border/50 bg-card hover:bg-accent hover:border-border transition-all text-center group"
+                  >
+                    <Icon className="w-5 h-5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                    <span className="text-xs font-medium text-muted-foreground group-hover:text-foreground transition-colors leading-tight">
+                      {page.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
