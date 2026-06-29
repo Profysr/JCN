@@ -57,7 +57,7 @@ Default permission: `IsAuthenticated`. Public endpoints (forms, invite detail) u
 
 ## App & Permission Registry (`workspaces/constants.py`)
 
-Single source of truth for all product apps and their permissions. Replaces the old `MODULE_REGISTRY` in `core/modules.py` (`core/modules.py` is now a thin shim that re-exports `APP_REGISTRY` as `MODULE_REGISTRY` for any remaining legacy references).
+Single source of truth for all product apps and their permissions. The old per-workspace module toggle system (`WorkspaceModule` model, `/modules/` routes, `core/modules.py`) has been **fully removed** — app-level access is now controlled entirely by `app_access` on each `CustomRole`.
 
 ### APP_REGISTRY
 
@@ -141,7 +141,7 @@ hr:         hr.manage_leave, hr.manage_attendance
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/workspaces/{ws}/permissions/` | Permission schema: `{ apps: APP_REGISTRY, permissions: PERMISSIONS }`. Static — cache with `staleTime: Infinity`. |
-| GET | `/api/workspaces/{ws}/roles/` | List all roles (system + custom) with `member_count`, `app_access`, and nested `permissions` |
+| GET | `/api/workspaces/{ws}/roles/` | **Scoped by caller's role.** Admins (owner or `settings.manage`) → all roles (system + custom) with `member_count`, `app_access`, and nested `permissions`. Non-admins → only their own assigned role (one-element array). `PermissionsContext` uses `roles.find(r => r.name === myRoleName)` which works correctly with either response. |
 | POST | `/api/workspaces/{ws}/roles/` | Create a custom role (admin only). Body: `{ name, description?, app_access: {app_key: bool}, permissions: {app_key: {perm_key: bool}} }`. `is_system` is always `false` for created roles. |
 | GET | `/api/workspaces/{ws}/roles/{id}/` | Role detail |
 | PATCH | `/api/workspaces/{ws}/roles/{id}/` | Update name/description/app_access/permissions (admin only). System roles → 400. |

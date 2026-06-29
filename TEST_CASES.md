@@ -119,7 +119,8 @@
 |----|------|----------|-------|-----------------|
 | RBAC-01 | API | Permission schema — admin | GET `/api/workspaces/{ws}/permissions/` as admin/owner | Full `{apps: APP_REGISTRY, permissions: PERMISSIONS}` returned; cache `staleTime: Infinity` |
 | RBAC-01b | API | Permission schema — non-admin | GET permissions as member with `projects` access only | `apps` and `permissions` filtered to `projects` + `workspace` group only; HR/Org/Analytics omitted |
-| RBAC-02 | API | List roles | GET `/api/workspaces/{ws}/roles/` | System + custom roles with `member_count`, `app_access`, nested `permissions` |
+| RBAC-02 | API | List roles — admin | GET `/api/workspaces/{ws}/roles/` as admin/owner | All roles (system + custom) with `member_count`, `app_access`, nested `permissions` |
+| RBAC-02b | API | List roles — non-admin | GET roles as Viewer/Member | **One-element array** containing only that user's own role; no other roles exposed |
 | RBAC-03 | API | Create custom role (admin) | POST roles `{name, app_access, permissions}` | 201; `is_system=false` |
 | RBAC-04 | API | Update system role rejected | PATCH a system role (Admin/Member/Viewer) | 400 |
 | RBAC-05 | API | Delete system role rejected | DELETE a system role | 400 |
@@ -135,14 +136,6 @@
 | RBAC-12 | UI | Role builder | Settings → Roles & Permissions | Per-permission toggles grouped by category; dependency rules auto-enable required perms (e.g. enabling a dependent perm enables its prerequisite) |
 | RBAC-13 | UI | Nav gating | User without a nav item's `permission` | Sidebar hides that item; owner always sees all; items without `permission` always visible |
 | RBAC-14 | UI | System role lock icon | MembersPage role dropdown | System roles shown with 🔒 suffix |
-
-### Module system
-
-| ID | Type | Scenario | Steps | Expected result |
-|----|------|----------|-------|-----------------|
-| MOD-01 | API | List modules | GET `/api/workspaces/{ws}/modules/` | Module enable states; cache 5 min |
-| MOD-02 | API | Toggle module | PATCH `/api/workspaces/{ws}/modules/{key}/` `{is_enabled}` | Updated; modules query invalidated |
-| MOD-03 | UI | Nav reflects module state | Disable a module | Nav items tagged with that `moduleKey` hide; items without one stay; items visible during first load (`modulesLoading`) |
 
 ### Onboarding
 

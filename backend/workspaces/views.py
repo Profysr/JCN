@@ -20,7 +20,6 @@ from .models import (
     WorkspaceAPIKey,
     WorkspaceInvite,
     WorkspaceMember,
-    WorkspaceModule,
 )
 from .serializers import (
     APIKeyCreateSerializer,
@@ -731,99 +730,6 @@ class ImportJobRollbackView(APIView):
         job.imported_task_ids = []
         job.save(update_fields=["status", "imported_task_ids"])
         return Response({"deleted": deleted})
-
-
-# ── Module System ─────────────────────────────────────────────────────────────
-
-
-class WorkspaceModuleListView(APIView):
-    """List all modules with their enabled/disabled status for a workspace."""
-
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request, workspace_id):
-        from core.modules import MODULE_REGISTRY
-
-        workspace = _get_workspace(workspace_id, request.user)
-        enabled_keys = set(
-            WorkspaceModule.objects.filter(
-                workspace=workspace, is_enabled=True
-            ).values_list("module_key", flat=True)
-        )
-        result = [
-            {
-                "key": key,
-                "name": meta["name"],
-                "description": meta["description"],
-                "tier": meta["tier"],
-                "always_on": meta.get("always_on", False),
-                "depends_on": meta.get("depends_on", []),
-                "icon": meta.get("icon", ""),
-                "is_enabled": meta.get("always_on", False) or key in enabled_keys,
-            }
-            for key, meta in MODULE_REGISTRY.items()
-        ]
-        return Response(result)
-
-
-class WorkspaceModuleToggleView(APIView):
-    """Enable or disable a module for a workspace. Admin only."""
-
-    permission_classes = [permissions.IsAuthenticated]
-
-    def patch(self, request, workspace_id, module_key):
-        from core.modules import MODULE_REGISTRY
-
-        workspace = _get_workspace(workspace_id, request.user)
-        _require_admin(workspace, request.user)
-
-        module_def = MODULE_REGISTRY.get(module_key)
-        if not module_def:
-            return Response(
-                {"detail": "Unknown module."}, status=status.HTTP_404_NOT_FOUND
-            )
-        if module_def.get("always_on"):
-            return Response(
-                {"detail": "This module cannot be toggled."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        is_enabled = request.data.get("is_enabled")
-        if is_enabled is None:
-            return Response(
-                {"detail": "is_enabled is required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if is_enabled:
-            for dep_key in module_def.get("depends_on", []):
-                dep_meta = MODULE_REGISTRY.get(dep_key, {})
-                already_on = (
-                    dep_meta.get("always_on")
-                    or WorkspaceModule.objects.filter(
-                        workspace=workspace, module_key=dep_key, is_enabled=True
-                    ).exists()
-                )
-                if not already_on:
-                    return Response(
-                        {
-                            "detail": f"Module '{dep_meta.get('name', dep_key)}' must be enabled first."
-                        },
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-
-        obj, _ = WorkspaceModule.objects.update_or_create(
-            workspace=workspace,
-            module_key=module_key,
-            defaults={"is_enabled": is_enabled, "enabled_by": request.user},
-        )
-        return Response(
-            {
-                "key": module_key,
-                "name": module_def["name"],
-                "is_enabled": obj.is_enabled,
-            }
-        )
 
 
 # ==============================================================================
