@@ -186,6 +186,7 @@ class InviteMemberView(APIView):
     def post(self, request, workspace_id):
         from .tasks import send_invite_email
         workspace = _get_workspace(workspace_id, request.user)
+        _require_admin(workspace, request.user)
         serializer = WorkspaceInviteSerializer(
             data=request.data, context={"request": request, "workspace": workspace}
         )
@@ -200,6 +201,7 @@ class WorkspaceInviteListView(APIView):
 
     def get(self, request, workspace_id):
         workspace = _get_workspace(workspace_id, request.user)
+        _require_admin(workspace, request.user)
         invites = workspace.invites.filter(
             status=WorkspaceInvite.Status.PENDING
         ).select_related("invited_by")
