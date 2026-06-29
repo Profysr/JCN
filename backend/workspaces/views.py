@@ -82,7 +82,7 @@ class WorkspaceListCreateView(APIView):
     def get(self, request):
         workspaces = (
             Workspace.objects.filter(members__user=request.user)
-            .prefetch_related("members")
+            .prefetch_related("members", "members__role_assignment__role")
             .distinct()
         )
         serializer = WorkspaceSerializer(
@@ -101,6 +101,7 @@ class WorkspaceListCreateView(APIView):
 
 class WorkspaceDetailView(APIView):
     permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
 
     def get(self, request, workspace_id):
         workspace = _get_workspace(workspace_id, request.user)

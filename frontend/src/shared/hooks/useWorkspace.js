@@ -40,8 +40,24 @@ export const useCreateWorkspace = (options = {}) => {
 export const useUpdateWorkspace = (workspaceId) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data) =>
-      api.patch(`/api/workspaces/${workspaceId}/`, data).then((r) => r.data),
+    mutationFn: (data) => {
+      const hasFile =
+        data instanceof FormData ||
+        Object.values(data).some((v) => v instanceof File);
+      const payload = hasFile
+        ? (() => {
+            const fd = new FormData();
+            Object.entries(data).forEach(
+              ([k, v]) => v != null && fd.append(k, v),
+            );
+            return fd;
+          })()
+        : data;
+      const headers = hasFile ? { "Content-Type": "multipart/form-data" } : {};
+      return api
+        .patch(`/api/workspaces/${workspaceId}/`, payload, { headers })
+        .then((r) => r.data);
+    },
     onSuccess: (updated) => {
       qc.invalidateQueries({ queryKey: ["workspaces"] });
       qc.setQueryData(["workspace", workspaceId], updated);

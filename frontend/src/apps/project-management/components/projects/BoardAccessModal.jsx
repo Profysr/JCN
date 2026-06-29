@@ -17,6 +17,7 @@ import { Button } from "@/shared/components/ui/button";
 import { Avatar } from "@/shared/components/ui/avatar";
 import { Badge } from "@/shared/components/ui/badge";
 import Modal from "@/shared/components/ui/Modal";
+import { Loader } from "@/shared/components/ui/Loader";
 import { cn } from "@/shared/lib/utils";
 import { PROJECT_ROLES, ROLE_BADGE_VARIANT } from "@/shared/lib/constants";
 import { useBoardRoleDefinitions } from "../../hooks/useBoardPermissions";
@@ -442,9 +443,7 @@ function PermissionsTab({ workspaceId, boardId }) {
       </p>
       <div className="overflow-x-auto">
         {isLoading ? (
-          <div className="py-8 text-center text-xs text-muted-foreground">
-            Loading…
-          </div>
+          <Loader className="py-8" />
         ) : (
           <table className="w-full text-sm">
             <thead>

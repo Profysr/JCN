@@ -54,6 +54,7 @@ import {
 import { ConfirmModal } from "@/shared/components/ui/ConfirmModal";
 import RolesSection from "@/shared/components/workspace/RolesSection";
 import PermissionsReferenceModal from "@/shared/components/workspace/PermissionsReferenceModal";
+import { Loader } from "@/shared/components/ui/Loader";
 import {
   useOrgProfile,
   useUpdateOrgProfile,
@@ -1157,9 +1158,7 @@ export default function MembersPage() {
 
               <div className="rounded-lg border bg-card overflow-hidden">
                 {isLoading ? (
-                  <div className="p-6 text-sm text-muted-foreground">
-                    Loading…
-                  </div>
+                  <Loader className="p-6" />
                 ) : (
                   <div className="divide-y">
                     {members.map((member) => (

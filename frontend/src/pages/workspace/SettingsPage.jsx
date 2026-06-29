@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { DeleteWorkspaceModal } from "@/shared/components/ui/ConfirmModal";
 import { useToast } from "@/shared/components/ui/toast";
+import { Loader } from "@/shared/components/ui/Loader";
 import {
   useDeleteWorkspace,
   useUpdateWorkspace,
@@ -19,6 +20,8 @@ import {
   Key,
   Webhook,
   Upload,
+  ImagePlus,
+  X,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
@@ -34,8 +37,11 @@ export default function SettingsPage() {
   const deleteWorkspace = useDeleteWorkspace(workspaceId);
 
   const [form, setForm] = useState({ name: "", description: "" });
+  const [logoFile, setLogoFile] = useState(null);
+  const [logoPreview, setLogoPreview] = useState(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     if (workspace)
@@ -45,11 +51,29 @@ export default function SettingsPage() {
       });
   }, [workspace]);
 
+  const handleLogoChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLogoFile(file);
+    setLogoPreview(URL.createObjectURL(file));
+  };
+
+  const handleRemoveLogo = () => {
+    setLogoFile(null);
+    setLogoPreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
   const handleSave = (e) => {
     e.preventDefault();
     setSaveSuccess(false);
-    updateWorkspace.mutate(form, {
-      onSuccess: () => setSaveSuccess(true),
+    const payload = logoFile ? { ...form, logo: logoFile } : form;
+    updateWorkspace.mutate(payload, {
+      onSuccess: () => {
+        setSaveSuccess(true);
+        setLogoFile(null);
+        setLogoPreview(null);
+      },
     });
   };
 
@@ -67,7 +91,7 @@ export default function SettingsPage() {
   };
 
   if (isLoading) {
-    return <div className="p-8 text-sm text-muted-foreground">Loading…</div>;
+    return <Loader className="p-8" />;
   }
 
   const OtherPages = [
@@ -110,6 +134,54 @@ export default function SettingsPage() {
         <section className="rounded-md border bg-card p-4">
           <h2 className="text-base font-medium mb-5">General</h2>
           <form onSubmit={handleSave} className="space-y-4">
+            {/* Logo */}
+            <div className="space-y-1.5">
+              <Label>Workspace logo</Label>
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-md bg-primary flex items-center justify-center text-primary-foreground font-bold text-lg flex-shrink-0 overflow-hidden">
+                  {logoPreview ? (
+                    <img src={logoPreview} className="w-full h-full object-cover" alt="" />
+                  ) : workspace?.logo ? (
+                    <img src={workspace.logo} className="w-full h-full object-cover" alt="" />
+                  ) : (
+                    workspace?.name?.[0]?.toUpperCase() ?? "W"
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleLogoChange}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <ImagePlus className="w-3.5 h-3.5" />
+                    {logoPreview ? "Change" : "Upload logo"}
+                  </Button>
+                  {logoPreview && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 gap-1.5 text-muted-foreground"
+                      onClick={handleRemoveLogo}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      Remove
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">PNG, JPG or GIF. Recommended 128×128px or larger.</p>
+            </div>
+
             <div className="space-y-1.5">
               <Label htmlFor="ws-name">Workspace name</Label>
               <Input

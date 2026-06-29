@@ -2272,12 +2272,54 @@ report.view       settings.manage   api_keys.manage
 - Feature gates: `workspace.plan.can_use_hr`, `workspace.plan.can_use_rbac`, etc.; checked server-side on every relevant endpoint
 - 14-day Pro trial auto-start on new workspace creation; no credit card required
 
+**Workspace Creation Enforcement (implement alongside billing)**
+
+> Currently `can_create_workspace` defaults to `True` for all signups and is never flipped after workspace creation — meaning any registered user can create unlimited workspaces. This must be fixed before billing goes live.
+
+Real-world model (how Jira / ClickUp enforce it):
+- A **buyer** purchases a subscription → they get one workspace slot.
+- A **member invited by the buyer** never gets a workspace slot — they join an existing workspace.
+- If the buyer **deletes their workspace**, they get their slot back and can create a new one.
+- No subscription = no workspace. The product is not usable without one (or a trial).
+
+Backend changes required:
+
+| File | Change |
+|------|--------|
+| `accounts/models.py` | `can_create_workspace = models.BooleanField(default=False)` + new migration — new signups are blocked by default |
+| `workspaces/serializers.py` → `WorkspaceSerializer.create()` | After workspace is created, set `request.user.can_create_workspace = False` — consumes the slot |
+| `workspaces/views.py` → `WorkspaceDetailView.delete()` | On deletion, `workspace.owner.can_create_workspace = True` — returns the slot to the owner |
+| Stripe webhook handler (`customer.subscription.created`) | Set `can_create_workspace = True` for the subscribing user — this is the moment the slot is granted |
+| Stripe webhook handler (`customer.subscription.deleted`) | Set `can_create_workspace = False` — revoke slot on cancellation/lapse |
+| Trial flow | On free trial start (new signup CTA), set `can_create_workspace = True` for 14 days; revert on trial expiry if no subscription |
+
+Onboarding gate:
+- New signups land on a **"Start your trial"** page, not the workspace creation form.
+- Trial activation sets `can_create_workspace = True` → they proceed to create their workspace.
+- Users who sign up via an invite link skip this entirely — `can_create_workspace` stays `False`, they go straight to the workspace they were invited to.
+
 **Frontend**
 
 - **Billing page** `/w/:ws/settings/billing`: current plan card, usage bars, upgrade CTA, invoice history with PDF download
 - Feature gate UX: locked features show "Upgrade to Pro" modal with 3 bullet reasons + CTA — never an error toast or redirect
 - Trial countdown banner in the workspace header: "9 days left in your Pro trial"
 - Plan badge in workspace switcher ("Free" / "Pro" / "Business" chip)
+
+**Transfer Ownership (implement alongside billing)**
+
+> Ownership transfer is a billing-time concern: the new owner inherits the subscription seat and workspace creation slot; the old owner loses theirs.
+
+Backend:
+- `POST /api/workspaces/:id/transfer-ownership/` — owner-only endpoint; body `{ "member_id": "<uuid>" }` 
+- Validates the target is an existing workspace member
+- Atomically: sets `workspace.owner = target_user`, re-assigns the Admin system role to the new owner, demotes the old owner to Member role
+- Flips `can_create_workspace`: `True` → new owner, `False` → old owner (slot transfer)
+- Emits a `workspace.ownership_transferred` audit log entry
+
+Frontend — Settings page → Danger Zone (owner only):
+- "Transfer Ownership" button opens a modal: member picker (searchable list of current members, excludes self) + confirmation input (type workspace name to confirm)
+- On success: navigates old owner to `/onboarding` or their next workspace (they are no longer owner and lose admin access)
+- New owner sees no disruption — workspace stays open, they now have the Admin role
 
 ---
 

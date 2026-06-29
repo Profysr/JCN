@@ -25,6 +25,7 @@ import {
   TimelineContent,
 } from "@/shared/components/ui/timeline";
 import LoadMoreButton from "@/shared/components/ui/LoadMoreButton";
+import { Loader } from "@/shared/components/ui/Loader";
 import { Avatar } from "@/shared/components/ui/avatar";
 import { Button } from "@/shared/components/ui/button";
 import { cn } from "@/shared/lib/utils";
@@ -448,10 +449,7 @@ function ActivityTab({ workspaceId, boardId, taskId }) {
 
   const activities = data?.pages.flatMap((p) => p.results) ?? [];
 
-  if (isLoading)
-    return (
-      <p className="text-sm text-muted-foreground text-center py-6">Loading…</p>
-    );
+  if (isLoading) return <Loader className="py-6" />;
   if (!activities.length)
     return (
       <p className="text-sm text-muted-foreground text-center py-6">

@@ -22,6 +22,7 @@ import {
 import { usePermissions } from "@/shared/hooks/usePermissions";
 import { APP_DEFS } from "@/shared/lib/navLinks";
 import { ShortcutTooltip } from "@/shared/components/ui/ShortcutTooltip";
+import { Loader } from "@/shared/components/ui/Loader";
 
 const _appDefByKey = Object.fromEntries(APP_DEFS.map((a) => [a.key, a]));
 
@@ -518,7 +519,7 @@ export default function RolesSection({ workspaceId, isAdmin, onOpenPermissionsRe
       </div>
 
       {isLoading ? (
-        <div className="p-6 text-sm text-muted-foreground">Loading…</div>
+        <Loader className="p-6" />
       ) : (
         <div className="flex flex-col min-h-[420px]" style={{ maxHeight: 620 }}>
           {/* Tab bar + inline actions */}

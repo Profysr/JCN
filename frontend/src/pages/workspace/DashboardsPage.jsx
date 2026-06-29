@@ -38,6 +38,7 @@ import { formatShortDate } from "@/shared/lib/dateUtils";
 import BoardTypeIcon from "@/shared/components/ui/BoardTypeIcon";
 import { Avatar } from "@/shared/components/ui/avatar";
 import GettingStartedChecklist from "@/apps/project-management/components/GettingStartedChecklist";
+import { Loader } from "@/shared/components/ui/Loader";
 
 // ── Urgency bucketing ─────────────────────────────────────────────────────────
 function sectionFor(task) {
@@ -478,9 +479,7 @@ function RecentNotificationsWidget({ workspaceId }) {
       </div>
 
       {isLoading ? (
-        <div className="py-8 flex items-center justify-center">
-          <span className="text-xs text-muted-foreground">Loading…</span>
-        </div>
+        <Loader className="py-8" />
       ) : items.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-10 text-center px-4">
           <Bell className="w-8 h-8 text-muted-foreground/30 mb-2" />
