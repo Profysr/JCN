@@ -543,6 +543,22 @@ class TaskSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"start_date": "Start date cannot be after the due date."}
             )
+
+        assignee_id = data.get("assignee_id")
+        board = self.context.get("board")
+        if assignee_id and board and board.is_private:
+            from django.contrib.auth import get_user_model
+            from .permissions import user_can_be_board_participant
+            User = get_user_model()
+            try:
+                assignee = User.objects.get(id=assignee_id)
+                if not user_can_be_board_participant(assignee, board):
+                    raise serializers.ValidationError(
+                        {"assignee_id": "This user doesn't have access to this board."}
+                    )
+            except User.DoesNotExist:
+                pass
+
         return data
 
     def create(self, validated_data):
@@ -1020,6 +1036,7 @@ class ApprovalReviewerSerializer(serializers.ModelSerializer):
 
 class ApprovalSerializer(serializers.ModelSerializer):
     requested_by = MiniUserSerializer(read_only=True)
+    overridden_by = MiniUserSerializer(read_only=True)
     reviewers = ApprovalReviewerSerializer(many=True, read_only=True)
     reviewer_ids = serializers.ListField(
         child=serializers.UUIDField(), write_only=True, required=True
@@ -1035,6 +1052,8 @@ class ApprovalSerializer(serializers.ModelSerializer):
             "due_date",
             "note",
             "requested_by",
+            "overridden_by",
+            "override_comment",
             "reviewers",
             "reviewer_ids",
             "approved_count",
@@ -1042,7 +1061,7 @@ class ApprovalSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "status", "requested_by", "created_at", "updated_at"]
+        read_only_fields = ["id", "status", "requested_by", "overridden_by", "override_comment", "created_at", "updated_at"]
 
     def get_approved_count(self, obj):
         reviewers = obj.reviewers.all()
@@ -1092,6 +1111,24 @@ class ApprovalResubmitSerializer(serializers.Serializer):
         approval.status = Approval.Status.PENDING
         approval.save(update_fields=["status", "updated_at"])
         approval.reviewers.all().update(status=ApprovalReviewer.Status.PENDING, comment="")
+        return approval
+
+
+class ApprovalAdminOverrideSerializer(serializers.Serializer):
+    """Workspace admin forces an approval to a terminal status, bypassing the reviewer workflow."""
+
+    status = serializers.ChoiceField(choices=[
+        Approval.Status.APPROVED,
+        Approval.Status.REJECTED,
+        Approval.Status.CHANGES_REQUESTED,
+    ])
+    comment = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def update(self, approval, validated_data):
+        approval.status = validated_data["status"]
+        approval.override_comment = validated_data.get("comment", "")
+        approval.overridden_by = self.context["request"].user
+        approval.save(update_fields=["status", "override_comment", "overridden_by", "updated_at"])
         return approval
 
 

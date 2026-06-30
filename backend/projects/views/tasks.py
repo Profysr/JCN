@@ -49,6 +49,7 @@ from ..serializers import (
     ApprovalReviewerSerializer,
     ApprovalReviewSerializer,
     ApprovalResubmitSerializer,
+    ApprovalAdminOverrideSerializer,
     MyWorkTaskSerializer,
     ChildTaskSerializer,
 )
@@ -67,6 +68,7 @@ from .helpers import (
     broadcast,
     log_activity,
     notify,
+    _is_workspace_admin,
 )
 
 
@@ -203,7 +205,7 @@ class TaskListCreateView(APIView):
 
     def post(self, request, workspace_id, board_id):
         board = _get_board(workspace_id, board_id, request.user)
-        serializer = TaskSerializer(data=request.data, context={"request": request})
+        serializer = TaskSerializer(data=request.data, context={"request": request, "board": board})
         serializer.is_valid(raise_exception=True)
         task = serializer.save(board=board)
 
@@ -245,7 +247,7 @@ class TaskDetailView(APIView):
         old_status, old_priority, old_assignee = task.status, task.priority, task.assignee
 
         serializer = TaskSerializer(
-            task, data=request.data, partial=True, context={"request": request}
+            task, data=request.data, partial=True, context={"request": request, "board": task.board}
         )
         serializer.is_valid(raise_exception=True)
         serializer.save()
@@ -622,6 +624,41 @@ class SprintDetailView(APIView):
         sprint = _get_sprint(workspace_id, board_id, sprint_id, request.user)
         sprint.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class SprintBulkTaskView(APIView):
+    """POST /sprints/{id}/tasks/bulk/ — assign or remove many tasks in one DB write."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, workspace_id, board_id, sprint_id):
+        sprint = _get_sprint(workspace_id, board_id, sprint_id, request.user)
+
+        task_ids = request.data.get("task_ids", [])
+        action = request.data.get("action", "add")
+
+        if not isinstance(task_ids, list) or not task_ids:
+            return Response(
+                {"error": "task_ids must be a non-empty list"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if action not in ("add", "remove"):
+            return Response(
+                {"error": "action must be 'add' or 'remove'"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        tasks = Task.objects.filter(id__in=task_ids, board=sprint.board)
+        tasks.update(sprint=sprint if action == "add" else None)
+
+        updated = TaskCardSerializer(_task_list_qs().filter(id__in=task_ids), many=True).data
+        broadcast(
+            workspace_id,
+            "tasks.bulk_updated",
+            {"tasks": updated, "board_id": str(board_id)},
+        )
+        return Response({"updated": len(updated)})
+
 
 # ── File Attachments (v1.2.0) ─────────────────────────────────────────────────
 class TaskAttachmentListCreateView(APIView):
@@ -1021,6 +1058,46 @@ class ApprovalResubmitView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         _notify_reviewers(approval, request.user, approval.task.board.workspace, approval.task)
+        _broadcast_approval(workspace_id, board_id, task_id, "approval.updated", approval)
+        return Response(ApprovalSerializer(approval).data)
+
+
+class ApprovalAdminOverrideView(APIView):
+    """
+    POST /tasks/:id/approvals/:approval_id/admin-override/
+    Body: { "status": "approved"|"rejected"|"changes_requested", "comment": "..." }
+    Only workspace admins (owner or board.admin permission) may call this.
+    The action is logged to TaskActivity so it appears in the Activity tab.
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, workspace_id, board_id, task_id, approval_id):
+        approval = _get_approval(workspace_id, board_id, task_id, approval_id, request.user)
+
+        if not _is_workspace_admin(approval.task.board.workspace, request.user):
+            return Response(
+                {"detail": "Only workspace admins can override approvals."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = ApprovalAdminOverrideSerializer(
+            approval, data=request.data, context={"request": request}
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        log_activity(
+            approval.task,
+            request.user,
+            "approval_admin_overridden",
+            {
+                "approval_id": str(approval.id),
+                "new_status": approval.status,
+                "comment": approval.override_comment,
+            },
+        )
+
         _broadcast_approval(workspace_id, board_id, task_id, "approval.updated", approval)
         return Response(ApprovalSerializer(approval).data)
 

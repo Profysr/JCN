@@ -7,48 +7,55 @@ import {
   Zap,
   CheckCircle2,
   Play,
+  ChevronsRight,
+  ChevronsLeft,
 } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { Avatar } from "@/shared/components/ui/avatar";
 import { cn } from "@/shared/lib/utils";
 import { useUpdateTask } from "@/apps/project-management/hooks/useTasks";
-import { useUpdateSprint } from "@/apps/project-management/hooks/useSprints";
+import { useUpdateSprint, useBulkSprintTasks } from "@/apps/project-management/hooks/useSprints";
+import { getPriority } from "@/shared/lib/constants";
 
-const PRIORITY_CONFIG = {
-  critical: { dot: "bg-red-500", label: "Critical" },
-  high: { dot: "bg-orange-500", label: "High" },
-  medium: { dot: "bg-yellow-400", label: "Medium" },
-  low: { dot: "bg-blue-400", label: "Low" },
-  none: { dot: "bg-muted-foreground/30", label: "" },
-};
-
-function TaskRow({ task, action, onAction, onTaskClick }) {
-  const pCfg = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.none;
+function TaskRow({ task, action, onAction, onTaskClick, selected, onToggle }) {
+  const priority = getPriority(task.priority);
   return (
     <div
       onClick={() => onTaskClick?.(task.id)}
-      className="flex items-center gap-3 px-3 py-2 rounded-lg group cursor-pointer hover:bg-accent/60 transition-colors"
+      className={cn(
+        "flex items-center gap-3 px-3 py-2 rounded-lg group cursor-pointer transition-colors",
+        selected ? "bg-primary/8 hover:bg-primary/12" : "hover:bg-accent/60",
+      )}
     >
+      {/* Checkbox — only shown for backlog (add) rows */}
+      {onToggle && (
+        <input
+          type="checkbox"
+          checked={!!selected}
+          onChange={(e) => {
+            e.stopPropagation();
+            onToggle(task.id);
+          }}
+          onClick={(e) => e.stopPropagation()}
+          className="w-3.5 h-3.5 flex-shrink-0 accent-primary cursor-pointer"
+        />
+      )}
+
       <div
-        className={cn("w-2 h-2 rounded-full flex-shrink-0", pCfg.dot)}
-        title={pCfg.label}
+        className={cn("w-2 h-2 rounded-full flex-shrink-0", priority.dotCls)}
+        title={priority.label}
       />
       <span className="flex-1 text-sm truncate min-w-0">{task.title}</span>
 
-      {/* Assignee avatars */}
-      {task.assignees?.length > 0 && (
-        <div className="flex -space-x-1.5 flex-shrink-0">
-          {task.assignees.slice(0, 2).map((a) => (
-            <Avatar
-              key={a.id}
-              user={a}
-              name={a.full_name || a.email}
-              src={a.avatar}
-              size="xs"
-              ring
-            />
-          ))}
-        </div>
+      {/* Assignee avatar */}
+      {task.assignee && (
+        <Avatar
+          user={task.assignee}
+          name={task.assignee.full_name || task.assignee.email}
+          src={task.assignee.avatar}
+          size="xs"
+          ring
+        />
       )}
 
       {/* Action button (visible on hover) */}
@@ -164,8 +171,11 @@ export default function SprintPlanningView({
   boardId,
 }) {
   const [search, setSearch] = useState("");
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [selectedStagedIds, setSelectedStagedIds] = useState(new Set());
   const updateTask = useUpdateTask(workspaceId, boardId);
   const updateSprint = useUpdateSprint(workspaceId, boardId);
+  const bulkSprintTasks = useBulkSprintTasks(workspaceId, boardId);
 
   const filteredBacklog = useMemo(
     () =>
@@ -175,11 +185,59 @@ export default function SprintPlanningView({
     [backlogTasks, search],
   );
 
-  const addToSprint = (task) =>
-    updateTask.mutate({ taskId: task.id, sprint_id: sprint.id });
+  const toggleSelect = (taskId) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(taskId) ? next.delete(taskId) : next.add(taskId);
+      return next;
+    });
 
-  const removeFromSprint = (task) =>
+  const toggleSelectAll = () =>
+    setSelectedIds((prev) =>
+      prev.size === filteredBacklog.length
+        ? new Set()
+        : new Set(filteredBacklog.map((t) => t.id)),
+    );
+
+  const addToSprint = (task) => {
+    setSelectedIds((prev) => { const n = new Set(prev); n.delete(task.id); return n; });
+    updateTask.mutate({ taskId: task.id, sprint_id: sprint.id });
+  };
+
+  const addSelectedToSprint = () => {
+    if (!selectedIds.size) return;
+    bulkSprintTasks.mutate(
+      { sprintId: sprint.id, taskIds: Array.from(selectedIds), action: "add" },
+      { onSuccess: () => setSelectedIds(new Set()) },
+    );
+  };
+
+  const toggleSelectStaged = (taskId) =>
+    setSelectedStagedIds((prev) => {
+      const next = new Set(prev);
+      next.has(taskId) ? next.delete(taskId) : next.add(taskId);
+      return next;
+    });
+
+  const toggleSelectAllStaged = () =>
+    setSelectedStagedIds((prev) =>
+      prev.size === stagedTasks.length
+        ? new Set()
+        : new Set(stagedTasks.map((t) => t.id)),
+    );
+
+  const removeFromSprint = (task) => {
+    setSelectedStagedIds((prev) => { const n = new Set(prev); n.delete(task.id); return n; });
     updateTask.mutate({ taskId: task.id, sprint_id: null });
+  };
+
+  const removeSelectedFromSprint = () => {
+    if (!selectedStagedIds.size) return;
+    bulkSprintTasks.mutate(
+      { sprintId: sprint.id, taskIds: Array.from(selectedStagedIds), action: "remove" },
+      { onSuccess: () => setSelectedStagedIds(new Set()) },
+    );
+  };
 
   const startSprint = () =>
     updateSprint.mutate({ sprintId: sprint.id, status: "active" });
@@ -191,12 +249,25 @@ export default function SprintPlanningView({
       {/* ── LEFT: Backlog ── */}
       <div className="flex-1 flex flex-col overflow-hidden border-r">
         <div className="px-5 py-4 border-b flex-shrink-0 space-y-3">
-          <div>
-            <h3 className="text-sm font-semibold">Backlog</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {filteredBacklog.length} unassigned task
-              {filteredBacklog.length !== 1 ? "s" : ""}
-            </p>
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-semibold">Backlog</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {filteredBacklog.length} unassigned task
+                {filteredBacklog.length !== 1 ? "s" : ""}
+              </p>
+            </div>
+            {selectedIds.size > 0 && (
+              <Button
+                size="sm"
+                className="gap-1.5 shrink-0"
+                onClick={addSelectedToSprint}
+                disabled={bulkSprintTasks.isPending}
+              >
+                <ChevronsRight className="w-3.5 h-3.5" />
+                Add {selectedIds.size} to sprint
+              </Button>
+            )}
           </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
@@ -207,6 +278,17 @@ export default function SprintPlanningView({
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
+          {filteredBacklog.length > 0 && (
+            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+              <input
+                type="checkbox"
+                className="w-3.5 h-3.5 accent-primary"
+                checked={selectedIds.size === filteredBacklog.length && filteredBacklog.length > 0}
+                onChange={toggleSelectAll}
+              />
+              Select all
+            </label>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto px-3 py-2">
@@ -225,6 +307,8 @@ export default function SprintPlanningView({
                 action="add"
                 onAction={addToSprint}
                 onTaskClick={onTaskClick}
+                selected={selectedIds.has(task.id)}
+                onToggle={toggleSelect}
               />
             ))
           )}
@@ -234,21 +318,47 @@ export default function SprintPlanningView({
       {/* ── RIGHT: Sprint commitment ── */}
       <div className="w-[400px] flex-shrink-0 flex flex-col overflow-hidden">
         <div className="px-5 py-4 border-b flex-shrink-0 space-y-3">
-          <div>
-            <h3 className="text-sm font-semibold flex items-center gap-2">
-              <Zap className="w-3.5 h-3.5 text-primary" />
-              {sprint.name}
-            </h3>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {stagedTasks.length} task{stagedTasks.length !== 1 ? "s" : ""}{" "}
-              staged for this sprint
-            </p>
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <Zap className="w-3.5 h-3.5 text-primary" />
+                {sprint.name}
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {stagedTasks.length} task{stagedTasks.length !== 1 ? "s" : ""}{" "}
+                staged for this sprint
+              </p>
+            </div>
+            {selectedStagedIds.size > 0 && (
+              <Button
+                size="sm"
+                variant="destructive"
+                className="gap-1.5 shrink-0"
+                onClick={removeSelectedFromSprint}
+                disabled={bulkSprintTasks.isPending}
+              >
+                <ChevronsLeft className="w-3.5 h-3.5" />
+                Remove {selectedStagedIds.size}
+              </Button>
+            )}
           </div>
 
           <CapacityMeter
             stagedCount={stagedTasks.length}
             memberCount={memberCount}
           />
+
+          {stagedTasks.length > 0 && (
+            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+              <input
+                type="checkbox"
+                className="w-3.5 h-3.5 accent-primary"
+                checked={selectedStagedIds.size === stagedTasks.length && stagedTasks.length > 0}
+                onChange={toggleSelectAllStaged}
+              />
+              Select all
+            </label>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto px-3 py-2">
@@ -267,6 +377,8 @@ export default function SprintPlanningView({
                 action="remove"
                 onAction={removeFromSprint}
                 onTaskClick={onTaskClick}
+                selected={selectedStagedIds.has(task.id)}
+                onToggle={toggleSelectStaged}
               />
             ))
           )}

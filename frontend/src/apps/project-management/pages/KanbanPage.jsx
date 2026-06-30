@@ -13,6 +13,7 @@ import {
   useCreateLabel,
 } from "@/apps/project-management/hooks/useLabels";
 import { useMembers } from "@/shared/hooks/useMembers";
+import { useBoardMembers } from "@/apps/project-management/hooks/useBoardMembers";
 import { useStatuses } from "@/apps/project-management/hooks/useStatusManagement";
 import {
   useSavedViews,
@@ -111,7 +112,11 @@ export default function KanbanPage() {
   } = useBoard(workspaceId, boardId);
   const { data: allTasks = [], isLoading: tasksLoading } = useTasks(workspaceId, boardId, apiFilters);
   const { data: labels = [] } = useLabels(workspaceId, boardId);
-  const { data: members = [] } = useMembers(workspaceId);
+  const { data: wsMembers = [] } = useMembers(workspaceId);
+  const { data: boardMembers = [] } = useBoardMembers(workspaceId, boardId, {
+    enabled: !!board?.is_private,
+  });
+  const members = board?.is_private ? boardMembers : wsMembers;
   // Only fetch sprints when view is sprint, list or timeline cz we won't need it in board view
   const { data: sprints = [] } = useSprints(
     workspaceId,

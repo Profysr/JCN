@@ -283,7 +283,7 @@ Views live in `projects/views/comments.py` (extracted from `tasks.py`).
 
 **Reply rules**: `parent_id` must point to a top-level comment (no reply-of-reply). Replies are nested under their parent in GET responses via `TaskCommentReplySerializer` (no further nesting). Parent comment author is notified when a reply is posted.
 
-**Mention resolution**: Frontend resolves `@handle` → user UUID at picker selection time. Backend receives `mentioned_user_ids` (validated against workspace membership) — no regex scanning.
+**Mention resolution**: Frontend resolves `@handle` → user UUID at picker selection time. Backend receives `mentioned_user_ids`. For **private boards**, the view validates each user ID against board membership (`user_can_be_board_participant`) before saving the comment — returns **400** naming the blocked users if any fail. Public boards accept any workspace member.
 
 ### Attachments
 
@@ -338,6 +338,7 @@ Views live in `projects/views/comments.py` (extracted from `tasks.py`).
 | GET | `/api/workspaces/{ws}/boards/{pid}/sprints/{id}/` | Sprint detail |
 | PATCH | `/api/workspaces/{ws}/boards/{pid}/sprints/{id}/` | Update sprint |
 | DELETE | `/api/workspaces/{ws}/boards/{pid}/sprints/{id}/` | Delete sprint |
+| POST | `/api/workspaces/{ws}/boards/{pid}/sprints/{id}/tasks/bulk/` | Bulk assign/remove tasks — body `{task_ids: [uuid, …], action: "add"\|"remove"}` |
 
 ### Task Templates
 
@@ -355,6 +356,7 @@ Views live in `projects/views/comments.py` (extracted from `tasks.py`).
 | POST | `/api/workspaces/{ws}/boards/{pid}/tasks/{tid}/approvals/` | Request approval (`reviewer_ids`, `due_date`, `note`) |
 | POST | `/api/workspaces/{ws}/boards/{pid}/tasks/{tid}/approvals/{id}/review/` | Submit reviewer verdict (`status`, `comment`) — validated by `ApprovalReviewSerializer` |
 | POST | `/api/workspaces/{ws}/boards/{pid}/tasks/{tid}/approvals/{id}/resubmit/` | Resubmit after changes requested — validated by `ApprovalResubmitSerializer` |
+| POST | `/api/workspaces/{ws}/boards/{pid}/tasks/{tid}/approvals/{id}/admin-override/` | Admin-only force approve/reject/request-changes, bypassing reviewers — `ApprovalAdminOverrideView` (`_is_workspace_admin` required) |
 
 **Approval helpers** (module-level in `views/tasks.py`):
 
@@ -546,17 +548,17 @@ Four dedicated views replace the old `AnalyticsMetricView` dynamic router. All f
 
 ### Validation rules (serializers)
 
-- **Task** (`TaskSerializer`): `title` required (max 500). `validate()` rejects `start_date > due_date` → **400** `{"start_date": "Start date cannot be after the due date."}`; it merges incoming values with the existing instance so a partial PATCH validates against stored fields. Write-only: `assignee_id`, `status_id`, `label_ids`, `sprint_id`, `parent_id`. Read-only: `id`, `created_by`, `created_at`, `updated_at`, `version`. Defaults: `priority=medium`, `task_type=task`, `order=0`, `version=1`. On create sets `created_by=request.user`; `label_ids` → `task.labels.set(...)`.
+- **Task** (`TaskSerializer`): `title` required (max 500). `validate()` rejects `start_date > due_date` → **400** `{"start_date": "Start date cannot be after the due date."}`; it merges incoming values with the existing instance so a partial PATCH validates against stored fields. For **private boards**, `validate()` also checks `assignee_id` via `user_can_be_board_participant` — rejects with **400** `{"assignee_id": "This user doesn't have access to this board."}` if the assignee is not a board member or workspace admin. The `board` object is passed through serializer context by both `TaskListCreateView.post()` and `TaskDetailView.patch()`. Write-only: `assignee_id`, `status_id`, `label_ids`, `sprint_id`, `parent_id`. Read-only: `id`, `created_by`, `created_at`, `updated_at`, `version`. Defaults: `priority=medium`, `task_type=task`, `order=0`, `version=1`. On create sets `created_by=request.user`; `label_ids` → `task.labels.set(...)`.
 - **Version conflict**: `PATCH /tasks/{tid}/` calls `_check_version_conflict` — if the body's `version` is present and ≠ the stored `version`, returns **409** `{detail, current_version, updated_at}`. On success the task's `version` is incremented. (Test optimistic-concurrency by PATCHing with a stale `version`.)
 - **Status bulk** (`BulkStatusUpdateSerializer`): `statuses` list (≥1). Per item: `id?`, `name`, `color`, `is_done`, `is_started`. Enforces a single `is_done=True` (last wins). Deletion guard described in the Task Statuses section above.
-- **Approval** (`ApprovalSerializer`): `reviewer_ids` (≥1) required, write-only; `due_date`/`note` optional. On create, idempotently `get_or_create`s an `ApprovalReviewer` (status `PENDING`) per reviewer. Review (`ApprovalReviewSerializer`): `status` ∈ {approved, rejected, changes_requested}, `comment?`. Resubmit (`ApprovalResubmitSerializer`): empty body; **403** unless `request.user == approval.requested_by`; **400** if already `APPROVED`.
+- **Approval** (`ApprovalSerializer`): `reviewer_ids` (≥1) required, write-only; `due_date`/`note` optional. On create, idempotently `get_or_create`s an `ApprovalReviewer` (status `PENDING`) per reviewer. `overridden_by` (read-only, `MiniUserSerializer`) and `override_comment` (read-only) are included in the response when set. Review (`ApprovalReviewSerializer`): `status` ∈ {approved, rejected, changes_requested}, `comment?`. Resubmit (`ApprovalResubmitSerializer`): empty body; **403** unless `request.user == approval.requested_by`; **400** if already `APPROVED`. Admin override (`ApprovalAdminOverrideSerializer`): `status` ∈ {approved, rejected, changes_requested}, `comment?`; sets `overridden_by=request.user`; **403** unless `_is_workspace_admin`; logs `approval_admin_overridden` activity; broadcasts `approval.updated`.
 - **Comment**: `body` required; `parent_id` (write-only) must reference a **top-level** comment (`parent__isnull=True`) on the same task — validated in the view, so reply-of-reply → 404/400.
 
 ### Business logic & side effects worth testing
 
 - **Task move** (`TaskMoveView`): body `{status_id?, order?}`. If destination is a **done** column and the task has a **pending approval**, rejected with **403** `{approval_required: true}` (`_check_move_blocked`). If destination has `is_started=True` and the task has no `start_date`, it's auto-set to today. Activity (`task.moved`) logged + broadcast only when the status actually changed.
 - **Deep clone** (`Task.clone()`): recursively clones the task and all children; copies labels + subtasks (order preserved); appends `" (Copy)"` to title; **strips** `assignee`, `start_date`, `due_date`, `sprint`, `order`. Logs activity `CREATED` with `meta.cloned_from`.
-- **Comment notifications** (async `send_comment_notifications`): task assignee + creator, parent-comment author (on reply), and validated `@mentioned_user_ids` (must be workspace members) each notified once (deduped); the author is never notified of their own comment.
+- **Comment notifications** (async `send_comment_notifications`): task assignee + creator, parent-comment author (on reply), and `@mentioned_user_ids` each notified once (deduped); the author is never notified of their own comment. **Private-board mention guard** runs synchronously in the view *before* the comment is saved: each mentioned user ID is checked via `user_can_be_board_participant`; if any fail, the view returns **400** with the names of the blocked users and the comment is not persisted. Public boards have no mention restriction beyond workspace membership (validated by the Celery task).
 - **Public form submission** (`PublicFormSubmitView`, `AllowAny`): creates a `FormSubmission`; if `config.create_task` (default true), creates a Task with `created_by=NULL`, title from `config.title_field_id` (else "Submission from …"), status from `config.default_status_id` (else the board's first status), then links `submission.task`.
 - **Bulk task update** (`TaskBulkUpdateView`): `{task_ids, action: update|delete, updates?}`. Skips rows already at the target value; re-serializes affected cards and broadcasts `tasks.bulk_updated`.
 - **Reactions**: `CommentReactionToggleView` toggles one emoji per user/comment; counts cached in Redis (`rxn:<comment_uuid>`), invalidated on toggle and on comment delete.
@@ -640,7 +642,7 @@ Four dedicated views replace the old `AnalyticsMetricView` dynamic router. All f
 | `AutomationLog` | `rule` (FK), `task` (FK), `exec_status`, `duration_ms` | indexes: rule+exec_status, rule+created_at |
 | `Objective` | `workspace` (FK), `board` (FK, nullable), `parent` (FK self), `title`, `owner` (FK), `time_period`, `start_date`, `end_date` | `ObjectiveSerializer` exposes: id, title, description, time_period, start_date, end_date, owner, key_results, progress, confidence. Fields `project` and `child_count` were removed — they don't exist on the model. |
 | `KeyResult` | `objective` (FK), `title`, `tasks` (M2M) | No `current_value` or `record_checkin` — progress is computed from linked tasks' done status. |
-| `Approval` | `task` (FK), `requested_by` (FK), `status` (PENDING/APPROVED/REJECTED/CHANGES_REQUESTED) | |
+| `Approval` | `task` (FK), `requested_by` (FK), `status` (PENDING/APPROVED/REJECTED/CHANGES_REQUESTED), `overridden_by` (FK User, nullable), `override_comment` (TextField, blank) | `overridden_by` set when a workspace admin force-changes status via `admin-override/` endpoint |
 | `ApprovalReviewer` | `approval` (FK), `user` (FK), `status`, `comment` | unique: approval+user |
 | `UserPresence` | `user` (FK), `workspace` (FK), `resource_type`, `resource_id`, `last_seen` | unique: user+workspace+resource_type+resource_id |
 | `CommentReaction` | `comment` (FK), `user` (FK), `emoji` | unique: comment+user+emoji |
@@ -826,6 +828,8 @@ Project-admin actions gate on `project.admin` (in the `projects` group).
 App access for hr/org/projects is enforced via `require_app_access()` at the top of each view.
 
 ### Board-level (unchanged from v2.1)
+
+**`user_can_be_board_participant(user, board)`** (`projects/permissions.py`) — returns `True` if user can be assigned to tasks or mentioned in comments on a private board. Checks: workspace owner → workspace `board.admin` permission → explicit `BoardMember` row. Used by `TaskSerializer.validate()` (assignee check) and `TaskCommentListCreateView.post()` (mention check). Does not check workspace membership — callers that already have a board object can assume the user is a workspace member.
 
 ```
 BoardMember.role:      admin > editor > viewer > guest

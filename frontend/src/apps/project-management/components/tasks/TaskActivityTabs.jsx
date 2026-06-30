@@ -39,7 +39,9 @@ import { useToggleReaction } from "@/apps/project-management/hooks/useCommentRea
 import {
   useSubmitReview,
   useResubmitApproval,
+  useAdminOverrideApproval,
 } from "@/apps/project-management/hooks/useApprovals";
+import { usePermission } from "@/contexts/PermissionsContext";
 import {
   QUICK_EMOJIS,
   REVIEWER_STATUS_CONFIG,
@@ -559,6 +561,11 @@ function ApprovalCard({
 }) {
   const [reviewComment, setReviewComment] = useState("");
   const [showReviewForm, setShowReviewForm] = useState(false);
+  const [showAdminOverride, setShowAdminOverride] = useState(false);
+  const [adminComment, setAdminComment] = useState("");
+  const { can, isOwner } = usePermission();
+  const isAdmin = isOwner || can("board.admin");
+
   const submitReview = useSubmitReview(
     workspaceId,
     boardId,
@@ -566,6 +573,12 @@ function ApprovalCard({
     approval.id,
   );
   const resubmit = useResubmitApproval(
+    workspaceId,
+    boardId,
+    taskId,
+    approval.id,
+  );
+  const adminOverride = useAdminOverrideApproval(
     workspaceId,
     boardId,
     taskId,
@@ -596,6 +609,18 @@ function ApprovalCard({
     );
   };
 
+  const handleAdminOverride = (verdict) => {
+    adminOverride.mutate(
+      { status: verdict, comment: adminComment },
+      {
+        onSuccess: () => {
+          setShowAdminOverride(false);
+          setAdminComment("");
+        },
+      },
+    );
+  };
+
   return (
     <div className="border border-border rounded-md p-3 space-y-3">
       <div className="flex items-center justify-between gap-2">
@@ -619,6 +644,21 @@ function ApprovalCard({
         <p className="text-xs text-muted-foreground italic">{approval.note}</p>
       )}
 
+      {approval.overridden_by && (
+        <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-violet-500/10 border border-violet-500/20 text-[11px] text-violet-700 dark:text-violet-400">
+          <ShieldCheck className="w-3 h-3 flex-shrink-0" />
+          <span>
+            Overridden by{" "}
+            <span className="font-semibold">
+              {approval.overridden_by.full_name || approval.overridden_by.email}
+            </span>
+            {approval.override_comment && (
+              <> · &quot;{approval.override_comment}&quot;</>
+            )}
+          </span>
+        </div>
+      )}
+
       <div className="space-y-2">
         {approval.reviewers?.map((r) => {
           const cfg =
@@ -627,8 +667,9 @@ function ApprovalCard({
             <div key={r.id} className="space-y-1">
               <div className="flex items-center gap-2">
                 <Avatar
+                  user={r.user}
                   name={
-                    r.user?.display_name || r.user?.full_name || r.user?.email
+                    r.user?.full_name || r.user?.email
                   }
                   src={r.user?.avatar}
                   size="xs"
@@ -725,6 +766,56 @@ function ApprovalCard({
                 </button>
                 <button
                   onClick={() => setShowReviewForm(false)}
+                  className="px-3 text-xs border rounded-md text-muted-foreground hover:bg-accent transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {isAdmin && approval.status !== "approved" && (
+        <div className="border-t border-border/60 pt-3">
+          {!showAdminOverride ? (
+            <button
+              onClick={() => setShowAdminOverride(true)}
+              className="w-full flex items-center justify-center gap-1.5 text-xs py-1.5 rounded-md bg-violet-500/10 text-violet-700 dark:text-violet-400 hover:bg-violet-500/20 font-semibold transition-colors border border-violet-500/20"
+            >
+              <ShieldCheck className="w-3 h-3" />
+              Admin Override
+            </button>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-[11px] text-muted-foreground font-medium">
+                Admin override — this will bypass reviewer decisions and will be logged.
+              </p>
+              <textarea
+                autoFocus
+                rows={2}
+                placeholder="Reason for override (optional)…"
+                className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background resize-none focus:outline-none focus:ring-1 focus:ring-ring"
+                value={adminComment}
+                onChange={(e) => setAdminComment(e.target.value)}
+              />
+              <div className="flex gap-1.5">
+                <button
+                  onClick={() => handleAdminOverride("approved")}
+                  disabled={adminOverride.isPending}
+                  className="flex-1 flex items-center justify-center gap-1 text-xs py-1.5 rounded-md bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 font-semibold transition-colors"
+                >
+                  <Check className="w-3 h-3" /> Force Approve
+                </button>
+                <button
+                  onClick={() => handleAdminOverride("rejected")}
+                  disabled={adminOverride.isPending}
+                  className="flex-1 flex items-center justify-center gap-1 text-xs py-1.5 rounded-md bg-destructive/10 text-destructive hover:bg-destructive/20 font-semibold transition-colors"
+                >
+                  <XCircle className="w-3 h-3" /> Force Reject
+                </button>
+                <button
+                  onClick={() => setShowAdminOverride(false)}
                   className="px-3 text-xs border rounded-md text-muted-foreground hover:bg-accent transition-colors"
                 >
                   Cancel

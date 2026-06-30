@@ -73,3 +73,21 @@ export function useSubmitReview(workspaceId, boardId, taskId, approvalId) {
     },
   });
 }
+
+export function useAdminOverrideApproval(workspaceId, boardId, taskId, approvalId) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data) =>
+      api
+        .post(
+          `/api/workspaces/${workspaceId}/boards/${boardId}/tasks/${taskId}/approvals/${approvalId}/admin-override/`,
+          data,
+        )
+        .then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: approvalsKey(workspaceId, boardId, taskId),
+      });
+    },
+  });
+}

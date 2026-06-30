@@ -75,9 +75,51 @@ export const useDeleteSprint = (workspaceId, boardId) => {
       api.delete(
         `/api/workspaces/${workspaceId}/boards/${boardId}/sprints/${sprintId}/`,
       ),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: sprintsKey(workspaceId, boardId) }),
+    onSuccess: (_, sprintId) => {
+      qc.setQueryData(sprintsKey(workspaceId, boardId), (old) =>
+        Array.isArray(old) ? old.filter((s) => s.id !== sprintId) : old,
+      );
+      qc.removeQueries({
+        queryKey: sprintDetailKey(workspaceId, boardId, sprintId),
+      });
+    },
     onError: () => toast({ title: "Failed to delete sprint", type: "error" }),
+  });
+};
+
+export const useBulkSprintTasks = (workspaceId, boardId) => {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: ({ sprintId, taskIds, action }) =>
+      api
+        .post(
+          `/api/workspaces/${workspaceId}/boards/${boardId}/sprints/${sprintId}/tasks/bulk/`,
+          { task_ids: taskIds, action },
+        )
+        .then((r) => r.data),
+    onSuccess: (data, { sprintId, action }) => {
+      const delta = action === "add" ? data.updated : -data.updated;
+
+      qc.setQueryData(
+        ["sprint", workspaceId, boardId, sprintId],
+        (old) =>
+          old ? { ...old, task_count: Math.max(0, (old.task_count || 0) + delta) } : old,
+      );
+      qc.setQueryData(["sprints", workspaceId, boardId], (old) =>
+        Array.isArray(old)
+          ? old.map((s) =>
+              s.id === sprintId
+                ? { ...s, task_count: Math.max(0, (s.task_count || 0) + delta) }
+                : s,
+            )
+          : old,
+      );
+
+      // Task list still needs a refetch so individual task sprint_id fields reflect the change
+      qc.invalidateQueries({ queryKey: ["tasks", workspaceId, boardId] });
+    },
+    onError: () => toast({ title: "Failed to update sprint tasks", type: "error" }),
   });
 };
 

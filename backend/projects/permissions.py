@@ -126,6 +126,22 @@ def get_effective_role(user, board):
     return "viewer"
 
 
+def user_can_be_board_participant(user, board):
+    """Return True if user can be assigned/mentioned on a private board.
+
+    Covers workspace owner, workspace-level board.admin, and explicit BoardMember.
+    Public boards always return True — call site must check board.is_private first.
+    """
+    from .models import BoardMember
+
+    workspace = board.workspace
+    if workspace.owner_id == user.pk:
+        return True
+    if has_workspace_permission(user, workspace, "board.admin"):
+        return True
+    return BoardMember.objects.filter(board=board, user=user).exists()
+
+
 def log_audit(
     actor, workspace, action, resource_type, resource_id, before=None, after=None
 ):

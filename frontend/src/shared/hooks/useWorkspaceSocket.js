@@ -182,10 +182,29 @@ function handleBoardEvent(type, payload, qc, workspaceId) {
   }
 
   if (type === "approval.created" || type === "approval.updated") {
-    qc.invalidateQueries({
-      queryKey: ["approvals", workspaceId, payload.board_id, payload.task_id],
+    const approvalsKey = ["approvals", workspaceId, payload.board_id, payload.task_id];
+
+    // Patch the approvals list in-place so the detail panel updates without a round-trip.
+    qc.setQueryData(approvalsKey, (old) => {
+      if (!old) return old; // not cached yet — next mount will fetch
+      if (type === "approval.created") return [...old, payload.approval];
+      return old.map((a) => (a.id === payload.approval.id ? payload.approval : a));
     });
-    qc.invalidateQueries({ queryKey: ["tasks", workspaceId, payload.board_id] });
+
+    // Patch only the affected task's approval badge counts — no full task-list refetch.
+    qc.setQueryData(["tasks", workspaceId, payload.board_id], (old) => {
+      if (!old) return old;
+      const allApprovals = qc.getQueryData(approvalsKey) ?? [];
+      const pendingCount = allApprovals.filter((a) =>
+        ["pending", "changes_requested"].includes(a.status),
+      ).length;
+      const approvedCount = allApprovals.filter((a) => a.status === "approved").length;
+      return old.map((task) =>
+        task.id === payload.task_id
+          ? { ...task, pending_approval_count: pendingCount, approved_approval_count: approvedCount }
+          : task,
+      );
+    });
   }
 
   if (type === "reaction.updated") {

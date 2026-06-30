@@ -958,6 +958,13 @@ class Approval(models.Model):
     )
     due_date = models.DateField(null=True, blank=True)
     note = models.TextField(blank=True)
+    overridden_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True, blank=True,
+        on_delete=models.SET_NULL,
+        related_name="approval_overrides",
+    )
+    override_comment = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

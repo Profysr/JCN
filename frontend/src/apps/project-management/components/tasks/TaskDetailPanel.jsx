@@ -19,6 +19,7 @@ import Modal from "@/shared/components/ui/Modal";
 import { cn } from "@/shared/lib/utils";
 import VoltEditor from "@/shared/components/ui/VoltEditor";
 import { useMembers } from "@/shared/hooks/useMembers";
+import { useBoardMembers } from "@/apps/project-management/hooks/useBoardMembers";
 import { useAuthStore } from "@/store/authStore";
 import { useToast } from "@/shared/components/ui/toast";
 import {
@@ -88,8 +89,12 @@ export default function TaskDetailPanel({
   const { workspaceId, boardId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const { data: members = [] } = useMembers(workspaceId);
+  const { data: wsMembers = [] } = useMembers(workspaceId);
   const { data: board } = useBoard(workspaceId, boardId);
+  const { data: boardMembers = [] } = useBoardMembers(workspaceId, boardId, {
+    enabled: !!board?.is_private,
+  });
+  const members = board?.is_private ? boardMembers : wsMembers;
   const { data: task, isLoading } = useTaskDetail(workspaceId, boardId, taskId);
   const { data: subtasks = [] } = useTaskSubtasks(workspaceId, boardId, taskId);
   const { data: childTasks = [] } = useChildTasks(workspaceId, boardId, taskId);

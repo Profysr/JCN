@@ -29,6 +29,7 @@ from .tasks import (
     SavedViewDetailView,
     SprintListCreateView,
     SprintDetailView,
+    SprintBulkTaskView,
     TaskBulkUpdateView,
     TaskAttachmentListCreateView,
     TaskAttachmentDeleteView,
@@ -43,6 +44,7 @@ from .tasks import (
     ApprovalListCreateView,
     ApprovalReviewView,
     ApprovalResubmitView,
+    ApprovalAdminOverrideView,
     MyWorkView,
 )
 
@@ -115,6 +117,7 @@ __all__ = [
     "SavedViewDetailView",
     "SprintListCreateView",
     "SprintDetailView",
+    "SprintBulkTaskView",
     "TaskBulkUpdateView",
     "TaskAttachmentListCreateView",
     "TaskAttachmentDeleteView",
@@ -130,6 +133,7 @@ __all__ = [
     "ApprovalListCreateView",
     "ApprovalReviewView",
     "ApprovalResubmitView",
+    "ApprovalAdminOverrideView",
     "MyWorkView",
     # search
     "GlobalSearchView",

@@ -2,17 +2,10 @@ import { useMemo } from "react";
 import { UserCircle2 } from "lucide-react";
 import { Avatar } from "@/shared/components/ui/avatar";
 import { cn } from "@/shared/lib/utils";
-
-const PRIORITY_DOT = {
-  critical: "bg-red-500",
-  high: "bg-orange-500",
-  medium: "bg-yellow-400",
-  low: "bg-blue-400",
-  none: "bg-muted-foreground/20",
-};
+import { getPriority } from "@/shared/lib/constants";
 
 function MiniTaskCard({ task, onClick }) {
-  const dot = PRIORITY_DOT[task.priority] || PRIORITY_DOT.none;
+  const { dotCls } = getPriority(task.priority);
   return (
     <div
       onClick={() => onClick(task.id)}
@@ -20,7 +13,7 @@ function MiniTaskCard({ task, onClick }) {
     >
       <div className="flex items-start gap-2">
         <div
-          className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0 mt-[5px]", dot)}
+          className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0 mt-[5px]", dotCls)}
         />
         <span className="text-xs leading-relaxed line-clamp-2 flex-1 min-w-0">
           {task.title}
@@ -33,10 +26,11 @@ function MiniTaskCard({ task, onClick }) {
 // Derive a stable user id + display info from a WorkspaceMember object.
 // The API may embed user as a nested object or flatten fields — handle both.
 function resolveMember(member) {
-  const userId = member.user?.id;
-  const name = member.user?.full_name || member.user?.email || "Unknown";
-  const avatar = member.user?.avatar;
-  return { userId, name, avatar };
+  const user = member.user ?? null;
+  const userId = user?.id;
+  const name = user?.full_name || user?.email || "Unknown";
+  const avatar = user?.avatar;
+  return { user, userId, name, avatar };
 }
 
 export default function SprintSwimLanes({
@@ -51,8 +45,8 @@ export default function SprintSwimLanes({
     const unassigned = [];
 
     for (const task of tasks) {
-      if (task.assignees?.length > 0) {
-        const uid = task.assignees[0].id;
+      const uid = task.assignee?.id;
+      if (uid) {
         (byUser[uid] ||= []).push(task);
       } else {
         unassigned.push(task);
@@ -61,8 +55,8 @@ export default function SprintSwimLanes({
 
     // Build lane rows in member order
     const laneData = members.map((member) => {
-      const { userId, name, avatar } = resolveMember(member);
-      return { member, userId, name, avatar, tasks: byUser[userId] || [] };
+      const { user, userId, name, avatar } = resolveMember(member);
+      return { member, user, userId, name, avatar, tasks: byUser[userId] || [] };
     });
 
     return { laneData, unassigned };
@@ -117,7 +111,7 @@ export default function SprintSwimLanes({
 
         {/* ── Member rows ── */}
         {laneData.map(
-          ({ member, userId, name, avatar, tasks: memberTasks }) => {
+          ({ member, user, userId, name, avatar, tasks: memberTasks }) => {
             const doneCount = memberTasks.filter((t) =>
               statuses.find((s) => s.id === t.status_id && s.is_done),
             ).length;
@@ -130,7 +124,7 @@ export default function SprintSwimLanes({
                 {/* Person cell */}
                 <div className="w-48 flex-shrink-0 px-4 py-4 border-r flex flex-col gap-1">
                   <div className="flex items-center gap-2.5">
-                    <Avatar name={name} src={avatar} size="sm" />
+                    <Avatar user={user} name={name} src={avatar} size="sm" />
                     <span className="text-sm font-medium leading-tight truncate">
                       {name.split(" ")[0]}
                     </span>

@@ -64,6 +64,27 @@ class TaskCommentListCreateView(APIView):
         if parent_id:
             get_object_or_404(TaskComment, id=parent_id, task=task, parent__isnull=True)
 
+        # Frontend resolves @mentions to user IDs at selection time — no regex needed.
+        mentioned_user_ids = list(request.data.get("mentioned_user_ids", []))
+
+        if mentioned_user_ids and task.board.is_private:
+            from ..permissions import user_can_be_board_participant
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            blocked = []
+            for uid in mentioned_user_ids:
+                try:
+                    u = User.objects.get(id=uid)
+                    if not user_can_be_board_participant(u, task.board):
+                        blocked.append(u.full_name or u.email)
+                except User.DoesNotExist:
+                    pass
+            if blocked:
+                return Response(
+                    {"detail": f"Cannot mention {', '.join(blocked)} — they don't have access to this board."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         serializer = TaskCommentSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         comment = serializer.save(task=task)
@@ -75,9 +96,6 @@ class TaskCommentListCreateView(APIView):
             for u in [task.assignee, task.created_by]
             if u and u != request.user
         ]
-
-        # Frontend resolves @mentions to user IDs at selection time — no regex needed.
-        mentioned_user_ids = request.data.get("mentioned_user_ids", [])
 
         # Hand off every notification to a background worker.
         # The view returns 201 immediately — users are never waiting for notify().

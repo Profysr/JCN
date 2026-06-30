@@ -11,6 +11,7 @@ from .views import (
     ApprovalListCreateView,
     ApprovalReviewView,
     ApprovalResubmitView,
+    ApprovalAdminOverrideView,
     ObjectiveListCreateView,
     ObjectiveDetailView,
     KeyResultListCreateView,
@@ -35,6 +36,7 @@ from .views import (
     SavedViewDetailView,
     SprintListCreateView,
     SprintDetailView,
+    SprintBulkTaskView,
     TaskBulkUpdateView,
     TaskAttachmentListCreateView,
     TaskAttachmentDeleteView,
@@ -114,6 +116,7 @@ urlpatterns = [
     # Sprints
     path(f"{_pr}/sprints/", SprintListCreateView.as_view()),
     path(f"{_pr}/sprints/<str:sprint_id>/", SprintDetailView.as_view()),
+    path(f"{_pr}/sprints/<str:sprint_id>/tasks/bulk/", SprintBulkTaskView.as_view()),
     # Attachments
     path(f"{_tk}/attachments/", TaskAttachmentListCreateView.as_view()),
     path(f"{_tk}/attachments/<str:attachment_id>/", TaskAttachmentDeleteView.as_view()),
@@ -154,6 +157,7 @@ urlpatterns = [
     path(f"{_tk}/approvals/", ApprovalListCreateView.as_view()),
     path(f"{_tk}/approvals/<str:approval_id>/review/", ApprovalReviewView.as_view()),
     path(f"{_tk}/approvals/<str:approval_id>/resubmit/", ApprovalResubmitView.as_view()),
+    path(f"{_tk}/approvals/<str:approval_id>/admin-override/", ApprovalAdminOverrideView.as_view()),
 ]
 
 _ob = "workspaces/<str:workspace_id>/objectives"

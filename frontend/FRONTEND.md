@@ -357,7 +357,7 @@ WebSocket URL (both): `ws(s)://BACKEND/ws/workspaces/{workspaceId}/?token={acces
 | `comment.created`          | `setQueryData`                             | `["task-detail", ws, board_id, task_id]`                                                                 |
 | `comment.deleted`          | `setQueryData`                             | `["task-detail", ws, board_id, task_id]`                                                                 |
 | `reaction.updated`         | `setQueryData`                             | `["task-detail", ws, board_id, task_id]`                                                                 |
-| `approval.created/updated` | `invalidateQueries`                        | `["approvals", ws, board_id, task_id]`, `["tasks", ws, board_id]`                                        |
+| `approval.created/updated` | `setQueryData` (patch in place)            | `["approvals", ws, board_id, task_id]` patched directly; `["tasks", ws, board_id]` approval counts recomputed from the patched list — **zero network requests** |
 | `typing.update`            | DOM custom event                           | `window → "jcn:typing"`                                                                                  |
 
 **Inbox badge is poll-free:** `useInboxUnreadCount` uses `staleTime: Infinity` + `refetchOnWindowFocus/Reconnect: false`. It fetches once per session, then the count only moves via three events — **created** (workspace socket increments in place), and **read / bulk-read** (`useUpdateInboxItem` / `useBulkUpdateInbox` invalidate the key). No window-focus refetching.
@@ -657,7 +657,19 @@ The analytics layer was rewritten to match the backend's 4 flat-param endpoints 
 ["approvals", workspaceId, boardId, taskId]   no staleTime
 ```
 
-WebSocket `approval.created` / `approval.updated` events invalidate both `["approvals", ...]` and `["tasks", ...]`. This is because approvals affect the `pending_approval_count` field on task cards.
+WebSocket `approval.created` / `approval.updated` events patch the approvals list in-place via `setQueryData` and recompute badge counts on the affected task — no network round-trip. See `handleBoardEvent` in `useWorkspaceSocket.js`.
+
+**Hooks:**
+
+| Hook | Purpose |
+|------|---------|
+| `useApprovals(ws, boardId, taskId)` | Fetch approvals list for a task |
+| `useRequestApproval(ws, boardId, taskId)` | `POST …/approvals/` — create new approval request |
+| `useReviewApproval(ws, boardId, taskId, approvalId)` | `POST …/approvals/{id}/review/` — reviewer submits verdict |
+| `useResubmitApproval(ws, boardId, taskId, approvalId)` | `POST …/approvals/{id}/resubmit/` — requester resubmits |
+| `useAdminOverrideApproval(ws, boardId, taskId, approvalId)` | `POST …/approvals/{id}/admin-override/` — workspace admin force-changes status, bypassing reviewers |
+
+**`useAdminOverrideApproval`** — body: `{ status, comment? }`. On success invalidates `["approvals", ws, boardId, taskId]`. The backend logs a `approval_admin_overridden` `TaskActivity` entry and broadcasts `approval.updated` to all board members. Requires `isOwner || can("board.admin")` check in the UI before rendering.
 
 ---
 
@@ -1050,6 +1062,8 @@ Board-level member management. Separate from workspace members. The query is gat
 
 All mutations invalidate `["project-members", ws, boardId]`. (`useAddBoardMember` exists but is private/unexported — bulk-add is the public path.)
 
+**Private-board member scoping:** `KanbanPage` and `TaskDetailPanel` both derive an `effectiveMembers` list. When `board.is_private` is `true`, `useBoardMembers` is enabled and its result is used; otherwise `useMembers(workspaceId)` (workspace-wide) is used. This `effectiveMembers` list is what flows into `CreateTaskModal`, `TaskDetailPanels` (assignee dropdown), `TaskActivityTabs` / `CommentEditor` (@mention picker), `FilterBar`, and `BulkActionBar`. No other files need changing — they all consume `members` as a prop.
+
 ---
 
 ### `useGoals.js` (OKR)
@@ -1349,7 +1363,7 @@ Built-in option rendering shows an icon / avatar / colour-dot + label + optional
 | `SprintView.jsx` | Sprint-first wrapper; active-sprint dropdown; routes to planning vs columns/swimlanes by sprint status; backlog (no `sprint_id`) split out. |
 | `SprintPanel.jsx` | Sprint header: selector dropdown, status badge, dates, progress, start/complete actions, columns↔swimlanes switch. |
 | `SprintPlanningView.jsx` | Two-panel backlog ↔ sprint staging, drag to add/remove. |
-| `SprintSwimLanes.jsx` | Swimlane grid (by assignee/status). |
+| `SprintSwimLanes.jsx` | Swimlane grid (by assignee/status). `resolveMember` threads the full `user` object through so `<Avatar user={user} …/>` uses ID-based color seeding (consistent with all other avatars). |
 | `CreateSprintModal.jsx` | Form: name, start/end dates, capacity → `useCreateSprint`. |
 | `BurndownChart.jsx` | Ideal vs actual remaining over time. |
 
@@ -1359,9 +1373,9 @@ Built-in option rendering shows an icon / avatar / colour-dot + label + optional
 | --------- | ------------ |
 | `TaskDetailPanel.jsx` | Drawer opened by `?task=`. Inline title edit (⇧T), properties (status/priority/assignee/dates/sprint/labels — all `Dropdown`s, openable via ⇧S/P/A/L/D), lazy description editor (⇧E), tabs for comments/activity, ⇧Del delete, layout prefs in localStorage, version-conflict detection. |
 | `TaskDetailBody.jsx` | Title edit, subtasks (add/toggle/delete + progress), child tasks (expand/link/detach). |
-| `TaskDetailPanels.jsx` | Property dropdowns + attachments + dependencies + approvals (request, reviewer status chips). |
+| `TaskDetailPanels.jsx` | Property dropdowns + attachments + dependencies + approvals (request, reviewer status chips). Reviewer Avatar uses `user={r.user}` for consistent ID-based color. |
 | `TaskDetailShared.jsx` | Houses `Dropdown`, `LabelPicker`, `PANEL_ITEMS`, `REVIEWER_STATUS_CONFIG`, `QUICK_EMOJIS`. |
-| `TaskActivityTabs.jsx` | Comments tab (composer + list + reactions + delete) and activity changelog. |
+| `TaskActivityTabs.jsx` | Comments tab (composer + list + reactions + delete) and activity changelog. Hosts `ApprovalCard` — shows reviewer list, verdict badges, and (when `isOwner \|\| can("board.admin")`) an admin override section at the bottom of each card with Force Approve / Force Reject buttons + optional reason textarea. A violet "Overridden by [name]" badge is shown when `approval.overridden_by` is set. Uses `useAdminOverrideApproval` and `usePermission`. |
 | `CommentEditor.jsx` | Tiptap with `@` mentions (filter, arrow-nav, Enter select); Enter submits, Shift+Enter newline. |
 | `TaskAttachmentsSection.jsx` | Upload zone, list, download/delete. |
 | `TaskDependenciesSection.jsx` | Add/remove blocks / blocked-by links via search. |
@@ -1405,7 +1419,9 @@ All views live inside `KanbanPage.jsx` as conditional renders (no unmount on vie
 KanbanPage
   useTasks(ws, boardId, apiFilters)  → allTasks
   useStatuses(ws, boardId)           → statuses
-  useMembers(ws)                     → members
+  useMembers(ws)                     → wsMembers
+  useBoardMembers(ws, boardId, {enabled: board?.is_private}) → boardMembers
+  members = board?.is_private ? boardMembers : wsMembers   ← scoped for private boards
   useSprints(ws, boardId, enabled)   → sprints  (only when view ∈ sprint|list|timeline)
   useLabels(ws, boardId)             → labels
   useBoard(ws, boardId)              → board
