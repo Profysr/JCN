@@ -243,6 +243,41 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "1.0.0",
 }
 
+# ── Logging ──────────────────────────────────────────────────────────────────
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "[{levelname}] {asctime} {name} — {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "WARNING",
+    },
+    "loggers": {
+        # Django request errors (500s, unhandled exceptions)
+        "django": {"handlers": ["console"], "level": "INFO", "propagate": False},
+        # Our app code — DEBUG in dev to see task/webhook/WS activity
+        "projects": {"handlers": ["console"], "level": "DEBUG", "propagate": False},
+        "workspaces": {"handlers": ["console"], "level": "DEBUG", "propagate": False},
+        # Celery task execution (retries, failures, task IDs)
+        "celery": {"handlers": ["console"], "level": "INFO", "propagate": False},
+        "celery.task": {"handlers": ["console"], "level": "DEBUG", "propagate": False},
+        # Channels / Redis channel layer errors
+        "channels": {"handlers": ["console"], "level": "WARNING", "propagate": False},
+        "channels_redis": {"handlers": ["console"], "level": "WARNING", "propagate": False},
+    },
+}
+
 # ── v4.3.0 — Integration settings ────────────────────────────────────────────
 # Slack — create a Slack App at https://api.slack.com/apps and fill these in .env
 SLACK_CLIENT_ID = env("SLACK_CLIENT_ID", default="")

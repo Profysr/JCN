@@ -10,7 +10,7 @@
 import os
 from django.core.asgi import get_asgi_application
 from channels.routing import ProtocolTypeRouter, URLRouter
-from channels.auth import AuthMiddlewareStack
+from workspaces.middleware import JWTAuthMiddlewareStack
 from workspaces.routing import websocket_urlpatterns
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "core.settings")
@@ -19,10 +19,10 @@ application = ProtocolTypeRouter({
     # Normal REST API requests go through the standard Django stack
     "http": get_asgi_application(),
 
-    # WebSocket connections are wrapped in AuthMiddlewareStack so that
-    # request.user is populated (same session/token auth as HTTP),
-    # then routed to the correct consumer based on the URL pattern
-    "websocket": AuthMiddlewareStack(
+    # WebSocket connections are authenticated via JWT (?token=<access_token>
+    # in the URL query string) — the frontend stores JWTs in localStorage,
+    # not cookies, so the standard AuthMiddlewareStack (session/cookie) won't
+    "websocket": JWTAuthMiddlewareStack(
         URLRouter(websocket_urlpatterns)
     ),
 })

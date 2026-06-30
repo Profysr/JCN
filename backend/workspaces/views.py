@@ -554,7 +554,7 @@ class WebhookTestView(APIView):
             {
                 "event": "ping",
                 "hook_id": str(hook.id),
-                "workspace": format_id(ws.PREFIX, ws.id),
+                "workspace": workspace_id,
             },
         )
         return Response({"ok": True, "message": "Test event queued"})

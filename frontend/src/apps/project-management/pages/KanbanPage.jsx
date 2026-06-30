@@ -167,7 +167,7 @@ export default function KanbanPage() {
     });
   };
 
-  useBoardSocket(workspaceId);
+  useBoardSocket();
 
   // v3.5.0 — announce presence for this board board
   useAnnouncePresence(workspaceId, "board", boardId);

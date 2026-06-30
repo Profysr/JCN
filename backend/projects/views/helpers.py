@@ -1,8 +1,12 @@
-﻿from rest_framework import permissions, status
+﻿import logging
+
+from rest_framework import permissions, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.exceptions import PermissionDenied
+
+logger = logging.getLogger(__name__)
 from django.shortcuts import get_object_or_404
 from django.db import models as django_models
 from django.http import HttpResponse
@@ -275,10 +279,19 @@ def _log_task_patch_changes(
 # ── Shared object-lookup helpers ✅──────────────────────────────────────────────
 def broadcast(workspace_id, event_type, data):
     """Push a real-time event to all WebSocket clients in this workspace."""
+    import json
+    from django.core.serializers.json import DjangoJSONEncoder
+
+    group = f"workspace_{workspace_id}"
+    logger.info("broadcast: group=%s event=%s", group, event_type)
     channel_layer = get_channel_layer()
+    # msgpack (used by channels_redis) cannot serialize UUID, datetime, or
+    # Decimal objects. Round-trip through DjangoJSONEncoder to convert them all
+    # to plain strings/numbers before they reach the channel layer.
+    safe_data = json.loads(json.dumps(data, cls=DjangoJSONEncoder))
     async_to_sync(channel_layer.group_send)(
-        f"workspace_{workspace_id}",
-        {"type": "workspace.event", "data": {"type": event_type, "payload": data}},
+        group,
+        {"type": "workspace.event", "data": {"type": event_type, "payload": safe_data}},
     )
     # v4.5.0 — also fan out to registered webhooks
     _fire_webhooks(workspace_id, event_type, data)
@@ -296,9 +309,10 @@ def _fire_webhooks(workspace_id, event_type, data):
         _EVENT_MAP = {
             "task.created": "task.created",
             "task.updated": "task.updated",
-            "task.moved": "task.updated",  # move is an update to external consumers
+            "task.moved": "task.updated",
             "task.deleted": "task.deleted",
-            "task.commented": "task.commented",
+            # Internal event is "comment.created"; public webhook surface is "task.commented"
+            "comment.created": "task.commented",
             "tasks.bulk_updated": "task.updated",
             "tasks.bulk_deleted": "task.deleted",
             "status.updated": "status.updated",
@@ -330,8 +344,8 @@ def _fire_webhooks(workspace_id, event_type, data):
                 # network call never blocks or slows down the API response.
                 deliver_webhook.delay(str(hook.id), webhook_event, payload)
 
-    except Exception:
-        pass  # never break the main request path
+    except Exception as exc:
+        logger.exception("_fire_webhooks failed for event=%s workspace=%s: %s", event_type, workspace_id, exc)
 
 
 def log_activity(task, actor, verb, meta=None):

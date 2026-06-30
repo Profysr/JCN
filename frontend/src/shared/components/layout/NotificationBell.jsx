@@ -10,7 +10,7 @@ import {
 import { EmptyState } from "@/shared/components/ui/empty-state";
 import LoadMoreButton from "@/shared/components/ui/LoadMoreButton";
 
-import { Bell, CheckCheck, Activity } from "lucide-react";
+import { Bell, CheckCheck, Activity, UserPlus, MessageSquare, AtSign, ShieldCheck } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Avatar } from "@/shared/components/ui/avatar";
 import { cn } from "@/shared/lib/utils";
@@ -20,22 +20,22 @@ import { Loader } from "../ui/Loader";
 const VERB_META = {
   task_assigned: {
     label: "assigned you to",
-    icon: "UserPlus",
+    icon: UserPlus,
     tone: "text-indigo-500",
   },
   task_commented: {
     label: "commented on",
-    icon: "MessageSquare",
+    icon: MessageSquare,
     tone: "text-sky-500",
   },
   task_mentioned: {
     label: "mentioned you in",
-    icon: "AtSign",
+    icon: AtSign,
     tone: "text-violet-500",
   },
   approval_requested: {
     label: "requested approval on",
-    icon: "ShieldCheck",
+    icon: ShieldCheck,
     tone: "text-amber-500",
   },
 };
@@ -200,6 +200,13 @@ export default function NotificationBell() {
   const updateItem = useUpdateInboxItem(workspaceId);
   const bulkUpdate = useBulkUpdateInbox(workspaceId);
 
+  // Derive from the fresh items list so the panel header count always matches
+  // what's actually displayed — no extra fetch, items are already loaded on open.
+  const panelUnreadCount = useMemo(
+    () => items.filter((i) => i.status === "unread").length,
+    [items],
+  );
+
   useEffect(() => {
     if (!open) setExpanded(false);
   }, [open]);
@@ -265,7 +272,7 @@ export default function NotificationBell() {
       {open && (
         <div className="absolute left-0 bottom-full mb-2 z-50 w-[360px] bg-popover border border-border rounded-md shadow-popover overflow-hidden animate-scale-in origin-bottom-left">
           <NotificationHeader
-            unreadCount={unreadCount}
+            unreadCount={panelUnreadCount}
             onMarkAllRead={handleMarkAllRead}
             isPending={bulkUpdate.isPending}
             filters={FILTERS}

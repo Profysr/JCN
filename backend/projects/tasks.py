@@ -1,6 +1,9 @@
 """Celery tasks for the projects app."""
 
+import logging
 from celery import shared_task
+
+logger = logging.getLogger(__name__)
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=30)
@@ -22,6 +25,7 @@ def send_comment_notifications(
     """
     try:
         # Local imports avoid circular imports at module load time.
+        from django.utils import timezone
         from core.fields import format_id
         from accounts.models import User
         from workspaces.models import InboxItem, Workspace
@@ -29,17 +33,15 @@ def send_comment_notifications(
         from .models import TaskComment
         from .views.helpers import broadcast_to_user
 
-        comment = (
-            TaskComment.objects
-            .select_related("task", "task__board", "parent__author")
-            .get(id=comment_id)
-        )
+        comment = TaskComment.objects.select_related(
+            "task", "task__board", "parent__author"
+        ).get(id=comment_id)
         workspace = Workspace.objects.get(id=workspace_id)
         sender = User.objects.get(id=sender_id)
         task = comment.task
 
         # ── Collect (user_id, verb) pairs ─────────────────────────────────────
-        recipients = []   # [(user_id_str, verb), ...]
+        recipients = []  # [(user_id_str, verb), ...]
         seen_ids = set()  # prevent duplicate notifications
 
         def _add(user_id_str, verb):
@@ -88,21 +90,25 @@ def send_comment_notifications(
         project_name = task.board.name if task.board_id else ""
 
         # ── One INSERT for all notifications ──────────────────────────────────
-        items = InboxItem.objects.bulk_create([
-            InboxItem(
-                user_id=user_id,
-                workspace=workspace,
-                actor_id=str(sender.id),
-                actor_name=actor_name,
-                verb=verb,
-                event_type=_VERB_TO_EVENT.get(verb, "commented"),
-                resource_name=task.title,
-                board_id=board_id_str,
-                project_name=project_name,
-                meta=meta,
-            )
-            for user_id, verb in recipients
-        ])
+        # bulk_create skips save(), so auto_now_add (created_at) is set by the DB but NOT reflected on the returned Python objects — item.created_at is None. Capture now() here so the WS payload has a valid timestamp.
+        now = timezone.now()
+        items = InboxItem.objects.bulk_create(
+            [
+                InboxItem(
+                    user_id=user_id,
+                    workspace=workspace,
+                    actor_id=str(sender.id),
+                    actor_name=actor_name,
+                    verb=verb,
+                    event_type=_VERB_TO_EVENT.get(verb, "commented"),
+                    resource_name=task.title,
+                    board_id=board_id_str,
+                    project_name=project_name,
+                    meta=meta,
+                )
+                for user_id, verb in recipients
+            ]
+        )
 
         # ── Push to each recipient's WebSocket channel ────────────────────────
         # Can't batch across different user channels; Redis pub/sub keeps each call fast.
@@ -121,9 +127,13 @@ def send_comment_notifications(
                     "project_name": project_name,
                     "meta": meta,
                     "status": "unread",
-                    "created_at": item.created_at.isoformat(),
+                    "created_at": (item.created_at or now).isoformat(),
                 },
             )
 
     except Exception as exc:
+        logger.exception(
+            "send_comment_notifications failed (comment=%s, attempt=%s): %s",
+            comment_id, self.request.retries, exc,
+        )
         raise self.retry(exc=exc)

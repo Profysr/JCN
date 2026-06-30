@@ -12,18 +12,23 @@
 # The channel layer (backed by Redis) is what makes the "broadcast to a group" pattern possible — it acts as a message bus between Django workers and connected WebSocket clients.
 
 import json
+import logging
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from .models import WorkspaceMember, Workspace
-from core.fields import parse_id, format_id
+from core.fields import parse_id
+
+logger = logging.getLogger(__name__)
 
 class WorkspaceConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         workspace_param = self.scope["url_route"]["kwargs"]["workspace_id"]
 
-        # Because you wrapped your routing configuration with AuthMiddlewareStack in your asgi.py file, Channels automatically populates self.scope["user"] using Django's standard session cookies
-        user = self.scope["user"]
-        if not user.is_authenticated:
+        # JWTAuthMiddleware (asgi.py) resolves scope["user"] from ?token= before
+        # this consumer runs — treat it exactly like AuthMiddlewareStack does.
+        user = self.scope.get("user")
+        if not user or not user.is_authenticated:
+            logger.warning("WS rejected: unauthenticated (workspace=%s)", workspace_param)
             await self.close()
             return
 
@@ -33,10 +38,11 @@ class WorkspaceConsumer(AsyncWebsocketConsumer):
             await self.close()
             return
 
-        # Use the prefixed workspace ID as the group key so it stays in sync with broadcasts
-        prefixed_id = format_id(workspace.PREFIX, workspace.id)
-        self.redis_group_name = f"workspace_{prefixed_id}"
+        # Group name must match broadcast() which uses the plain UUID from URL params.
+        self.redis_group_name = f"workspace_{workspace.id}"
         self.user_group_name = f"user_{user.id}"
+
+        logger.info("WS connect: user=%s workspace_group=%s user_group=%s", user.id, self.redis_group_name, self.user_group_name)
 
         # Subscribe to workspace-wide events (visible to all members)
         await self.channel_layer.group_add(self.redis_group_name, self.channel_name)
@@ -67,10 +73,18 @@ class WorkspaceConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def get_workspace(self, workspace_param, user):
-        """Look up a workspace by prefixed ID (wsp_...), verifying membership."""
+        """Look up a workspace by prefixed ID (wsp_...) or plain UUID string."""
+        import uuid as _uuid
+        try:
+            workspace_id = parse_id(workspace_param)
+        except (ValueError, AttributeError):
+            try:
+                workspace_id = _uuid.UUID(str(workspace_param))
+            except (ValueError, AttributeError):
+                return None
         try:
             return Workspace.objects.filter(
-                id=parse_id(workspace_param), members__user=user
+                id=workspace_id, members__user=user
             ).first()
-        except (ValueError, AttributeError):
+        except Exception:
             return None

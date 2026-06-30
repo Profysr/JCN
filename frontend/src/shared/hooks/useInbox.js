@@ -64,6 +64,19 @@ export function useUpdateInboxItem(workspaceId) {
   return useMutation({
     mutationFn: ({ id, ...data }) =>
       api.patch(`/api/inbox/${id}/`, data).then((r) => r.data),
+    onMutate: async ({ status }) => {
+      if (status === "read") {
+        await qc.cancelQueries({ queryKey: ["inbox-unread-count", workspaceId] });
+        const prevCount = qc.getQueryData(["inbox-unread-count", workspaceId]);
+        qc.setQueryData(["inbox-unread-count", workspaceId], (c) => Math.max(0, (c ?? 0) - 1));
+        return { prevCount };
+      }
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.prevCount !== undefined) {
+        qc.setQueryData(["inbox-unread-count", workspaceId], context.prevCount);
+      }
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["inbox", workspaceId] });
       qc.invalidateQueries({ queryKey: ["inbox-unread-count", workspaceId] });
@@ -76,6 +89,19 @@ export function useBulkUpdateInbox(workspaceId) {
   return useMutation({
     mutationFn: (data) =>
       api.post("/api/inbox/bulk/", data).then((r) => r.data),
+    onMutate: async ({ action }) => {
+      if (action === "read") {
+        await qc.cancelQueries({ queryKey: ["inbox-unread-count", workspaceId] });
+        const prevCount = qc.getQueryData(["inbox-unread-count", workspaceId]);
+        qc.setQueryData(["inbox-unread-count", workspaceId], 0);
+        return { prevCount };
+      }
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.prevCount !== undefined) {
+        qc.setQueryData(["inbox-unread-count", workspaceId], context.prevCount);
+      }
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["inbox", workspaceId] });
       qc.invalidateQueries({ queryKey: ["inbox-unread-count", workspaceId] });

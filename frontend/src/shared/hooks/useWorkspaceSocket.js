@@ -3,51 +3,31 @@ import { useQueryClient } from "@tanstack/react-query";
 import { presenceKey } from "@/shared/hooks/usePresence";
 import { BACKEND_WS_URL } from "@/shared/lib/env";
 
-/**
- * Shared connection lifecycle for the workspace WebSocket.
- *
- * Both scopes connect to the SAME endpoint (`/ws/workspaces/:id/`) and the
- * backend pushes every event to every connection. The `handle` function (a
- * stable module-level function) decides which events that connection acts on,
- * so the workspace and board connections never double-process the same event.
- *
- * `handle(type, payload, qc, workspaceId)` — must be defined at module scope so
- * its reference is stable across renders (the effect intentionally omits it
- * from its dependency array).
- */
-function useScopedWorkspaceSocket(workspaceId, handle) {
-  const qc = useQueryClient();
-  const wsRef = useRef(null);
+// ─────────────────────────────────────────────────────────────────────────────
+// Handler registry
+//
+// A single WebSocket connection is opened by useWorkspaceSocket (AppLayout).
+// Other hooks (useBoardSocket, etc.) register handlers here while they are
+// mounted. Every incoming message is dispatched to ALL registered handlers so
+// there is never more than one open socket per workspace, regardless of how
+// many pages or panels are open.
+// ─────────────────────────────────────────────────────────────────────────────
+const _handlers = new Set();
 
-  useEffect(() => {
-    if (!workspaceId) return;
+function _register(fn) {
+  _handlers.add(fn);
+  return () => _handlers.delete(fn);
+}
 
-    const token = localStorage.getItem("access_token");
-    const ws = new WebSocket(
-      `${BACKEND_WS_URL}/ws/workspaces/${workspaceId}/?token=${token}`,
-    );
-    wsRef.current = ws;
-
-    ws.onmessage = (e) => {
-      const { type, payload } = JSON.parse(e.data);
-      handle(type, payload, qc, workspaceId);
-    };
-
-    ws.onerror = () =>
-      console.warn("WebSocket error — realtime updates unavailable");
-
-    return () => ws.close();
-  }, [workspaceId, qc]);
-
-  return wsRef;
+function _dispatch(type, payload, qc, workspaceId) {
+  _handlers.forEach((fn) => fn(type, payload, qc, workspaceId));
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Workspace-scoped events — alive on EVERY page (mounted once in AppLayout).
-// These do not depend on a board being open: notifications/inbox, goals, presence.
+// Workspace-scoped events — notifications, OKRs, presence.
+// Handled on every page because useWorkspaceSocket lives in AppLayout.
 // ════════════════════════════════════════════════════════════════════════════
 function handleWorkspaceEvent(type, payload, qc, workspaceId) {
-  // ── Inbox: keep the bell badge + list fresh from anywhere in the app ──
   if (type === "notification.created") {
     qc.setQueryData(
       ["inbox-unread-count", workspaceId],
@@ -56,7 +36,6 @@ function handleWorkspaceEvent(type, payload, qc, workspaceId) {
     qc.invalidateQueries({ queryKey: ["inbox", workspaceId] });
   }
 
-  // ── Objective (OKR) events ──
   if (
     type === "objective.created" ||
     type === "objective.updated" ||
@@ -65,7 +44,6 @@ function handleWorkspaceEvent(type, payload, qc, workspaceId) {
     qc.invalidateQueries({ queryKey: ["objectives", workspaceId] });
   }
 
-  // ── Presence events ──
   if (type === "presence.updated") {
     const { resource_type, resource_id } = payload;
     qc.invalidateQueries({
@@ -76,12 +54,10 @@ function handleWorkspaceEvent(type, payload, qc, workspaceId) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Board-scoped events — only mounted while a board is open (KanbanPage).
-// Tasks, comments, approvals, typing, reactions all carry a board_id.
+// Board-scoped events — tasks, comments, approvals, reactions.
+// Registered only while KanbanPage (or any board view) is mounted.
 // ════════════════════════════════════════════════════════════════════════════
 function handleBoardEvent(type, payload, qc, workspaceId) {
-  // ── Task events ──
-  // All use setQueriesData (prefix match) because useTasks stores data under a 4-element key ["tasks", workspaceId, boardId, filters]. setQueryData (exact match) would miss it and write to a ghost entry nobody reads.
   if (type === "task.created") {
     qc.invalidateQueries({ queryKey: ["tasks", workspaceId, payload.board_id] });
     qc.invalidateQueries({ queryKey: ["sprint", workspaceId, payload.board_id] });
@@ -121,39 +97,40 @@ function handleBoardEvent(type, payload, qc, workspaceId) {
     qc.invalidateQueries({ queryKey: ["sprint", workspaceId, payload.board_id] });
   }
 
-  // ── Comment events — update the task detail cache ──
   if (type === "comment.created") {
-    qc.setQueryData(
-      ["task-detail", workspaceId, payload.board_id, payload.task_id],
+    qc.invalidateQueries({
+      queryKey: ["comments", workspaceId, payload.board_id, payload.task_id],
+    });
+    qc.setQueriesData(
+      { queryKey: ["tasks", workspaceId, payload.board_id] },
       (old) => {
         if (!old) return old;
-        const exists = old.comments?.find((c) => c.id === payload.comment.id);
-        if (exists) return old;
-        return {
-          ...old,
-          comments: [...(old.comments || []), payload.comment],
-          comment_count: (old.comment_count || 0) + 1,
-        };
+        return old.map((t) =>
+          t.id === payload.task_id
+            ? { ...t, comment_count: (t.comment_count || 0) + 1 }
+            : t,
+        );
       },
     );
   }
 
   if (type === "comment.deleted") {
-    qc.setQueryData(
-      ["task-detail", workspaceId, payload.board_id, payload.task_id],
+    qc.invalidateQueries({
+      queryKey: ["comments", workspaceId, payload.board_id, payload.task_id],
+    });
+    qc.setQueriesData(
+      { queryKey: ["tasks", workspaceId, payload.board_id] },
       (old) => {
         if (!old) return old;
-        return {
-          ...old,
-          comments:
-            old.comments?.filter((c) => c.id !== payload.comment_id) || [],
-          comment_count: Math.max(0, (old.comment_count || 1) - 1),
-        };
+        return old.map((t) =>
+          t.id === payload.task_id
+            ? { ...t, comment_count: Math.max(0, (t.comment_count || 1) - 1) }
+            : t,
+        );
       },
     );
   }
 
-  // ── Approval events ──
   if (type === "approval.created" || type === "approval.updated") {
     qc.invalidateQueries({
       queryKey: ["approvals", workspaceId, payload.board_id, payload.task_id],
@@ -161,44 +138,84 @@ function handleBoardEvent(type, payload, qc, workspaceId) {
     qc.invalidateQueries({ queryKey: ["tasks", workspaceId, payload.board_id] });
   }
 
-  // ── Typing indicators — disabled, not in use ──
-  // if (type === "typing.update") {
-  //   window.dispatchEvent(new CustomEvent("jcn:typing", { detail: payload }));
-  // }
-
-  // ── Comment reaction events ──
   if (type === "reaction.updated") {
     qc.setQueryData(
-      ["task-detail", workspaceId, payload.board_id, payload.task_id],
+      ["comments", workspaceId, payload.board_id, payload.task_id],
       (old) => {
         if (!old) return old;
-        return {
-          ...old,
-          comments:
-            old.comments?.map((c) =>
-              c.id === payload.comment_id
-                ? { ...c, reactions: payload.reactions }
-                : c,
-            ) || [],
-        };
+        const pages = old.pages.map((page) => ({
+          ...page,
+          results: page.results.map((c) => {
+            if (c.id === payload.comment_id)
+              return { ...c, reactions: payload.reactions };
+            if (c.replies?.some((r) => r.id === payload.comment_id)) {
+              return {
+                ...c,
+                replies: c.replies.map((r) =>
+                  r.id === payload.comment_id
+                    ? { ...r, reactions: payload.reactions }
+                    : r,
+                ),
+              };
+            }
+            return c;
+          }),
+        }));
+        return { ...old, pages };
       },
     );
   }
 }
 
 /**
- * Workspace-wide realtime. Mount ONCE at the layout level (AppLayout) so
- * notification / goal / presence events stay live on every page.
+ * Opens ONE WebSocket connection for the workspace and keeps it alive as long
+ * as AppLayout is mounted (i.e. the entire session). All registered handlers
+ * receive every message — no duplicate connections.
+ *
+ * Mount once in AppLayout.
  */
 export function useWorkspaceSocket(workspaceId) {
-  return useScopedWorkspaceSocket(workspaceId, handleWorkspaceEvent);
+  const qc = useQueryClient();
+  const wsRef = useRef(null);
+
+  // Register the workspace-level handler for the lifetime of this hook.
+  useEffect(() => _register(handleWorkspaceEvent), []);
+
+  // Open and maintain the single connection.
+  useEffect(() => {
+    if (!workspaceId) return;
+
+    const token = localStorage.getItem("access_token");
+    const ws = new WebSocket(
+      `${BACKEND_WS_URL}/ws/workspaces/${workspaceId}/?token=${token}`,
+    );
+    wsRef.current = ws;
+
+    ws.onopen = () => console.debug("[WS] connected to workspace", workspaceId);
+
+    ws.onmessage = (e) => {
+      const { type, payload } = JSON.parse(e.data);
+      _dispatch(type, payload, qc, workspaceId);
+    };
+
+    ws.onerror = () =>
+      console.warn("[WS] error — realtime updates unavailable");
+
+    ws.onclose = (ev) =>
+      console.debug("[WS] closed", ev.code, ev.reason);
+
+    return () => ws.close();
+  }, [workspaceId, qc]);
+
+  return wsRef;
 }
 
 /**
- * Board-level realtime (tasks, comments, approvals, typing, reactions).
- * Mount on the board page (KanbanPage) — opens a second connection that lives
- * only while a board is open. Cheap: same endpoint, scoped handler.
+ * Registers board-level event handling while a board page is open.
+ * Does NOT open a new socket — reuses the single connection from AppLayout.
+ *
+ * Mount in KanbanPage (or any board view).
  */
-export function useBoardSocket(workspaceId) {
-  return useScopedWorkspaceSocket(workspaceId, handleBoardEvent);
+export function useBoardSocket() {
+  useEffect(() => _register(handleBoardEvent), []);
 }
