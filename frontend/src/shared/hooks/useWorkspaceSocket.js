@@ -33,7 +33,20 @@ function handleWorkspaceEvent(type, payload, qc, workspaceId) {
       ["inbox-unread-count", workspaceId],
       (c) => (c ?? 0) + 1,
     );
-    qc.invalidateQueries({ queryKey: ["inbox", workspaceId] });
+    // Prepend directly — eliminates a GET /inbox/ round-trip when the bell is open.
+    // Falls back gracefully when the list isn't loaded yet (updater receives undefined).
+    qc.setQueriesData(
+      { queryKey: ["inbox", workspaceId] },
+      (old) => {
+        if (!old || !Array.isArray(old.results)) return old;
+        if (old.results.some((item) => item.id === payload.id)) return old;
+        return {
+          ...old,
+          count: (old.count || 0) + 1,
+          results: [{ ...payload, status: "unread" }, ...old.results],
+        };
+      },
+    );
   }
 
   if (
@@ -98,15 +111,52 @@ function handleBoardEvent(type, payload, qc, workspaceId) {
   }
 
   if (type === "comment.created") {
-    qc.invalidateQueries({
-      queryKey: ["comments", workspaceId, payload.board_id, payload.task_id],
-    });
+    const { board_id, task_id, comment, is_reply } = payload;
+
+    // Direct cache insert — eliminates the GET /comments/ round-trip.
+    // Mirrors useCreateComment.onSuccess exactly. De-duplicates to skip comments
+    // the poster already inserted via their own mutation's onSuccess.
+    qc.setQueryData(
+      ["comments", workspaceId, board_id, task_id],
+      (old) => {
+        if (!old) return old;
+        if (is_reply) {
+          const alreadyExists = old.pages.some((p) =>
+            p.results.some((c) => c.replies?.some((r) => r.id === comment.id)),
+          );
+          if (alreadyExists) return old;
+          const pages = old.pages.map((page) => ({
+            ...page,
+            results: page.results.map((c) =>
+              c.id === comment.parent_id
+                ? { ...c, replies: [...(c.replies || []), comment] }
+                : c,
+            ),
+          }));
+          return { ...old, pages };
+        }
+        // Top-level comment
+        const alreadyExists = old.pages.some((p) =>
+          p.results.some((c) => c.id === comment.id),
+        );
+        if (alreadyExists) return old;
+        // Append to last page — matches useCreateComment.onSuccess ordering
+        const pages = [...old.pages];
+        const last = pages[pages.length - 1];
+        pages[pages.length - 1] = {
+          ...last,
+          results: [...last.results, comment],
+        };
+        return { ...old, pages };
+      },
+    );
+
     qc.setQueriesData(
-      { queryKey: ["tasks", workspaceId, payload.board_id] },
+      { queryKey: ["tasks", workspaceId, board_id] },
       (old) => {
         if (!old) return old;
         return old.map((t) =>
-          t.id === payload.task_id
+          t.id === task_id
             ? { ...t, comment_count: (t.comment_count || 0) + 1 }
             : t,
         );
