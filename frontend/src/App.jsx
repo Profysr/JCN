@@ -158,7 +158,7 @@ export default function App() {
           <Route path="/w/:workspaceId" element={<AppLayout />}>
             <Route element={<SuspenseOutlet />}>
               <Route index element={<Navigate to="apps" replace />} />
-              <Route path="apps" element={<AppLauncherPage />} handle={{ app: "launcher" }} />
+              <Route path="apps" element={<AppLauncherPage />} />
 
               {/* ── Project Management ──────────────────────────────────── */}
               <Route element={<AppGuard app="projects" />}>
@@ -189,8 +189,8 @@ export default function App() {
                 <Route path="members/:memberId" element={<MemberDetailPage />} />
               </Route>
 
-              {/* ── Workspace & Settings (requires settings.manage) ──────── */}
-              <Route element={<AppGuard permission="settings.manage" />}>
+              {/* ── Workspace & Settings ────────────────────────────────── */}
+              <Route element={<AppGuard />}>
                 <Route path="members" element={<MembersPage />} />
                 <Route path="settings" element={<SettingsPage />} />
                 <Route path="settings/integrations" element={<IntegrationsPage />} />
