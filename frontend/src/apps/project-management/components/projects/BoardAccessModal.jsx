@@ -527,7 +527,7 @@ function RoleDropdown({ value, onChange }) {
           sideOffset={4}
           collisionPadding={8}
           className={cn(
-            "w-52 z-[300] bg-popover border rounded-md shadow-popover py-1",
+            "w-52 z-[1000] bg-popover border rounded-md shadow-popover py-1",
             "animate-scale-in",
           )}
         >

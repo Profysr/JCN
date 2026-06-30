@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState, useMemo, useEffect } from "react";
+import { useDebounce } from "@/shared/hooks/useDebounce";
 import { Loader } from "@/shared/components/ui/Loader";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { DragDropContext } from "@hello-pangea/dnd";
@@ -7,7 +8,6 @@ import {
   useTasks,
   useMoveTask,
 } from "@/apps/project-management/hooks/useTasks";
-import { useDebounce } from "@/shared/hooks/useDebounce";
 import {
   useLabels,
   useCreateLabel,
@@ -100,7 +100,7 @@ export default function KanbanPage() {
   const [view, setView] = useState("kanban");
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const debouncedSearch = useDebounce(filters.search, 350);
-  const apiFilters = { ...filters, search: debouncedSearch };
+  const apiFilters = { ...filters, search: undefined };
 
   const {
     data: board,
@@ -151,7 +151,14 @@ export default function KanbanPage() {
     setFocusCommentId(searchParams.get("comment") || null);
   }, [searchParams]);
 
-  const tasks = allTasks;
+  const tasks = useMemo(() => {
+    const q = debouncedSearch?.trim().toLowerCase();
+    if (!q) return allTasks;
+    return allTasks.filter((t) =>
+      t.title?.toLowerCase().includes(q) ||
+      t.description?.toLowerCase().includes(q),
+    );
+  }, [allTasks, debouncedSearch]);
   
   // Keyboard-focus state — tracks which task the arrow keys have highlighted. Distinct from selectedTaskId (which opens the detail panel).
   const [focusedTaskId, setFocusedTaskId] = useState(null);

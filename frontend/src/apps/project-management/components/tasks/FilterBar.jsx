@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import {
   Search,
   X,
@@ -180,16 +181,47 @@ const FILTER_FIELDS = [
 function AdvancedFilters({ filters = {}, onChange, labels = [], currentUserId }) {
   const [open, setOpen] = useState(false);
   const [activeKey, setActiveKey] = useState(null);
-  const ref = useRef(null);
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, right: 0 });
+  const btnRef = useRef(null);
+  const dropdownRef = useRef(null);
 
-  useClickOutside(ref, () => { setOpen(false); setActiveKey(null); });
+  // Click-outside that works across the portal boundary
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (btnRef.current?.contains(e.target) || dropdownRef.current?.contains(e.target)) return;
+      setOpen(false);
+      setActiveKey(null);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
 
   // Listen for the global Shift+F shortcut dispatched by AppLayout
   useEffect(() => {
-    const handler = () => setOpen((v) => { if (v) setActiveKey(null); return !v; });
+    const handler = () => {
+      setOpen((v) => {
+        if (!v && btnRef.current) {
+          const rect = btnRef.current.getBoundingClientRect();
+          setDropdownPos({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
+        }
+        if (v) setActiveKey(null);
+        return !v;
+      });
+    };
     window.addEventListener("jcn:open-filters", handler);
     return () => window.removeEventListener("jcn:open-filters", handler);
   }, []);
+
+  const handleToggle = () => {
+    if (!open && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      setDropdownPos({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
+    } else {
+      setActiveKey(null);
+    }
+    setOpen((v) => !v);
+  };
 
   const activeCount =
     (filters.priorities?.length || 0) +
@@ -299,9 +331,10 @@ function AdvancedFilters({ filters = {}, onChange, labels = [], currentUserId })
   };
 
   return (
-    <div ref={ref} className="relative">
+    <div className="relative">
       <button
-        onClick={() => { setOpen((v) => !v); if (open) setActiveKey(null); }}
+        ref={btnRef}
+        onClick={handleToggle}
         className={cn(
           "flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border transition-colors",
           activeCount > 0 || open
@@ -319,10 +352,11 @@ function AdvancedFilters({ filters = {}, onChange, labels = [], currentUserId })
         <ChevronDown className={cn("w-3 h-3 transition-transform duration-150", open && "rotate-180")} />
       </button>
 
-      {open && (
+      {open && createPortal(
         <div
-          className="absolute top-full right-0 mt-1.5 z-50 bg-popover border rounded-lg shadow-lg flex overflow-hidden"
-          style={{ minWidth: 460 }}
+          ref={dropdownRef}
+          className="fixed bg-popover border rounded-lg shadow-lg flex overflow-hidden"
+          style={{ top: dropdownPos.top, right: dropdownPos.right, minWidth: 460, zIndex: "var(--z-dropdown)" }}
         >
           {/* Left panel — field list */}
           <div className="w-48 border-r flex flex-col shrink-0">
@@ -428,7 +462,8 @@ function AdvancedFilters({ filters = {}, onChange, labels = [], currentUserId })
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

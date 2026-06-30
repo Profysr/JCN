@@ -8,18 +8,7 @@ export function useBoardMembers(workspaceId, boardId, { enabled = true } = {}) {
     queryKey: ["project-members", workspaceId, boardId],
     queryFn: () => api.get(base(workspaceId, boardId)).then((r) => r.data),
     enabled: enabled && !!workspaceId && !!boardId,
-  });
-}
-
-function useAddBoardMember(workspaceId, boardId) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data) =>
-      api.post(base(workspaceId, boardId), data).then((r) => r.data),
-    onSuccess: () =>
-      qc.invalidateQueries({
-        queryKey: ["project-members", workspaceId, boardId],
-      }),
+    staleTime: Infinity, // only changes via mutations — each one already updates this key
   });
 }
 
@@ -30,10 +19,11 @@ export function useUpdateBoardMember(workspaceId, boardId) {
       api
         .patch(`${base(workspaceId, boardId)}${memberId}/`, { role })
         .then((r) => r.data),
-    onSuccess: () =>
-      qc.invalidateQueries({
-        queryKey: ["project-members", workspaceId, boardId],
-      }),
+    onSuccess: (updated) =>
+      qc.setQueryData(
+        ["project-members", workspaceId, boardId],
+        (prev) => prev?.map((m) => (m.id === updated.id ? updated : m)),
+      ),
   });
 }
 
@@ -42,10 +32,11 @@ export function useRemoveBoardMember(workspaceId, boardId) {
   return useMutation({
     mutationFn: (memberId) =>
       api.delete(`${base(workspaceId, boardId)}${memberId}/`),
-    onSuccess: () =>
-      qc.invalidateQueries({
-        queryKey: ["project-members", workspaceId, boardId],
-      }),
+    onSuccess: (_, memberId) =>
+      qc.setQueryData(
+        ["project-members", workspaceId, boardId],
+        (prev) => prev?.filter((m) => m.id !== memberId),
+      ),
   });
 }
 
