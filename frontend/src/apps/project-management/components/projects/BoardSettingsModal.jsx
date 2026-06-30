@@ -9,17 +9,29 @@ import { cn } from "@/shared/lib/utils";
 
 const PRESET_COLORS = [
   "#94a3b8",
+  "#64748b",
+  "#475569",
   "#6366f1",
   "#8b5cf6",
+  "#a855f7",
+  "#d946ef",
   "#ec4899",
-  "#f59e0b",
-  "#22c55e",
-  "#14b8a6",
-  "#3b82f6",
+  "#f43f5e",
   "#ef4444",
   "#f97316",
-  "#64748b",
+  "#f59e0b",
+  "#eab308",
+  "#84cc16",
+  "#22c55e",
+  "#10b981",
+  "#14b8a6",
+  "#06b6d4",
   "#0ea5e9",
+  "#3b82f6",
+  "#1d4ed8",
+  "#7c3aed",
+  "#be185d",
+  "#b91c1c",
 ];
 
 let _tempId = 0;
@@ -143,9 +155,9 @@ export default function BoardSettingsModal({
         <p className="text-xs text-muted-foreground mb-3">
           Mark a column as{" "}
           <span className="font-semibold text-indigo-600">Started</span> to
-          automatically set a task&apos;s start date when it&apos;s moved into that
-          column. Only one column can be Started or Done at a time, and a column
-          cannot be both.
+          automatically set a task&apos;s start date when it&apos;s moved into
+          that column. Only one column can be Started or Done at a time, and a
+          column cannot be both.
         </p>
 
         <DragDropContext onDragEnd={handleDragEnd}>
@@ -197,13 +209,13 @@ export default function BoardSettingsModal({
                               : "Mark as Started column"
                           }
                           className={cn(
-                            "flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded border transition-all shrink-0",
+                            "flex items-center justify-center gap-1 text-[11px] font-medium w-[100px] py-0.5 rounded border transition-all shrink-0",
                             s.is_started
-                              ? "bg-indigo-50 text-indigo-600 border-indigo-200"
+                              ? "bg-indigo-500/20 text-indigo-600 border-indigo-400/50"
                               : "text-muted-foreground border-transparent hover:border-border",
                           )}
                         >
-                          <Check className="w-3 h-3" />
+                          <Check className="w-3 h-3 shrink-0" />
                           {s.is_started ? "Started" : "Mark started"}
                         </button>
 
@@ -215,13 +227,13 @@ export default function BoardSettingsModal({
                               : "Mark as Done column"
                           }
                           className={cn(
-                            "flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded border transition-all shrink-0",
+                            "flex items-center justify-center gap-1 text-[11px] font-medium w-[80px] py-0.5 rounded border transition-all shrink-0",
                             s.is_done
-                              ? "bg-emerald-50 text-emerald-600 border-emerald-200"
+                              ? "bg-emerald-500/20 text-emerald-600 border-emerald-400/50"
                               : "text-muted-foreground border-transparent hover:border-border",
                           )}
                         >
-                          <Check className="w-3 h-3" />
+                          <Check className="w-3 h-3 shrink-0" />
                           {s.is_done ? "Done" : "Mark done"}
                         </button>
 
@@ -241,7 +253,7 @@ export default function BoardSettingsModal({
             onSubmit={handleAddSubmit}
             className="flex items-center gap-2 pt-2 border-t mt-3"
           >
-            <ColorPicker value={newColor} onChange={setNewColor} />
+            <ColorPicker value={newColor} onChange={setNewColor} dropUp />
             <input
               autoFocus
               className="flex-1 text-sm border rounded-md px-2.5 py-1.5 bg-background outline-none focus:ring-1 focus:ring-ring"
@@ -345,7 +357,7 @@ function DeleteButton({ onDelete }) {
   );
 }
 
-function ColorPicker({ value, onChange }) {
+function ColorPicker({ value, onChange, dropUp = false }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -357,7 +369,12 @@ function ColorPicker({ value, onChange }) {
         onClick={() => setOpen((o) => !o)}
       />
       {open && (
-        <div className="absolute top-7 left-0 z-50 bg-popover border rounded-lg shadow-lg p-2 grid grid-cols-6 gap-1 w-[136px]">
+        <div
+          className={cn(
+            "absolute left-0 z-50 bg-popover border rounded-lg shadow-lg p-2 grid grid-cols-6 gap-1 w-[136px]",
+            dropUp ? "bottom-7" : "top-7",
+          )}
+        >
           {PRESET_COLORS.map((c) => (
             <button
               key={c}
