@@ -76,6 +76,7 @@ function AssigneeFilter({ members, selected, onChange }) {
               )}
             >
               <Avatar
+                user={m.user}
                 name={m.user?.full_name || m.user?.email}
                 src={m.user?.avatar}
                 size="sm"
@@ -134,7 +135,7 @@ function AssigneeFilter({ members, selected, onChange }) {
                   )}
                 >
                   <div className="relative flex-shrink-0">
-                    <Avatar name={name} src={m.user?.avatar} size="sm" />
+                    <Avatar user={m.user} name={name} src={m.user?.avatar} size="sm" />
                     {isActive && (
                       <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-primary flex items-center justify-center ring-1 ring-background">
                         <Check className="w-1.5 h-1.5 text-white" />

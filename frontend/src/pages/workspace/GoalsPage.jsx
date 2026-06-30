@@ -343,6 +343,7 @@ function ObjectiveCard({ objective, workspaceId }) {
             {objective.owner && (
               <span className="flex items-center gap-1">
                 <Avatar
+                  user={objective.owner}
                   name={objective.owner.full_name || objective.owner.email}
                   size="xs"
                 />

@@ -150,6 +150,7 @@ export function MemberProfilePanel({ member, workspaceId, isAdmin, onClose }) {
         {/* Identity block */}
         <div className="p-5 border-b flex flex-col items-center text-center gap-3">
           <Avatar
+            user={member.user}
             name={member.user?.full_name || member.user?.email}
             src={member.user?.avatar}
             size="lg"

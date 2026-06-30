@@ -332,6 +332,7 @@ function renderBodyCell(col, task, ctx) {
         {task.assignee ? (
           <div className="flex items-center gap-2">
             <Avatar
+              user={task.assignee}
               name={task.assignee.full_name || task.assignee.email}
               src={task.assignee.avatar}
               size="xs"

@@ -582,6 +582,7 @@ class TaskCardSerializer(serializers.ModelSerializer):
         model = Task
         fields = [
             "id",
+            "board_id",
             "title",
             "priority",
             "task_type",

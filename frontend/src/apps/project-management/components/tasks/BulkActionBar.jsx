@@ -134,6 +134,7 @@ export default function BulkActionBar({
                       className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent transition-colors text-foreground"
                     >
                       <Avatar
+                        user={m.user}
                         name={m.user?.full_name || m.user?.email}
                         src={m.user?.avatar}
                         size="xs"

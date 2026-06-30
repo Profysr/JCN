@@ -275,6 +275,7 @@ function TaskRow({ row, onTaskClick, criticalSet }) {
       onClick={() => onTaskClick(task.id)}
     >
       <Avatar
+        user={primary}
         name={primary?.full_name || primary?.email}
         src={primary?.avatar}
         size="xs"

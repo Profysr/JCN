@@ -549,7 +549,7 @@ export default function MemberDetailPage() {
 
       {/* Header */}
       <div className="flex items-center gap-4 mb-6">
-        <Avatar name={member.user?.full_name} src={member.user?.avatar} size="xl" />
+        <Avatar user={member.user} name={member.user?.full_name || member.user?.email} src={member.user?.avatar} size="xl" />
         <div>
           <h1 className="text-xl font-bold">{member.user?.full_name}</h1>
           <p className="text-sm text-muted-foreground">{member.user?.email}</p>

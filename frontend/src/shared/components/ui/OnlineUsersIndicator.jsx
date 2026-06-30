@@ -31,6 +31,7 @@ export function OnlineUsersIndicator({ users = [] }) {
               >
                 <div className="relative flex-shrink-0">
                   <Avatar
+                    user={p.user}
                     name={p.user.full_name || p.user.email}
                     src={p.user.avatar}
                     size="xs"

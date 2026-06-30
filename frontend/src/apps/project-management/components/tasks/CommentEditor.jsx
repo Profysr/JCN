@@ -272,7 +272,7 @@ const CommentEditor = forwardRef(
                       : "hover:bg-accent text-foreground",
                   )}
                 >
-                  <Avatar name={item.fullName || item.email} size="sm" />
+                  <Avatar user={item} name={item.fullName || item.email} size="sm" />
                   <div className="min-w-0">
                     <p className="font-medium truncate text-xs">
                       {item.fullName || item.email}

@@ -436,13 +436,14 @@ export function PropertiesPanel({
               ...members.map((m) => ({
                 value: m.user?.id,
                 label: m.user?.full_name || m.user?.email,
+                user: m.user,
               })),
             ]}
             onChange={(v) => update.mutate({ assignee_id: v || null })}
             renderTrigger={(opt) =>
               opt && (
                 <span className="flex items-center gap-2">
-                  <Avatar name={opt.label} size="xs" />
+                  <Avatar user={opt.user} name={opt.label} size="xs" />
                   <span className="font-semibold text-xs truncate">
                     {opt.label}
                   </span>
@@ -452,7 +453,7 @@ export function PropertiesPanel({
             renderOption={(opt) => (
               <span className="flex items-center gap-2">
                 {opt.value ? (
-                  <Avatar name={opt.label} size="xs" />
+                  <Avatar user={opt.user} name={opt.label} size="xs" />
                 ) : (
                   <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
                     <User className="w-3 h-3 text-muted-foreground" />
@@ -760,9 +761,8 @@ export function RequestApprovalDropdown({
                   )}
                 >
                   <Avatar
-                    name={
-                      m.user?.display_name || m.user?.full_name || m.user?.email
-                    }
+                    user={m.user}
+                    name={m.user?.full_name || m.user?.email}
                     src={m.user?.avatar}
                     size="xs"
                   />

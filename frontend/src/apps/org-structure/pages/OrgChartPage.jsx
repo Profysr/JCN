@@ -194,7 +194,7 @@ function OrgNode({ node, x, y, zoom, isSelected, onSelect, onDragStart, isAdmin,
       />
       <foreignObject width={NODE_W} height={NODE_H} style={{ pointerEvents: "none" }}>
         <div className={cn("flex items-center gap-2.5 h-full px-3", compact ? "py-2" : "py-3")}>
-          <Avatar name={node.name || node.email} size={compact ? "xs" : "sm"} className="flex-shrink-0" />
+          <Avatar user={node} name={node.name || node.email} size={compact ? "xs" : "sm"} className="flex-shrink-0" />
           <div className="min-w-0 flex-1">
             <p className="text-xs font-semibold truncate leading-tight">{node.name || node.email}</p>
             {!compact && node.job_title && (
@@ -253,7 +253,7 @@ function NodePopover({ node, onClose, _isAdmin, _workspaceId, _members }) {
         </button>
       </div>
       <div className="p-4 flex flex-col items-center text-center gap-3">
-        <Avatar name={node.name || node.email} size="lg" />
+        <Avatar user={node} name={node.name || node.email} size="lg" />
         <div>
           <p className="font-semibold text-sm">{node.name || node.email}</p>
           <p className="text-xs text-muted-foreground mt-0.5">{node.email}</p>
@@ -295,7 +295,7 @@ function DragOverlay({ node, x, y }) {
       className="fixed pointer-events-none z-[100] border-2 border-primary bg-primary/10 rounded-lg flex items-center gap-2 px-3 py-2 shadow-lg"
       style={{ left: x - NODE_W / 2, top: y - NODE_H / 2, width: NODE_W, height: NODE_H }}
     >
-      <Avatar name={node.name || node.email} size="xs" />
+      <Avatar user={node} name={node.name || node.email} size="xs" />
       <span className="text-xs font-semibold truncate">{node.name}</span>
     </div>
   );

@@ -357,8 +357,12 @@ export const useCreateComment = (workspaceId, boardId, taskId) => {
     onSuccess: (comment, { parent_id }) => {
       qc.setQueryData(commentsKey(workspaceId, boardId, taskId), (old) => {
         if (!old) return old;
+        // check if the reply already exists
         if (parent_id) {
-          // Nest reply under its parent comment in the cache
+          const alreadyExists = old.pages.some((p) =>
+            p.results.some((c) => c.replies?.some((r) => r.id === comment.id)),
+          );
+          if (alreadyExists) return old;
           const pages = old.pages.map((page) => ({
             ...page,
             results: page.results.map((c) =>
@@ -369,7 +373,12 @@ export const useCreateComment = (workspaceId, boardId, taskId) => {
           }));
           return { ...old, pages };
         }
-        // Top-level: append to last page
+        // Check if the comment already exists
+        const alreadyExists = old.pages.some((p) =>
+          p.results.some((c) => c.id === comment.id),
+        );
+        if (alreadyExists) return old;
+
         const pages = [...old.pages];
         const last = pages[pages.length - 1];
         pages[pages.length - 1] = {
@@ -378,6 +387,7 @@ export const useCreateComment = (workspaceId, boardId, taskId) => {
         };
         return { ...old, pages };
       });
+      
       // Only increment scalar for top-level comments
       if (!parent_id) {
         qc.setQueryData(detailKey(workspaceId, boardId, taskId), (old) =>

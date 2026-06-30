@@ -189,13 +189,14 @@ function MemberListItem({ member, canAdmin, onRoleChange, onRemove }) {
   return (
     <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg border bg-background hover:bg-accent/30 transition-colors">
       <Avatar
-        name={member.user.display_name || member.user.email}
+        user={member.user}
+        name={member.user.full_name || member.user.email}
         src={member.user.avatar}
         size="sm"
       />
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium truncate">
-          {member.user.display_name || member.user.full_name}
+          {member.user.full_name || member.user.email}
         </p>
         <p className="text-xs text-muted-foreground truncate">
           {member.user.email}
@@ -384,13 +385,14 @@ function BulkMemberPicker({
                     )}
                   </span>
                   <Avatar
-                    name={m.user.display_name || m.user.email}
+                    user={m.user}
+                    name={m.user.full_name || m.user.email}
                     src={m.user.avatar}
                     size="sm"
                   />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">
-                      {m.user.display_name || m.user.full_name}
+                      {m.user.full_name || m.user.email}
                     </p>
                     <p className="text-xs text-muted-foreground truncate">
                       {m.user.email}

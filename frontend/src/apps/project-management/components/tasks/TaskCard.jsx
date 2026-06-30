@@ -99,11 +99,8 @@ export default function TaskCard({
 
               {task.assignee && (
                 <Avatar
-                  name={
-                    task.assignee.display_name ||
-                    task.assignee.full_name ||
-                    task.assignee.email
-                  }
+                  user={task.assignee}
+                  name={task.assignee.full_name || task.assignee.email}
                   src={task.assignee.avatar}
                   size="xs"
                 />

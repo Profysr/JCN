@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { Outlet, useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
 import { useThemeStore } from "@/store/themeStore";
 import { useWorkspace } from "@/shared/hooks/useWorkspace";
@@ -7,6 +7,7 @@ import { PermissionsProvider } from "@/contexts/PermissionsContext";
 import { useWorkspaceSocket } from "@/shared/hooks/useWorkspaceSocket";
 import { useKeyboardShortcuts } from "@/shared/hooks/useKeyboardShortcuts";
 import Sidebar from "@/shared/components/layout/Sidebar";
+import PermissionGuard from "@/shared/components/layout/PermissionRoute";
 const CommandPalette = lazy(() => import("@/shared/components/CommandPalette"));
 const ShortcutOverlay = lazy(
   () => import("@/shared/components/ShortcutOverlay"),
@@ -108,7 +109,7 @@ export default function AppLayout() {
 
         {/* Main content */}
         <main className="flex-1 overflow-y-auto">
-          <Outlet />
+          <PermissionGuard />
         </main>
 
         <Suspense fallback={null}>

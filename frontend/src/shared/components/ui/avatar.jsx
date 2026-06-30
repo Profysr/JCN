@@ -11,6 +11,16 @@ const AVATAR_COLORS = [
   "bg-pink-500 text-white",
   "bg-sky-500 text-white",
   "bg-teal-500 text-white",
+  "bg-orange-500 text-white",
+  "bg-lime-500 text-white",
+  "bg-fuchsia-500 text-white",
+  "bg-red-500 text-white",
+  "bg-yellow-500 text-white",
+  "bg-green-500 text-white",
+  "bg-purple-500 text-white",
+  "bg-blue-700 text-white",
+  "bg-indigo-700 text-white",
+  "bg-rose-700 text-white",
 ];
 
 function getAvatarColor(name) {
@@ -58,7 +68,10 @@ export function Avatar({
   const resolvedIcon = null;
   const resolvedName = name ?? user?.full_name ?? user?.email;
 
-  const color = getAvatarColor(resolvedName);
+  // Use user.id as the color seed so two users with the same name still get
+  // distinct colors. Fall back to name when there is no user object.
+  const colorSeed = user?.id != null ? String(user.id) : resolvedName;
+  const color = getAvatarColor(colorSeed);
   const initial = resolvedName?.[0]?.toUpperCase() || "?";
 
   const base = cn(

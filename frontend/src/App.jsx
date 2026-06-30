@@ -236,37 +236,38 @@ export default function App() {
                 handle={{ app: "projects" }}
               />
               <Route
+                path="import"
+                element={<ImportPage />}
+                handle={{ app: "projects" }}
+              />
+              <Route
                 path="members"
                 element={<MembersPage />}
-                handle={{ app: "workspace" }}
+                handle={{ app: "workspace", permission: "settings.manage" }}
               />
 
               {/* Settings */}
               <Route
                 path="settings"
                 element={<SettingsPage />}
-                handle={{ app: "workspace" }}
+                handle={{ app: "workspace", permission: "settings.manage" }}
               />
               <Route
                 path="settings/integrations"
                 element={<IntegrationsPage />}
-                handle={{ app: "workspace" }}
+                handle={{ app: "workspace", permission: "settings.manage" }}
               />
               <Route
                 path="settings/api"
                 element={<APIKeysPage />}
-                handle={{ app: "workspace" }}
+                handle={{ app: "workspace", permission: "settings.manage" }}
               />
               <Route
                 path="settings/webhooks"
                 element={<WebhooksPage />}
-                handle={{ app: "workspace" }}
+                handle={{ app: "workspace", permission: "settings.manage" }}
               />
-              <Route
-                path="import"
-                element={<ImportPage />}
-                handle={{ app: "projects" }}
-              />
+ 
             </Route>
           </Route>
         </Route>

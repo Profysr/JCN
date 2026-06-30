@@ -216,7 +216,8 @@ function CommentComposer({
     <form onSubmit={handleSubmit} className="flex gap-2.5 items-start">
       {!isReply && (
         <Avatar
-          name={user?.display_name || user?.email || "?"}
+          user={user}
+          name={user?.full_name || user?.email || "?"}
           size="sm"
           className="flex-shrink-0 mt-1.5"
         />
@@ -350,6 +351,7 @@ function CommentBubble({
   return (
     <div className="flex gap-2.5 group">
       <Avatar
+        user={c.author}
         name={c.author?.display_name || c.author?.full_name || c.author?.email}
         size="sm"
         className="flex-shrink-0 mt-0.5"

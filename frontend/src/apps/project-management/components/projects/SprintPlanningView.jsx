@@ -41,6 +41,7 @@ function TaskRow({ task, action, onAction, onTaskClick }) {
           {task.assignees.slice(0, 2).map((a) => (
             <Avatar
               key={a.id}
+              user={a}
               name={a.full_name || a.email}
               src={a.avatar}
               size="xs"
