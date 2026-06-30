@@ -5,6 +5,8 @@ const wikiBase = (ws, proj) => `/api/workspaces/${ws}/boards/${proj}/wiki/`;
 const docBase = (ws) => `/api/workspaces/${ws}/documents/`;
 
 // ── Wiki pages ────────────────────────────────────────────────────────────────
+// The list endpoint returns root-level pages only (parent=null).
+// Child pages are fetched individually via the detail key.
 
 export function useWikiPages(workspaceId, boardId) {
   return useQuery({
@@ -30,8 +32,16 @@ export function useCreateWikiPage(workspaceId, boardId) {
   return useMutation({
     mutationFn: (data) =>
       api.post(wikiBase(workspaceId, boardId), data).then((r) => r.data),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["wiki", workspaceId, boardId] }),
+    onSuccess: (page) => {
+      // Seed the detail cache — avoids a GET on immediate navigation to the new page.
+      qc.setQueryData(["wiki-page", workspaceId, boardId, page.id], page);
+      // Only append to the root list when this is a root page (no parent).
+      if (!page.parent) {
+        qc.setQueryData(["wiki", workspaceId, boardId], (old) =>
+          old ? [...old, page] : [page],
+        );
+      }
+    },
   });
 }
 
@@ -42,11 +52,14 @@ export function useUpdateWikiPage(workspaceId, boardId, pageId) {
       api
         .patch(`${wikiBase(workspaceId, boardId)}${pageId}/`, data)
         .then((r) => r.data),
-    onSuccess: () => {
-      qc.invalidateQueries({
-        queryKey: ["wiki-page", workspaceId, boardId, pageId],
-      });
-      qc.invalidateQueries({ queryKey: ["wiki", workspaceId, boardId] });
+    onSuccess: (page) => {
+      qc.setQueryData(["wiki-page", workspaceId, boardId, pageId], page);
+      // Update in the root list only if this page is at root level.
+      if (!page.parent) {
+        qc.setQueryData(["wiki", workspaceId, boardId], (old) =>
+          old ? old.map((p) => (p.id === pageId ? page : p)) : old,
+        );
+      }
     },
   });
 }
@@ -56,8 +69,18 @@ export function useDeleteWikiPage(workspaceId, boardId) {
   return useMutation({
     mutationFn: (pageId) =>
       api.delete(`${wikiBase(workspaceId, boardId)}${pageId}/`),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["wiki", workspaceId, boardId] }),
+    onSuccess: (_, pageId) => {
+      qc.removeQueries({
+        queryKey: ["wiki-page", workspaceId, boardId, pageId],
+      });
+      // Remove immediately for instant feedback.
+      qc.setQueryData(["wiki", workspaceId, boardId], (old) =>
+        old ? old.filter((p) => p.id !== pageId) : old,
+      );
+      // Background refetch: the backend uses SET_NULL on children, so any
+      // child pages of the deleted page become root-level and must appear.
+      qc.invalidateQueries({ queryKey: ["wiki", workspaceId, boardId] });
+    },
   });
 }
 
@@ -96,8 +119,12 @@ function useCreateDocument(workspaceId) {
   return useMutation({
     mutationFn: (data) =>
       api.post(docBase(workspaceId), data).then((r) => r.data),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["documents", workspaceId] }),
+    onSuccess: (doc) => {
+      qc.setQueryData(["document", workspaceId, doc.id], doc);
+      qc.setQueryData(["documents", workspaceId], (old) =>
+        old ? [...old, doc] : [doc],
+      );
+    },
   });
 }
 
@@ -106,9 +133,11 @@ function useUpdateDocument(workspaceId, docId) {
   return useMutation({
     mutationFn: (data) =>
       api.patch(`${docBase(workspaceId)}${docId}/`, data).then((r) => r.data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["document", workspaceId, docId] });
-      qc.invalidateQueries({ queryKey: ["documents", workspaceId] });
+    onSuccess: (doc) => {
+      qc.setQueryData(["document", workspaceId, docId], doc);
+      qc.setQueryData(["documents", workspaceId], (old) =>
+        old ? old.map((d) => (d.id === docId ? doc : d)) : old,
+      );
     },
   });
 }
@@ -117,7 +146,11 @@ function useDeleteDocument(workspaceId) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (docId) => api.delete(`${docBase(workspaceId)}${docId}/`),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["documents", workspaceId] }),
+    onSuccess: (_, docId) => {
+      qc.removeQueries({ queryKey: ["document", workspaceId, docId] });
+      qc.setQueryData(["documents", workspaceId], (old) =>
+        old ? old.filter((d) => d.id !== docId) : old,
+      );
+    },
   });
 }

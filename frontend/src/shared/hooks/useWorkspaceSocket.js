@@ -58,11 +58,35 @@ function handleWorkspaceEvent(type, payload, qc, workspaceId) {
   }
 
   if (type === "presence.updated") {
-    const { resource_type, resource_id } = payload;
-    qc.invalidateQueries({
-      queryKey: presenceKey(workspaceId, resource_type, resource_id),
+    const { resource_type, resource_id, user, last_seen, action } = payload;
+    const isLeave = action === "leave";
+
+    // Patch the resource-specific list in-place — no GET round-trip.
+    // The 90s refetchInterval on usePresence acts as the resync safety net.
+    qc.setQueryData(
+      presenceKey(workspaceId, resource_type, resource_id),
+      (old) => {
+        if (!old) return old;
+        if (isLeave) return old.filter((p) => p.user.id !== user.id);
+        const idx = old.findIndex((p) => p.user.id === user.id);
+        if (idx === -1) return [...old, { user, resource_type, resource_id, last_seen }];
+        return old.map((p) => (p.user.id === user.id ? { ...p, user, last_seen } : p));
+      },
+    );
+
+    // Patch the workspace-wide "all" list the same way.
+    qc.setQueryData(["presence", workspaceId, "all"], (old) => {
+      if (!old) return old;
+      const match = (p) =>
+        p.user.id === user.id &&
+        p.resource_type === resource_type &&
+        String(p.resource_id) === String(resource_id);
+      if (isLeave) return old.filter((p) => !match(p));
+      const idx = old.findIndex(match);
+      const entry = { user, resource_type, resource_id, last_seen };
+      if (idx === -1) return [...old, entry];
+      return old.map((p) => (match(p) ? { ...p, ...entry } : p));
     });
-    qc.invalidateQueries({ queryKey: ["presence", workspaceId, "all"] });
   }
 }
 

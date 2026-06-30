@@ -12,12 +12,12 @@ import {
   TabsTrigger,
   TabsContent,
 } from "@/shared/components/ui/Tabs";
-import FilterBar from "./analytics/FilterBar";
-import KpiSection from "./analytics/KpiSection";
-import OverdueSection from "./analytics/OverdueSection";
-import BoardTab from "./analytics/BoardTab";
-import SprintsTab from "./analytics/SprintsTab";
-import TeamsTab from "./analytics/TeamsTab";
+import FilterBar from "@/pages/workspace/analytics/FilterBar";
+import KpiSection from "@/pages/workspace/analytics/KpiSection";
+import OverdueSection from "@/pages/workspace/analytics/OverdueSection";
+import BoardTab from "@/pages/workspace/analytics/BoardTab";
+import SprintsTab from "@/pages/workspace/analytics/SprintsTab";
+import TeamsTab from "@/pages/workspace/analytics/TeamsTab";
 
 const TABS = [
   { id: "board", label: "Board", icon: LayoutGrid },

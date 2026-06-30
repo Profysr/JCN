@@ -344,7 +344,7 @@ WebSocket URL (both): `ws(s)://BACKEND/ws/workspaces/{workspaceId}/?token={acces
 | ------------------------------------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------- |
 | `notification.created`                      | `setQueryData` (**increment in place, no GET**) + `invalidateQueries` on the list | `["inbox-unread-count", ws]` (+1), `["inbox", ws]`       |
 | `objective.created` / `updated` / `deleted` | `invalidateQueries`                                                               | `["objectives", ws]` (prefix — all time-period variants) |
-| `presence.updated`                          | `invalidateQueries`                                                               | `presenceKey(...)`, `["presence", ws, "all"]`            |
+| `presence.updated`                          | `setQueryData` (upsert/remove user in place)                                      | `presenceKey(...)`, `["presence", ws, "all"]` — **zero GETs**; 90s poll is the resync safety net |
 
 #### Board scope — `handleBoardEvent`
 
@@ -597,7 +597,7 @@ Presence is special — it's both query-driven and effect-driven.
 - `usePresence(ws, type, id)`: polls every 90s (`refetchInterval: 90_000`), `staleTime: Infinity` (never stale between polls).
 - `useWorkspaceOnlineUsers(ws)`: same polling pattern, key `["presence", ws, "all"]`.
 - `useAnnouncePresence(ws, type, id)`: side-effect only hook. POSTs on mount, sends heartbeat every 90s, DELETEs on unmount. Then invalidates `presenceKey`.
-- WebSocket `presence.updated` events also invalidate presence keys.
+- WebSocket `presence.updated` events patch presence keys in-place via `setQueryData` (no GET).
 
 ---
 

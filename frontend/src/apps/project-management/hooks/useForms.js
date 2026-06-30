@@ -45,8 +45,12 @@ export function useCreateForm(workspaceId, boardId) {
   return useMutation({
     mutationFn: (data) =>
       api.post(formBase(workspaceId, boardId), data).then((r) => r.data),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["forms", workspaceId, boardId] }),
+    onSuccess: (form) => {
+      qc.setQueryData(["form", workspaceId, boardId, form.id], form);
+      qc.setQueryData(["forms", workspaceId, boardId], (old) =>
+        old ? [...old, form] : [form],
+      );
+    },
   });
 }
 
@@ -57,11 +61,11 @@ export function useUpdateForm(workspaceId, boardId, formId) {
       api
         .patch(`${formBase(workspaceId, boardId)}${formId}/`, data)
         .then((r) => r.data),
-    onSuccess: () => {
-      qc.invalidateQueries({
-        queryKey: ["form", workspaceId, boardId, formId],
-      });
-      qc.invalidateQueries({ queryKey: ["forms", workspaceId, boardId] });
+    onSuccess: (form) => {
+      qc.setQueryData(["form", workspaceId, boardId, formId], form);
+      qc.setQueryData(["forms", workspaceId, boardId], (old) =>
+        old ? old.map((f) => (f.id === formId ? form : f)) : old,
+      );
     },
   });
 }
@@ -71,8 +75,12 @@ export function useDeleteForm(workspaceId, boardId) {
   return useMutation({
     mutationFn: (formId) =>
       api.delete(`${formBase(workspaceId, boardId)}${formId}/`),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["forms", workspaceId, boardId] }),
+    onSuccess: (_, formId) => {
+      qc.removeQueries({ queryKey: ["form", workspaceId, boardId, formId] });
+      qc.setQueryData(["forms", workspaceId, boardId], (old) =>
+        old ? old.filter((f) => f.id !== formId) : old,
+      );
+    },
   });
 }
 
@@ -83,10 +91,13 @@ export function useUpdateFormFields(workspaceId, boardId, formId) {
       api
         .put(`${formBase(workspaceId, boardId)}${formId}/fields/`, fields)
         .then((r) => r.data),
-    onSuccess: () =>
-      qc.invalidateQueries({
-        queryKey: ["form", workspaceId, boardId, formId],
-      }),
+    // Response is the full FormSerializer — patch both caches in one pass.
+    onSuccess: (form) => {
+      qc.setQueryData(["form", workspaceId, boardId, formId], form);
+      qc.setQueryData(["forms", workspaceId, boardId], (old) =>
+        old ? old.map((f) => (f.id === formId ? form : f)) : old,
+      );
+    },
   });
 }
 
@@ -108,9 +119,12 @@ export function useUpdateSubmissionStatus(workspaceId, boardId, formId) {
       api
         .patch(`${formBase(workspaceId, boardId)}${formId}/submissions/`, data)
         .then((r) => r.data),
-    onSuccess: () =>
-      qc.invalidateQueries({
-        queryKey: ["form-submissions", workspaceId, boardId, formId],
-      }),
+    // Response is the single updated submission — patch it in the list in-place.
+    onSuccess: (updated) => {
+      qc.setQueryData(
+        ["form-submissions", workspaceId, boardId, formId],
+        (old) => (old ? old.map((s) => (s.id === updated.id ? updated : s)) : old),
+      );
+    },
   });
 }
