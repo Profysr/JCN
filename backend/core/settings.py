@@ -101,28 +101,35 @@ DATABASES = {
     )
 }
 
-# Channel layers are how Django Channels broadcasts messages between consumers
-# Redis is the broker — when one WebSocket client sends an event, Redis fans it out to all subscribers
+# ── Message broker (RabbitMQ) ─────────────────────────────────────────────────
+RABBITMQ_URL = env("RABBITMQ_URL", default="amqp://guest:guest@localhost:5672//")
+
+# Redis — caching + rate limiting only (see projects/cache.py, DRF throttling).
+REDIS_URL = env("REDIS_URL", default="redis://localhost:6379")
+
+# Channel layers broadcast messages between consumers. RabbitMQ fans out a WebSocket event to every subscribed consumer across all worker processes.
 CHANNEL_LAYERS = {
     "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "BACKEND": "channels_rabbitmq.core.RabbitmqChannelLayer",
         "CONFIG": {
-            "hosts": [env("REDIS_URL", default="redis://localhost:6379")],
+            "host": RABBITMQ_URL,
         },
     },
 }
 
 # ── Celery (v2.7.0) ───────────────────────────────────────────────────────────
-CELERY_BROKER_URL = env("REDIS_URL", default="redis://localhost:6379")
-CELERY_RESULT_BACKEND = env("REDIS_URL", default="redis://localhost:6379")
+# Broker = RabbitMQ (the worker consumes tasks from here).
+CELERY_BROKER_URL = RABBITMQ_URL
+CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", default="rpc://")
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = "UTC"
 
+# ── Authentication ───────────────────────────────────────────────────────────
 # Swap Django's built-in User model for ours (email-based, UUID pk, no username)
 AUTH_USER_MODEL = "accounts.User"
-
 AUTH_PASSWORD_VALIDATORS = [
     {
         "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"
@@ -154,7 +161,6 @@ REST_FRAMEWORK = {
     # Two authentication methods are supported:
     #   1. JWT Bearer token — used by the React frontend (login flow)
     #   2. API key (jcn_...) — used by external integrations (CI, scripts, Zapier, etc.)
-    # DRF tries each in order and stops at the first match.
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "workspaces.authentication.APIKeyAuthentication",
         "rest_framework_simplejwt.authentication.JWTAuthentication",

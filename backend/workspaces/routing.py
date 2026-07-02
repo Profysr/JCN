@@ -5,12 +5,14 @@
 # The frontend connects to:
 #   ws://localhost:8000/ws/workspaces/<workspace_id>/
 #
-# (?P<workspace_id>[\w]+) captures the prefixed workspace ID (e.g. wsp_018e...) and makes it available
-# inside the consumer as: self.scope["url_route"]["kwargs"]["workspace_id"]
+# The <uuid:workspace_id> converter validates the ID up front: a non-UUID never
+# matches this route, so the connection is rejected before WorkspaceConsumer runs.
+# Inside the consumer it arrives already parsed as a uuid.UUID at
+# self.scope["url_route"]["kwargs"]["workspace_id"].
 
-from django.urls import re_path
+from django.urls import path
 from . import consumers
 
 websocket_urlpatterns = [
-    re_path(r"ws/workspaces/(?P<workspace_id>[\w-]+)/$", consumers.WorkspaceConsumer.as_asgi()),
+    path("ws/workspaces/<uuid:workspace_id>/", consumers.WorkspaceConsumer.as_asgi()),
 ]

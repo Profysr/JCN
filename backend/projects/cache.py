@@ -7,7 +7,8 @@ Key schema
 
 Why Redis and not Django's cache framework:
   Django's default cache is in-memory and per-process — useless across workers.
-  We already have Redis (Celery + Channels), so zero extra infra needed.
+  Redis is our dedicated caching layer (the message broker is RabbitMQ), so this
+  connects to REDIS_URL directly.
 """
 
 import json
@@ -26,7 +27,7 @@ def _redis():
     global _pool
     if _pool is None:
         _pool = redis_lib.ConnectionPool.from_url(
-            settings.CELERY_BROKER_URL,
+            settings.REDIS_URL,
             decode_responses=True,
             max_connections=50,
             socket_connect_timeout=1,

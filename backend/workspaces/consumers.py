@@ -3,57 +3,57 @@
 # How it works:
 #   1. Browser opens a WebSocket to ws://.../ws/workspaces/<workspace_id>/
 #   2. connect() is called — we authenticate the user and verify they're a member,
-#      then subscribe them to two Redis pub/sub groups:
+#      then subscribe them to two channel-layer groups:
 #        - "workspace_<id>" → receives events broadcast to everyone in this workspace (e.g. task created, sprint started)
 #        - "user_<id>"      → receives events sent to this specific user only (e.g. personal notifications, inbox items)
 #   3. When something happens in the app (a task is updated, etc.), Django signals or Celery tasks call channel_layer.group_send() with an event dict. Every connected client in that group receives it immediately via workspace_event() or user_notification().
 #   4. disconnect() removes the client from both groups so they stop receiving messages.
 
-# The channel layer (backed by Redis) is what makes the "broadcast to a group" pattern possible — it acts as a message bus between Django workers and connected WebSocket clients.
+# The channel layer (backed by RabbitMQ — see CHANNEL_LAYERS in core/settings.py) is what makes the "broadcast to a group" pattern possible — it acts as a message bus between Django workers and connected WebSocket clients.
 
 import json
 import logging
+
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
-from .models import WorkspaceMember, Workspace
-from core.fields import parse_id
+from .models import Workspace
 
 logger = logging.getLogger(__name__)
 
 class WorkspaceConsumer(AsyncWebsocketConsumer):
     async def connect(self):
-        workspace_param = self.scope["url_route"]["kwargs"]["workspace_id"]
+        workspace_id = self.scope["url_route"]["kwargs"]["workspace_id"]
 
         # JWTAuthMiddleware (asgi.py) resolves scope["user"] from ?token= before
         # this consumer runs — treat it exactly like AuthMiddlewareStack does.
         user = self.scope.get("user")
         if not user or not user.is_authenticated:
-            logger.warning("WS rejected: unauthenticated (workspace=%s)", workspace_param)
+            logger.warning("WS rejected: unauthenticated (workspace=%s)", workspace_id)
             await self.close()
             return
 
-        # Resolve workspace by prefixed ID (wsp_...) or legacy slug
-        workspace = await self.get_workspace(workspace_param, user)
+        # Resolve the workspace and confirm membership (returns None if either fails).
+        workspace = await self.get_workspace(workspace_id, user)
         if workspace is None:
             await self.close()
             return
 
         # Group name must match broadcast() which uses the plain UUID from URL params.
-        self.redis_group_name = f"workspace_{workspace.id}"
+        self.workspace_group_name = f"workspace_{workspace.id}"
         self.user_group_name = f"user_{user.id}"
 
-        logger.info("WS connect: user=%s workspace_group=%s user_group=%s", user.id, self.redis_group_name, self.user_group_name)
+        logger.info("WS connect: user=%s workspace_group=%s user_group=%s", user.id, self.workspace_group_name, self.user_group_name)
 
         # Subscribe to workspace-wide events (visible to all members)
-        await self.channel_layer.group_add(self.redis_group_name, self.channel_name)
+        await self.channel_layer.group_add(self.workspace_group_name, self.channel_name)
         # Subscribe to user-specific events (personal notifications)
         await self.channel_layer.group_add(self.user_group_name, self.channel_name)
         await self.accept()
 
     async def disconnect(self, close_code):
         # Unsubscribe from both groups so the client stops receiving messages
-        if hasattr(self, "redis_group_name"):
-            await self.channel_layer.group_discard(self.redis_group_name, self.channel_name)
+        if hasattr(self, "workspace_group_name"):
+            await self.channel_layer.group_discard(self.workspace_group_name, self.channel_name)
         if hasattr(self, "user_group_name"):
             await self.channel_layer.group_discard(self.user_group_name, self.channel_name)
 
@@ -72,19 +72,7 @@ class WorkspaceConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps(event["data"]))
 
     @database_sync_to_async
-    def get_workspace(self, workspace_param, user):
-        """Look up a workspace by prefixed ID (wsp_...) or plain UUID string."""
-        import uuid as _uuid
-        try:
-            workspace_id = parse_id(workspace_param)
-        except (ValueError, AttributeError):
-            try:
-                workspace_id = _uuid.UUID(str(workspace_param))
-            except (ValueError, AttributeError):
-                return None
-        try:
-            return Workspace.objects.filter(
-                id=workspace_id, members__user=user
-            ).first()
-        except Exception:
-            return None
+    def get_workspace(self, workspace_id, user):
+        """Return the workspace iff `user` is a member, else None
+        """
+        return Workspace.objects.filter(id=workspace_id, members__user=user).first()

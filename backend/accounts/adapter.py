@@ -35,7 +35,6 @@ class CustomAccountAdapter(DefaultAccountAdapter):
         return f"{settings.FRONTEND_URL}/verify-email/{key}"
 
     # ── private helpers ────────────────────────────────────────────────────────
-
     def _send_password_reset(self, email, context):
         reset_url = context.get("password_reset_url", "")
         html = render_email("password_reset.html", {
