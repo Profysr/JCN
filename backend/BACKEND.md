@@ -38,9 +38,7 @@ hr/             HR management: leave (policies/balances/requests), attendance (c
 
 All model PKs use `UUIDv7Field` from `core.fields` — time-sortable, no B-tree fragmentation.
 Opaque token fields (invite tokens, form tokens) stay UUID4.
-All serializers return plain UUIDs — `PrefixedUUIDField` has been removed from the entire DRF layer.
-
-URL route kwargs use plain UUIDs — `_parse_pk()` helpers in views still accept both formats for backwards compatibility.
+IDs are plain UUIDs end-to-end. Serializers return plain UUIDs, URL route kwargs are plain UUIDs passed straight into ORM lookups, and WebSocket/webhook/integration payloads emit plain UUIDs too. The prefixed-ID helpers (`PrefixedUUIDField`, `parse_id`, `format_id`, and the per-view `_parse_pk()` shims) have all been removed. Model `PREFIX` class attributes remain as declarative metadata but are no longer consumed anywhere.
 
 ---
 
