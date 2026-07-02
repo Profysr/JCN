@@ -604,7 +604,7 @@ Four dedicated views replace the old `AnalyticsMetricView` dynamic router. All f
 | `Workspace` | `id` (UUIDv7), `name`, `logo`, `owner` (FK→User) | No slug — routes use UUID `id`. ordering: -id |
 | `WorkspaceMember` | `workspace` (FK), `user` (FK), `role` (ADMIN/MEMBER/VIEWER), `invited_by`, `joined_at` | unique: workspace+user; index: workspace+role |
 | `WorkspaceInvite` | `workspace` (FK), `email`, `role`, `token` (UUID4), `status` (PENDING/ACCEPTED/DECLINED) | unique: workspace+email; index: workspace+status |
-| `InboxItem` | `user` (FK), `workspace` (FK), `actor_id` (str, denorm), `actor_name` (str, denorm), `verb`, `event_type`, `resource_name`, `board_id`, `project_name`, `meta` (JSON), `status` (UNREAD/READ/ARCHIVED/SNOOZED), `snoozed_until` | indexes: user+status, user+workspace+status; ordering: -id |
+| `InboxItem` | `user` (FK), `workspace` (FK), `actor_id` (str, denorm), `actor_name` (str, denorm), `verb`, `event_type`, `resource_name`, `board_id`, `project_name`, `meta` (JSON), `status` (UNREAD/READ/ARCHIVED/SNOOZED), `snoozed_until` | indexes: user+status, user+workspace+status; ordering: -id. Verbs: `task_assigned`, `task_commented`, `task_mentioned`, `approval_requested`, `org_profile_submitted`, `org_profile_approved`. EventTypes: `assigned`, `mentioned`, `commented`, `approved`, `automated`, `org`. |
 | `WorkspaceAPIKey` | `workspace` (FK), `name`, `key_prefix`, `key_hash`, `scopes` (JSON), `is_active`, `expires_at`, `last_used_at`, `created_by` (FK) | Raw key shown once; soft-delete via is_active. `generate()` classmethod returns (instance, raw_key) |
 | `Webhook` | `workspace` (FK), `name`, `url`, `events` (JSON), `secret`, `is_active` | HMAC-SHA256 signing. `create_with_secret()` classmethod |
 | `WebhookDelivery` | `webhook` (FK), `event`, `request_body`, `response_code`, `response_body`, `duration_ms`, `success`, `attempt` | indexes: webhook+created_at, webhook+success |
@@ -647,6 +647,39 @@ Four dedicated views replace the old `AnalyticsMetricView` dynamic router. All f
 | `UserPresence` | `user` (FK), `workspace` (FK), `resource_type`, `resource_id`, `last_seen` | unique: user+workspace+resource_type+resource_id |
 | `CommentReaction` | `comment` (FK), `user` (FK), `emoji` | unique: comment+user+emoji |
 | `AuditEvent` | `workspace` (FK), `actor` (FK), `action`, `resource_type`, `resource_id`, `before` (JSON), `after` (JSON) | indexes: workspace+created_at, workspace+resource_type |
+
+### organization — Org Events (`organization/events.py`)
+
+New module for real-time + webhook fan-out. Call from any org view or task after a mutation.
+
+| Function | Purpose |
+|----------|---------|
+| `broadcast_org_event(workspace_id, event_type, data)` | Push WS event to `workspace_{id}` group + fan-out to registered webhooks |
+| `broadcast_to_user(user_id, event_type, data)` | Push to a single user's `user_{id}` WS group (used by tasks for per-admin inbox push) |
+
+**Event types wired so far:**
+
+| View / task | Event fired |
+|-------------|-------------|
+| `DepartmentListCreateView.post` | `org.department.created` |
+| `DepartmentDetailView.patch` | `org.department.updated` |
+| `DepartmentDetailView.delete` | `org.department.deleted` |
+| `TeamListCreateView.post` | `org.team.created` |
+| `TeamDetailView.patch` | `org.team.updated` |
+| `TeamDetailView.delete` | `org.team.deleted` |
+| `ReportingLineListCreateView.post` | `org.reporting_line.created` |
+| `ReportingLineDetailView.delete` | `org.reporting_line.deleted` |
+| `MyOrgProfileView.post` (submit) | `org.profile.submitted` |
+| `ApproveProfileView.post` | `org.profile.approved` |
+| `BulkApproveProfilesView.post` | `org.profile.approved` (one per profile) |
+
+### organization — Permission changes
+
+All org **read** views now call `_require_org_access(workspace, user)` which enforces:
+1. `require_app_access(user, workspace, "org")` — CustomRole must have `app_access["org"] = true`
+2. `_require_onboarded(workspace, user)` — non-admin profile must not be in draft state
+
+Previously only `_require_onboarded` was applied. Mutation views (`_require_admin`) implicitly pass app-access because Admin system role has all access true.
 
 ### organization
 
@@ -702,6 +735,12 @@ All org endpoints require `app_access["org"] = true` on the user's role (enforce
 | POST | `/api/workspaces/{ws}/org/reporting-lines/` | Create reporting line (admin); body `{ manager_id, report_id }` |
 | DELETE | `/api/workspaces/{ws}/org/reporting-lines/{line_id}/` | Delete reporting line (admin) |
 | GET | `/api/workspaces/{ws}/org/chart/` | Org chart tree: all members with job_title, manager_id, departments, teams. Single query via `prefetch_related(department_memberships__department, team_memberships__team, org_profile__job_title, reports_to)`. |
+| GET | `/api/workspaces/{ws}/org/me/profile/` | Current user's own org profile (auto-creates). |
+| PATCH | `/api/workspaces/{ws}/org/me/profile/` | Update own org profile fields (draft or submitted). |
+| POST | `/api/workspaces/{ws}/org/me/profile/` | Submit profile — draft → submitted; fires `notify_hr_profile_submitted` Celery task. |
+| GET | `/api/workspaces/{ws}/org/profiles/pending/` | Admin-only list of submitted profiles awaiting review. |
+| POST | `/api/workspaces/{ws}/org/profiles/{profile_id}/approve/` | Approve a single submitted profile; fires `notify_member_profile_approved`. |
+| POST | `/api/workspaces/{ws}/org/profiles/bulk-approve/` | Approve multiple profiles in one request. Body: `{ profile_ids: [uuid, …] }` (max 100). Returns `{ approved: N }`. Fires approval email per member. |
 
 ### hr — URL Reference
 
@@ -754,6 +793,8 @@ All hr endpoints require `app_access["hr"] = true` on the user's role (enforced 
 | `send_invite_email` | `workspaces.tasks` | 2 (60s delay) | Send invite email via Resend SDK. Fetches invite with `select_related(workspace, invited_by)`, builds inline HTML, sends from `settings.FROM_EMAIL`. Fired by `POST /api/workspaces/{ws}/invites/` immediately after invite row is created. |
 | `run_import` | `workspaces.tasks` | — | Parse file → create board/statuses → bulk insert tasks; push progress via WebSocket `import.progress` |
 | `send_comment_notifications` | `projects.tasks` | — | Collect all recipients (task assignee/creator, parent comment author, @mentioned users), validate workspace membership for mentions, `bulk_create` all `InboxItem` rows in one DB round-trip, then broadcast per-user via WebSocket. Called with `.delay()` immediately after `POST /comments/` returns. |
+| `notify_hr_profile_submitted` | `organization.tasks` | 2 (60s delay) | **InboxItem** `bulk_create` for all admins + WS push per admin + email batch. Fired by `POST /org/me/profile/` (submit action). |
+| `notify_member_profile_approved` | `organization.tasks` | 2 (60s delay) | **InboxItem** for the member + WS push + email. Fired by single-approve and bulk-approve views. |
 
 ---
 
@@ -965,7 +1006,11 @@ All paginated responses follow DRF's standard envelope: `{count, next, previous,
 ```python
 ["task.created", "task.updated", "task.deleted", "task.assigned",
  "task.commented", "task.completed", "sprint.started", "sprint.completed",
- "member.added", "member.removed"]
+ "member.added", "member.removed",
+ "org.profile.submitted", "org.profile.approved",
+ "org.department.created", "org.department.updated", "org.department.deleted",
+ "org.team.created", "org.team.updated", "org.team.deleted",
+ "org.reporting_line.created", "org.reporting_line.deleted"]
 ```
 
 ---

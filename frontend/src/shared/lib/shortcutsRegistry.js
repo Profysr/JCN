@@ -271,6 +271,36 @@ export const SHORTCUT_GROUPS = [
     ],
   },
   {
+    id: "org",
+    label: "Org Structure",
+    shortcuts: [
+      {
+        id: "org:create",
+        keys: ["n"],
+        display: ["n"],
+        description: "New department / team",
+      },
+      {
+        id: "org:review-prev",
+        keys: ["ArrowLeft"],
+        display: ["←"],
+        description: "Previous pending profile",
+      },
+      {
+        id: "org:review-next",
+        keys: ["ArrowRight"],
+        display: ["→"],
+        description: "Next pending profile",
+      },
+      {
+        id: "org:review-approve",
+        keys: ["Enter"],
+        display: ["Enter"],
+        description: "Approve profile (HR review modal)",
+      },
+    ],
+  },
+  {
     id: "global",
     label: "Global",
     shortcuts: [

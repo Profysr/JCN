@@ -1,4 +1,4 @@
-import { Building2, Users2, Network } from "lucide-react";
+import { Building2, Users2, Network, Users, Briefcase, UserCheck } from "lucide-react";
 
 export const ORG_NAV_ITEMS = [
   {
@@ -22,8 +22,30 @@ export const ORG_NAV_ITEMS = [
     desc: "Visual company org chart",
     path: "org-chart",
   },
+  {
+    key: "people",
+    icon: Users,
+    label: "People",
+    desc: "People directory",
+    path: "people",
+  },
+  {
+    key: "job-titles",
+    icon: Briefcase,
+    label: "Job Titles",
+    desc: "Manage job titles & levels",
+    path: "org/job-titles",
+  },
+  {
+    key: "hr-queue",
+    icon: UserCheck,
+    label: "HR Queue",
+    desc: "Profiles pending approval",
+    path: "org/pending",
+  },
 ];
 
 export const ORG_NAV_GROUPS = [
-  { label: "People", items: ["departments", "teams", "org-chart"] },
+  { label: "Directory", items: ["departments", "teams", "org-chart", "people"] },
+  { label: "HR", items: ["job-titles", "hr-queue"] },
 ];

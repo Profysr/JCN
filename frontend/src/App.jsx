@@ -9,6 +9,7 @@ import ProtectedRoute from "@/shared/components/layout/ProtectedRoute";
 import AppLayout from "@/shared/components/layout/AppLayout";
 import AppGuard from "@/shared/components/layout/PermissionRoute";
 import WorkspaceRedirect from "@/pages/workspace/WorkspaceRedirect";
+import OrgOnboardingGate from "@/apps/org-structure/components/OrgOnboardingGate";
 
 // ── Public pages ──────────────────────────────────────────────────────────────
 const LoginPage = lazy(() => import("@/pages/auth/LoginPage"));
@@ -51,6 +52,18 @@ const DepartmentsPage = lazy(
 const TeamsPage = lazy(() => import("@/apps/org-structure/pages/TeamsPage"));
 const OrgChartPage = lazy(
   () => import("@/apps/org-structure/pages/OrgChartPage"),
+);
+const PeopleDirectoryPage = lazy(
+  () => import("@/apps/org-structure/pages/PeopleDirectoryPage"),
+);
+const PendingProfilesPage = lazy(
+  () => import("@/apps/org-structure/pages/PendingProfilesPage"),
+);
+const JobTitlesPage = lazy(
+  () => import("@/apps/org-structure/pages/JobTitlesPage"),
+);
+const MemberProfilePage = lazy(
+  () => import("@/apps/org-structure/pages/MemberProfilePage"),
 );
 
 // ── HR Management pages ───────────────────────────────────────────────────────
@@ -176,9 +189,15 @@ export default function App() {
 
               {/* ── Org Structure ───────────────────────────────────────── */}
               <Route element={<AppGuard app="org" />}>
-                <Route path="departments" element={<DepartmentsPage />} />
-                <Route path="teams" element={<TeamsPage />} />
-                <Route path="org-chart" element={<OrgChartPage />} />
+                <Route element={<OrgOnboardingGate />}>
+                  <Route path="departments" element={<DepartmentsPage />} />
+                  <Route path="teams" element={<TeamsPage />} />
+                  <Route path="org-chart" element={<OrgChartPage />} />
+                  <Route path="people" element={<PeopleDirectoryPage />} />
+                  <Route path="people/:memberId" element={<MemberProfilePage />} />
+                  <Route path="org/pending" element={<PendingProfilesPage />} />
+                  <Route path="org/job-titles" element={<JobTitlesPage />} />
+                </Route>
               </Route>
 
               {/* ── HR Management ───────────────────────────────────────── */}

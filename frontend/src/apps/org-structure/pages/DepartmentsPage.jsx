@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
-import { useParams } from "react-router-dom";
-import { Plus, ChevronRight, Pencil, Trash2, Users } from "lucide-react";
+import { useParams, Link } from "react-router-dom";
+import { Plus, ChevronRight, Pencil, Trash2, Users, X, Search, Settings2, Crown } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import Select from "@/shared/components/ui/Select";
@@ -9,27 +9,21 @@ import { Loader } from "@/shared/components/ui/Loader";
 import { Avatar } from "@/shared/components/ui/avatar";
 import { useToast } from "@/shared/components/ui/toast";
 import Modal from "@/shared/components/ui/Modal";
+import { ShortcutTooltip } from "@/shared/components/ui/ShortcutTooltip";
 import { cn } from "@/shared/lib/utils";
 import { useMembers } from "@/shared/hooks/useMembers";
+import { usePermission } from "@/contexts/PermissionsContext";
 import {
   useDepartments,
   useCreateDepartment,
   useUpdateDepartment,
   useDeleteDepartment,
+  useDepartmentMembers,
+  useAddDepartmentMember,
+  useRemoveDepartmentMember,
 } from "@/apps/org-structure/hooks/useOrg";
 import GettingStartedChecklist from "@/apps/org-structure/components/GettingStartedChecklist";
-
-const DEPT_COLORS = [
-  "#6366f1", "#8b5cf6", "#3b82f6", "#10b981",
-  "#f59e0b", "#ef4444", "#06b6d4", "#ec4899",
-];
-
-function generateIdentifier(name) {
-  if (!name) return "";
-  const words = name.trim().split(/\s+/).filter(Boolean);
-  if (words.length === 1) return words[0].slice(0, 4).toUpperCase();
-  return words.map((w) => w[0]).join("").slice(0, 6).toUpperCase();
-}
+import { ORG_COLORS, generateIdentifier } from "@/apps/org-structure/constants";
 
 function buildTree(depts) {
   const map = {};
@@ -46,19 +40,24 @@ function buildTree(depts) {
 }
 
 // ── Department row (recursive) ────────────────────────────────────────────────
-function DeptNode({ node, depth, onEdit, onDelete }) {
+function DeptNode({ node, depth, onEdit, onDelete, onSelect, selectedId }) {
   const [open, setOpen] = useState(true);
   const hasChildren = node.children.length > 0;
+  const isSelected = selectedId === node.id;
 
   return (
     <div>
       <div
-        className="group flex items-center gap-2 rounded-md py-1.5 pr-2 hover:bg-accent/50 transition-colors"
+        className={cn(
+          "group flex items-center gap-2 rounded-md py-1.5 pr-2 transition-colors cursor-pointer",
+          isSelected ? "bg-primary/5 border-l-2 border-primary" : "hover:bg-accent/50",
+        )}
         style={{ paddingLeft: `${8 + depth * 20}px` }}
+        onClick={() => onSelect?.(node)}
       >
         {/* Expand toggle */}
         <button
-          onClick={() => hasChildren && setOpen((v) => !v)}
+          onClick={(e) => { e.stopPropagation(); hasChildren && setOpen((v) => !v); }}
           className={cn(
             "w-5 h-5 flex items-center justify-center rounded flex-shrink-0 text-muted-foreground transition-transform duration-150",
             hasChildren
@@ -105,7 +104,7 @@ function DeptNode({ node, depth, onEdit, onDelete }) {
         {/* Hover actions */}
         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
           <button
-            onClick={() => onEdit(node)}
+            onClick={(e) => { e.stopPropagation(); onEdit(node); }}
             className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
             title="Edit department"
             aria-label="Edit department"
@@ -113,7 +112,7 @@ function DeptNode({ node, depth, onEdit, onDelete }) {
             <Pencil className="w-3.5 h-3.5" />
           </button>
           <button
-            onClick={() => onDelete(node)}
+            onClick={(e) => { e.stopPropagation(); onDelete(node); }}
             className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
             title="Delete department"
             aria-label="Delete department"
@@ -132,10 +131,198 @@ function DeptNode({ node, depth, onEdit, onDelete }) {
               depth={depth + 1}
               onEdit={onEdit}
               onDelete={onDelete}
+              onSelect={onSelect}
+              selectedId={selectedId}
             />
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Department detail panel ───────────────────────────────────────────────────
+function DeptAddMemberPanel({ workspaceId, deptId, available, search, onSearchChange, onAdded }) {
+  const addMember = useAddDepartmentMember(workspaceId, deptId);
+
+  const handleAdd = async (memberId) => {
+    await addMember.mutateAsync({ member_id: memberId });
+    onAdded();
+  };
+
+  return (
+    <div className="mb-3 rounded-md border border-border bg-muted/30 p-3 space-y-2">
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+        <Input
+          value={search}
+          onChange={(e) => onSearchChange(e.target.value)}
+          placeholder="Search members…"
+          className="pl-8 h-8 text-xs"
+          autoFocus
+        />
+      </div>
+      {available.length === 0 ? (
+        <p className="text-xs text-muted-foreground text-center py-2">
+          {search ? "No members found" : "All members are already in this department"}
+        </p>
+      ) : (
+        <div className="space-y-0.5 max-h-40 overflow-y-auto">
+          {available.map((m) => (
+            <button
+              key={m.id}
+              onClick={() => handleAdd(m.id)}
+              disabled={addMember.isPending}
+              className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-accent transition-colors"
+            >
+              <Avatar user={m.user} size="xs" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium truncate">{m.user.full_name || m.user.email}</p>
+              </div>
+              <span className="text-[10px] text-primary font-medium">Add</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DeptDetail({ dept, workspaceId, allMembers, onEdit, onClose }) {
+  const { data: memberships = [], isLoading } = useDepartmentMembers(workspaceId, dept.id);
+  const removeMember = useRemoveDepartmentMember(workspaceId, dept.id);
+  const [showAdd, setShowAdd] = useState(false);
+  const [memberSearch, setMemberSearch] = useState("");
+
+  const memberIds = new Set(memberships.map((m) => m.member.id));
+
+  const availableToAdd = useMemo(
+    () =>
+      allMembers.filter(
+        (m) =>
+          !memberIds.has(m.id) &&
+          (memberSearch === "" ||
+            m.user.full_name?.toLowerCase().includes(memberSearch.toLowerCase()) ||
+            m.user.email.toLowerCase().includes(memberSearch.toLowerCase())),
+      ),
+    [allMembers, memberIds, memberSearch],
+  );
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-3 px-5 py-4 border-b border-border flex-shrink-0">
+        <div
+          className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+          style={{ background: dept.color }}
+        />
+        <div className="flex-1 min-w-0">
+          <h2 className="font-semibold text-sm truncate">{dept.name}</h2>
+          {dept.parent && (
+            <span className="text-xs text-muted-foreground">{dept.parent.name}</span>
+          )}
+        </div>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <button
+            onClick={() => onEdit(dept)}
+            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            title="Edit department"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+        {dept.description && (
+          <p className="text-sm text-muted-foreground">{dept.description}</p>
+        )}
+
+        {/* Head */}
+        {dept.head && (
+          <div className="flex items-center gap-2 p-3 rounded-md bg-muted/40 border border-border/50">
+            <Crown className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+            <Avatar user={dept.head.user} size="sm" />
+            <div className="min-w-0">
+              <p className="text-sm font-medium truncate">{dept.head.user.full_name}</p>
+              <p className="text-xs text-muted-foreground">Department head</p>
+            </div>
+          </div>
+        )}
+
+        {/* Members */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Members ({memberships.length})
+            </h3>
+            <button
+              onClick={() => setShowAdd((v) => !v)}
+              className="text-xs text-primary hover:text-primary/80 font-medium transition-colors"
+            >
+              + Add member
+            </button>
+          </div>
+
+          {showAdd && (
+            <DeptAddMemberPanel
+              workspaceId={workspaceId}
+              deptId={dept.id}
+              available={availableToAdd}
+              search={memberSearch}
+              onSearchChange={setMemberSearch}
+              onAdded={() => { setShowAdd(false); setMemberSearch(""); }}
+            />
+          )}
+
+          {isLoading && <Loader className="h-16" />}
+
+          {!isLoading && memberships.length === 0 && (
+            <p className="text-sm text-muted-foreground/60 italic text-center py-4">No members yet</p>
+          )}
+
+          <div className="space-y-1 mt-2">
+            {memberships.map((m) => (
+              <div
+                key={m.id}
+                className="group flex items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-accent/40 transition-colors"
+              >
+                <Avatar user={m.member.user} size="sm" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">
+                    {m.member.user.full_name || m.member.user.email}
+                  </p>
+                  <p className="text-xs text-muted-foreground truncate">{m.member.user.email}</p>
+                </div>
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  {m.is_head && (
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                      Head
+                    </span>
+                  )}
+                  <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-muted text-muted-foreground capitalize">
+                    {m.member.role}
+                  </span>
+                  <button
+                    onClick={() => removeMember.mutate(m.id)}
+                    className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-all"
+                    title="Remove from department"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -145,7 +332,7 @@ const BLANK = {
   name: "",
   identifier: "",
   description: "",
-  color: DEPT_COLORS[0],
+  color: ORG_COLORS[0],
   parent_id: null,
   head_id: null,
 };
@@ -265,7 +452,7 @@ function DeptFormModal({ isOpen, onClose, initialData, allDepts, members, worksp
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-muted-foreground">Color</label>
           <div className="flex gap-2">
-            {DEPT_COLORS.map((c) => (
+            {ORG_COLORS.map((c) => (
               <button
                 key={c}
                 type="button"
@@ -328,14 +515,36 @@ export default function DepartmentsPage() {
   const { data: members = [] } = useMembers(workspaceId);
   const deleteDept = useDeleteDepartment(workspaceId);
   const { toast } = useToast();
+  const { isOwner, can } = usePermission();
+  const isAdmin = isOwner || can("org.manage");
 
+  const [selectedDept, setSelectedDept] = useState(null);
   const [modal, setModal] = useState(null); // null | { mode: 'create' } | { mode: 'edit', dept }
-  const [confirmDelete, setConfirmDelete] = useState(null); // null | dept
+  const [confirmDelete, setConfirmDelete] = useState(null);
+
+  // Keep selectedDept in sync when depts list updates
+  useEffect(() => {
+    if (selectedDept) {
+      const updated = depts.find((d) => d.id === selectedDept.id);
+      if (updated) setSelectedDept(updated);
+      else setSelectedDept(null);
+    }
+  }, [depts]);
 
   const tree = useMemo(() => buildTree(depts), [depts]);
 
   const openCreate = () => setModal({ mode: "create" });
-  const openEdit = (dept) => setModal({ mode: "edit", dept });
+  const openEdit = (dept) => { setModal({ mode: "edit", dept }); };
+
+  useEffect(() => {
+    const handleKey = (e) => {
+      if (modal) return;
+      if (e.target.matches("input,textarea,[contenteditable]")) return;
+      if (e.key === "n") { e.preventDefault(); openCreate(); }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [modal]);
   const closeModal = () => setModal(null);
 
   const handleDelete = async () => {
@@ -343,12 +552,10 @@ export default function DepartmentsPage() {
     try {
       await deleteDept.mutateAsync(confirmDelete.id);
       toast.success("Department deleted");
+      if (selectedDept?.id === confirmDelete.id) setSelectedDept(null);
       setConfirmDelete(null);
     } catch (err) {
-      toast.error(
-        "Couldn't delete department",
-        err.message,
-      );
+      toast.error("Couldn't delete department", err.message);
     }
   };
 
@@ -366,9 +573,21 @@ export default function DepartmentsPage() {
             {depts.length} department{depts.length !== 1 ? "s" : ""} in this workspace
           </p>
         </div>
-        <Button onClick={openCreate}>
-          <Plus className="w-4 h-4 mr-1.5" /> New Department
-        </Button>
+        <div className="flex items-center gap-2">
+          {isAdmin && (
+            <Link
+              to={`/w/${workspaceId}/org/job-titles`}
+              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground border rounded-md px-3 py-1.5 hover:bg-accent transition-colors"
+            >
+              <Settings2 className="w-4 h-4" /> Job Titles
+            </Link>
+          )}
+          <ShortcutTooltip label="New Department" shortcut="n" side="bottom">
+            <Button onClick={openCreate}>
+              <Plus className="w-4 h-4 mr-1.5" /> New Department
+            </Button>
+          </ShortcutTooltip>
+        </div>
       </div>
 
       {/* Content */}
@@ -388,30 +607,46 @@ export default function DepartmentsPage() {
       )}
 
       {!isLoading && depts.length > 0 && (
-        <div className="rounded-md border border-border overflow-hidden">
-          {/* Column headers */}
-          <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 border-b border-border text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            <div className="w-5 flex-shrink-0" />
-            <div className="w-2.5 flex-shrink-0" />
-            <div className="w-10 flex-shrink-0" />
-            <div className="flex-1">Name</div>
-            <div className="w-6 flex-shrink-0" />
-            <div className="w-12 flex-shrink-0 text-right">Members</div>
-            <div className="w-14 flex-shrink-0" />
+        <div className={cn("flex gap-6", selectedDept ? "items-start" : "")}>
+          {/* Tree */}
+          <div className={cn("flex-1 rounded-md border border-border overflow-hidden")}>
+            {/* Column headers */}
+            <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 border-b border-border text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <div className="w-5 flex-shrink-0" />
+              <div className="w-2.5 flex-shrink-0" />
+              <div className="w-10 flex-shrink-0" />
+              <div className="flex-1">Name</div>
+              <div className="w-6 flex-shrink-0" />
+              <div className="w-12 flex-shrink-0 text-right">Members</div>
+              <div className="w-14 flex-shrink-0" />
+            </div>
+            <div className="divide-y divide-border/30 py-1">
+              {tree.map((root) => (
+                <DeptNode
+                  key={root.id}
+                  node={root}
+                  depth={0}
+                  onEdit={openEdit}
+                  onDelete={setConfirmDelete}
+                  onSelect={(d) => setSelectedDept((prev) => prev?.id === d.id ? null : d)}
+                  selectedId={selectedDept?.id}
+                />
+              ))}
+            </div>
           </div>
 
-          {/* Tree */}
-          <div className="divide-y divide-border/30 py-1">
-            {tree.map((root) => (
-              <DeptNode
-                key={root.id}
-                node={root}
-                depth={0}
+          {/* Detail panel */}
+          {selectedDept && (
+            <div className="w-80 flex-shrink-0 rounded-md border border-border bg-card shadow-card overflow-hidden max-h-[calc(100vh-220px)] flex flex-col">
+              <DeptDetail
+                dept={selectedDept}
+                workspaceId={workspaceId}
+                allMembers={members}
                 onEdit={openEdit}
-                onDelete={setConfirmDelete}
+                onClose={() => setSelectedDept(null)}
               />
-            ))}
-          </div>
+            </div>
+          )}
         </div>
       )}
 

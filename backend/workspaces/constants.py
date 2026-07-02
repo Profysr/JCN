@@ -226,4 +226,15 @@ WEBHOOK_EVENTS = [
     "objective.created",
     "objective.updated",
     "objective.deleted",
+    # Org Structure
+    "org.profile.submitted",
+    "org.profile.approved",
+    "org.department.created",
+    "org.department.updated",
+    "org.department.deleted",
+    "org.team.created",
+    "org.team.updated",
+    "org.team.deleted",
+    "org.reporting_line.created",
+    "org.reporting_line.deleted",
 ]

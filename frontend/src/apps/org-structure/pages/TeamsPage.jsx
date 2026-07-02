@@ -11,6 +11,7 @@ import { Loader } from "@/shared/components/ui/Loader";
 import { Avatar } from "@/shared/components/ui/avatar";
 import { useToast } from "@/shared/components/ui/toast";
 import Modal from "@/shared/components/ui/Modal";
+import { ShortcutTooltip } from "@/shared/components/ui/ShortcutTooltip";
 import { cn } from "@/shared/lib/utils";
 import { useMembers } from "@/shared/hooks/useMembers";
 import {
@@ -23,18 +24,7 @@ import {
   useRemoveTeamMember,
   useDepartments,
 } from "@/apps/org-structure/hooks/useOrg";
-
-const TEAM_COLORS = [
-  "#8b5cf6", "#6366f1", "#3b82f6", "#10b981",
-  "#f59e0b", "#ef4444", "#06b6d4", "#ec4899",
-];
-
-function generateIdentifier(name) {
-  if (!name) return "";
-  const words = name.trim().split(/\s+/).filter(Boolean);
-  if (words.length === 1) return words[0].slice(0, 4).toUpperCase();
-  return words.map((w) => w[0]).join("").slice(0, 6).toUpperCase();
-}
+import { ORG_COLORS, generateIdentifier } from "@/apps/org-structure/constants";
 
 // ── Team card ─────────────────────────────────────────────────────────────────
 function TeamCard({ team, isSelected, onClick }) {
@@ -310,7 +300,7 @@ const BLANK = {
   name: "",
   identifier: "",
   description: "",
-  color: TEAM_COLORS[0],
+  color: ORG_COLORS[0],
   department_id: null,
   lead_id: null,
 };
@@ -422,7 +412,7 @@ function TeamFormModal({ isOpen, onClose, initialData, departments, members, wor
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-muted-foreground">Color</label>
           <div className="flex gap-2">
-            {TEAM_COLORS.map((c) => (
+            {ORG_COLORS.map((c) => (
               <button
                 key={c}
                 type="button"
@@ -504,6 +494,16 @@ export default function TeamsPage() {
   const openEdit = (team) => {
     setModal({ mode: "edit", team });
   };
+
+  useEffect(() => {
+    const handleKey = (e) => {
+      if (modal) return;
+      if (e.target.matches("input,textarea,[contenteditable]")) return;
+      if (e.key === "n") { e.preventDefault(); openCreate(); }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [modal]);
   const closeModal = () => setModal(null);
 
   const handleDelete = async () => {
@@ -533,9 +533,11 @@ export default function TeamsPage() {
             {teams.length} team{teams.length !== 1 ? "s" : ""} in this workspace
           </p>
         </div>
-        <Button onClick={openCreate}>
-          <Plus className="w-4 h-4 mr-1.5" /> New Team
-        </Button>
+        <ShortcutTooltip label="New Team" shortcut="n" side="bottom">
+          <Button onClick={openCreate}>
+            <Plus className="w-4 h-4 mr-1.5" /> New Team
+          </Button>
+        </ShortcutTooltip>
       </div>
 
       {/* Content */}

@@ -35,7 +35,6 @@ class MiniMemberSerializer(serializers.ModelSerializer):
     user = MiniUserSerializer(read_only=True)
 
     class Meta:
-        from workspaces.models import WorkspaceMember
         model = WorkspaceMember
         fields = ["id", "user", "role"]
 
@@ -146,8 +145,10 @@ class TeamMemberSerializer(serializers.ModelSerializer):
 
 class OrgProfileSerializer(serializers.ModelSerializer):
     id = serializers.UUIDField(read_only=True)
+    member = MiniMemberSerializer(read_only=True)
     job_title = MiniJobTitleSerializer(read_only=True)
     job_title_id = serializers.UUIDField(write_only=True, required=False, allow_null=True)
+    approved_by = MiniMemberSerializer(read_only=True)
     departments = serializers.SerializerMethodField()
     teams = serializers.SerializerMethodField()
     manager = serializers.SerializerMethodField()
@@ -156,24 +157,44 @@ class OrgProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrgProfile
         fields = [
-            "id", "job_title", "job_title_id", "employment_type",
+            "id", "member",
+            "job_title", "job_title_id", "employment_type",
             "employee_id", "start_date", "location", "bio",
+            "status", "submitted_at", "approved_at", "approved_by",
             "departments", "teams", "manager", "direct_reports_count",
             "updated_at",
         ]
-        read_only_fields = ["id", "updated_at", "departments", "teams", "manager", "direct_reports_count"]
+        read_only_fields = [
+            "id", "member", "status", "submitted_at", "approved_at", "approved_by",
+            "updated_at", "departments", "teams", "manager", "direct_reports_count",
+        ]
+
+    # Each of the four methods below prefers a bulk-prefetched map passed in via
+    # context (see `bulk_relations_context()`) and falls back to a per-object query
+    # only when serializing a single profile, where one extra query is cheap. List
+    # views MUST supply the context maps — without them this becomes an N+1 (4
+    # queries per row) once the list has more than a couple of profiles.
 
     def get_departments(self, obj):
+        bulk = self.context.get("departments_by_member")
+        if bulk is not None:
+            return bulk.get(obj.member_id, [])
         from .models import DepartmentMember
         memberships = DepartmentMember.objects.filter(member=obj.member).select_related("department")
         return [{"id": str(dm.department.id), "name": dm.department.name, "color": dm.department.color} for dm in memberships]
 
     def get_teams(self, obj):
+        bulk = self.context.get("teams_by_member")
+        if bulk is not None:
+            return bulk.get(obj.member_id, [])
         from .models import TeamMember
         memberships = TeamMember.objects.filter(member=obj.member).select_related("team")
         return [{"id": str(tm.team.id), "name": tm.team.name, "color": tm.team.color} for tm in memberships]
 
     def get_manager(self, obj):
+        bulk = self.context.get("manager_by_member")
+        if bulk is not None:
+            return bulk.get(obj.member_id)
         from .models import ReportingLine
         line = ReportingLine.objects.filter(report=obj.member).select_related("manager", "manager__user").first()
         if not line:
@@ -182,8 +203,55 @@ class OrgProfileSerializer(serializers.ModelSerializer):
         return {"id": str(mgr.id), "name": mgr.user.full_name, "email": mgr.user.email}
 
     def get_direct_reports_count(self, obj):
+        bulk = self.context.get("reports_count_by_member")
+        if bulk is not None:
+            return bulk.get(obj.member_id, 0)
         from .models import ReportingLine
         return ReportingLine.objects.filter(manager=obj.member).count()
+
+
+def bulk_relations_context(members):
+    """Build the departments/teams/manager/direct_reports_count maps `OrgProfileSerializer`
+    needs, in 4 queries total instead of 4 per profile. Pass the result as extra
+    context to `OrgProfileSerializer(profiles, many=True, context={...})`.
+    """
+    from collections import defaultdict
+    from django.db.models import Count
+    from .models import DepartmentMember, TeamMember
+
+    member_ids = [m.id for m in members]
+
+    departments_by_member = defaultdict(list)
+    for dm in DepartmentMember.objects.filter(member_id__in=member_ids).select_related("department"):
+        departments_by_member[dm.member_id].append(
+            {"id": str(dm.department_id), "name": dm.department.name, "color": dm.department.color}
+        )
+
+    teams_by_member = defaultdict(list)
+    for tm in TeamMember.objects.filter(member_id__in=member_ids).select_related("team"):
+        teams_by_member[tm.member_id].append(
+            {"id": str(tm.team_id), "name": tm.team.name, "color": tm.team.color}
+        )
+
+    manager_by_member = {}
+    for line in ReportingLine.objects.filter(report_id__in=member_ids).select_related("manager", "manager__user"):
+        mgr = line.manager
+        manager_by_member[line.report_id] = {"id": str(mgr.id), "name": mgr.user.full_name, "email": mgr.user.email}
+
+    reports_count_by_member = defaultdict(int)
+    for row in (
+        ReportingLine.objects.filter(manager_id__in=member_ids)
+        .values("manager_id")
+        .annotate(count=Count("id"))
+    ):
+        reports_count_by_member[row["manager_id"]] = row["count"]
+
+    return {
+        "departments_by_member": departments_by_member,
+        "teams_by_member": teams_by_member,
+        "manager_by_member": manager_by_member,
+        "reports_count_by_member": reports_count_by_member,
+    }
 
 
 class ReportingLineSerializer(serializers.ModelSerializer):

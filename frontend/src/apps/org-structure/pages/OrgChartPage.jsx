@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import { useParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ZoomIn,
   ZoomOut,
@@ -9,12 +10,13 @@ import {
   Building2,
   X,
   GitBranch,
+  UserMinus,
 } from "lucide-react";
 import { Loader } from "@/shared/components/ui/Loader";
 import { EmptyState } from "@/shared/components/ui/empty-state";
 import { Avatar } from "@/shared/components/ui/avatar";
 import { cn } from "@/shared/lib/utils";
-import { useOrgChart } from "@/apps/org-structure/hooks/useOrg";
+import { useOrgChart, useDeleteReportingLine } from "@/apps/org-structure/hooks/useOrg";
 import { useMembers } from "@/shared/hooks/useMembers";
 import { usePermission } from "@/contexts/PermissionsContext";
 import api from "@/shared/lib/api";
@@ -209,6 +211,11 @@ function OrgNode({ node, x, y, zoom, isSelected, onSelect, onDragStart, isAdmin,
         </div>
       </foreignObject>
 
+      {/* Pending-review indicator */}
+      {node.onboarding_status === "submitted" && (
+        <circle cx={NODE_W - 10} cy={10} r={5} fill="#f59e0b" />
+      )}
+
       {/* Collapse/expand toggle */}
       {hasChildren && (
         <g transform={`translate(${NODE_W / 2 - 9}, ${NODE_H - 9})`} onClick={() => onToggle(node.id)} style={{ cursor: "pointer" }}>
@@ -238,8 +245,13 @@ function Edge({ fromPos, toPos }) {
 }
 
 // ── Profile popover ───────────────────────────────────────────────────────────
-function NodePopover({ node, onClose, _isAdmin, _workspaceId, _members }) {
-  // const member = members.find((m) => m.id === node.id);
+function NodePopover({ node, onClose, isAdmin, onRemoveManager }) {
+  const STATUS_BADGE = {
+    submitted: { label: "Pending review", className: "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-400" },
+    approved: null,
+    draft: { label: "Incomplete profile", className: "bg-muted text-muted-foreground" },
+  };
+  const statusBadge = STATUS_BADGE[node.onboarding_status] ?? null;
 
   return (
     <div
@@ -261,6 +273,18 @@ function NodePopover({ node, onClose, _isAdmin, _workspaceId, _members }) {
             <p className="text-xs text-muted-foreground/70 mt-0.5">{node.job_title}</p>
           )}
         </div>
+
+        <div className="flex flex-wrap gap-1 justify-center">
+          <span className={cn("text-[10px] px-2 py-0.5 rounded font-medium", node.role === "admin" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+            {node.role}
+          </span>
+          {statusBadge && (
+            <span className={cn("text-[10px] px-2 py-0.5 rounded font-medium", statusBadge.className)}>
+              {statusBadge.label}
+            </span>
+          )}
+        </div>
+
         {node.departments?.length > 0 && (
           <div className="flex flex-wrap gap-1 justify-center">
             {node.departments.map((d) => (
@@ -279,9 +303,15 @@ function NodePopover({ node, onClose, _isAdmin, _workspaceId, _members }) {
             ))}
           </div>
         )}
-        <span className={cn("text-[10px] px-2 py-0.5 rounded font-medium", node.role === "admin" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
-          {node.role}
-        </span>
+
+        {isAdmin && node.manager_id && node.reporting_line_id && (
+          <button
+            onClick={() => onRemoveManager(node)}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-destructive transition-colors mt-1"
+          >
+            <UserMinus className="w-3.5 h-3.5" /> Remove manager
+          </button>
+        )}
       </div>
     </div>
   );
@@ -307,9 +337,21 @@ export default function OrgChartPage() {
   const { data, isLoading } = useOrgChart(workspaceId);
   const { data: members = [] } = useMembers(workspaceId);
   const { isOwner, can } = usePermission();
+  const qc = useQueryClient();
+  const deleteReportingLine = useDeleteReportingLine(workspaceId);
   const nodes = data?.nodes ?? [];
 
   const isAdmin = isOwner || can("org.manage");
+
+  const handleRemoveManager = useCallback(async (node) => {
+    if (!node.reporting_line_id) return;
+    try {
+      await deleteReportingLine.mutateAsync(node.reporting_line_id);
+      setSelectedNode(null);
+    } catch (err) {
+      console.error("Remove manager failed", err);
+    }
+  }, [deleteReportingLine]);
 
   // Pan / zoom state
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -390,7 +432,6 @@ export default function OrgChartPage() {
   const onMouseUp = useCallback(async (_e) => {
     panRef.current = null;
     if (drag && dragOver && dragOver !== drag.node.id && isAdmin) {
-      // Reparent: set reporting line
       try {
         const mgr = members.find((m) => m.id === dragOver);
         if (mgr) {
@@ -398,6 +439,7 @@ export default function OrgChartPage() {
             manager_id: dragOver,
             report_id: drag.node.id,
           });
+          qc.invalidateQueries({ queryKey: ["org-chart", workspaceId] });
         }
       } catch (err) {
         console.error("Reparent failed", err);
@@ -405,7 +447,7 @@ export default function OrgChartPage() {
     }
     setDrag(null);
     setDragOver(null);
-  }, [drag, dragOver, isAdmin, members, workspaceId]);
+  }, [drag, dragOver, isAdmin, members, workspaceId, qc]);
 
   const onWheel = useCallback((e) => {
     e.preventDefault();
@@ -617,8 +659,7 @@ export default function OrgChartPage() {
             node={selectedNode}
             onClose={() => setSelectedNode(null)}
             isAdmin={isAdmin}
-            workspaceId={workspaceId}
-            members={members}
+            onRemoveManager={handleRemoveManager}
           />
         )}
 

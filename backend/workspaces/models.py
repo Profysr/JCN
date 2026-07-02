@@ -106,6 +106,8 @@ class InboxItem(models.Model):
         TASK_COMMENTED = "task_commented", "commented on your task"
         TASK_MENTIONED = "task_mentioned", "mentioned you in a comment"
         APPROVAL_REQUESTED = "approval_requested", "requested your approval"
+        ORG_PROFILE_SUBMITTED = "org_profile_submitted", "submitted their org profile"
+        ORG_PROFILE_APPROVED = "org_profile_approved", "approved your org profile"
 
     class Status(models.TextChoices):
         UNREAD = "unread", "Unread"
@@ -119,6 +121,7 @@ class InboxItem(models.Model):
         COMMENTED = "commented", "Commented"
         APPROVED = "approved", "Approval"
         AUTOMATED = "automated", "Automated"
+        ORG = "org", "Org"
 
     id = UUIDv7Field()
     user = models.ForeignKey(

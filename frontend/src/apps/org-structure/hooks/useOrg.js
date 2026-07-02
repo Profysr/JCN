@@ -51,7 +51,7 @@ export const useDeleteDepartment = (workspaceId) =>
     deptsKey(workspaceId),
   );
 
-const _useDepartmentMembers = (workspaceId, deptId) =>
+export const useDepartmentMembers = (workspaceId, deptId) =>
   useQuery({
     queryKey: deptMemKey(workspaceId, deptId),
     queryFn: () =>
@@ -64,7 +64,7 @@ const _useDepartmentMembers = (workspaceId, deptId) =>
     staleTime: Infinity,
   });
 
-const _useAddDepartmentMember = (workspaceId, deptId) =>
+export const useAddDepartmentMember = (workspaceId, deptId) =>
   useInvalidatingMutation(
     (data) =>
       api
@@ -77,7 +77,7 @@ const _useAddDepartmentMember = (workspaceId, deptId) =>
     deptsKey(workspaceId),
   );
 
-const _useRemoveDepartmentMember = (workspaceId, deptId) =>
+export const useRemoveDepartmentMember = (workspaceId, deptId) =>
   useInvalidatingMutation(
     (membershipId) =>
       api.delete(
@@ -169,12 +169,28 @@ export const useJobTitles = (workspaceId) =>
     staleTime: Infinity,
   });
 
-const _useCreateJobTitle = (workspaceId) =>
+export const useCreateJobTitle = (workspaceId) =>
   useInvalidatingMutation(
     (data) =>
       api
         .post(`/api/workspaces/${workspaceId}/org/job-titles/`, data)
         .then((r) => r.data),
+    jobsKey(workspaceId),
+  );
+
+export const useUpdateJobTitle = (workspaceId) =>
+  useInvalidatingMutation(
+    ({ titleId, ...data }) =>
+      api
+        .patch(`/api/workspaces/${workspaceId}/org/job-titles/${titleId}/`, data)
+        .then((r) => r.data),
+    jobsKey(workspaceId),
+  );
+
+export const useDeleteJobTitle = (workspaceId) =>
+  useInvalidatingMutation(
+    (titleId) =>
+      api.delete(`/api/workspaces/${workspaceId}/org/job-titles/${titleId}/`),
     jobsKey(workspaceId),
   );
 
@@ -190,6 +206,8 @@ export const useOrgChart = (workspaceId) =>
 
 // ── Org Profile ───────────────────────────────────────────────────────────────
 const profileKey = (ws, memberId) => ["org-profile", ws, memberId];
+const myProfileKey = (ws) => ["org-my-profile", ws];
+const pendingProfilesKey = (ws) => ["org-pending-profiles", ws];
 
 export const useOrgProfile = (workspaceId, memberId) =>
   useQuery({
@@ -214,6 +232,91 @@ export const useUpdateOrgProfile = (workspaceId, memberId) => {
         .then((r) => r.data),
     onSuccess: (updated) => {
       qc.setQueryData(profileKey(workspaceId, memberId), updated);
+      qc.invalidateQueries({ queryKey: chartKey(workspaceId) });
+    },
+  });
+};
+
+// ── My Profile (self-service onboarding) ─────────────────────────────────────
+export const useMyOrgProfile = (workspaceId) =>
+  useQuery({
+    queryKey: myProfileKey(workspaceId),
+    queryFn: () =>
+      api
+        .get(`/api/workspaces/${workspaceId}/org/me/profile/`)
+        .then((r) => r.data),
+    enabled: !!workspaceId,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+  });
+
+export const useUpdateMyOrgProfile = (workspaceId) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data) =>
+      api
+        .patch(`/api/workspaces/${workspaceId}/org/me/profile/`, data)
+        .then((r) => r.data),
+    onSuccess: (updated) => {
+      qc.setQueryData(myProfileKey(workspaceId), updated);
+    },
+  });
+};
+
+export const useSubmitMyOrgProfile = (workspaceId) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api
+        .post(`/api/workspaces/${workspaceId}/org/me/profile/`)
+        .then((r) => r.data),
+    onSuccess: (updated) => {
+      qc.setQueryData(myProfileKey(workspaceId), updated);
+    },
+  });
+};
+
+// ── Pending Profiles (HR review queue) ───────────────────────────────────────
+export const usePendingProfiles = (workspaceId) =>
+  useQuery({
+    queryKey: pendingProfilesKey(workspaceId),
+    queryFn: () =>
+      api
+        .get(`/api/workspaces/${workspaceId}/org/profiles/pending/`)
+        .then((r) => r.data),
+    enabled: !!workspaceId,
+    staleTime: 60 * 1000,
+  });
+
+export const useApproveProfile = (workspaceId) =>
+  useInvalidatingMutation(
+    (profileId) =>
+      api
+        .post(`/api/workspaces/${workspaceId}/org/profiles/${profileId}/approve/`)
+        .then((r) => r.data),
+    pendingProfilesKey(workspaceId),
+    chartKey(workspaceId),
+  );
+
+export const useBulkApproveProfiles = (workspaceId) =>
+  useInvalidatingMutation(
+    (profileIds) =>
+      api
+        .post(`/api/workspaces/${workspaceId}/org/profiles/bulk-approve/`, {
+          profile_ids: profileIds,
+        })
+        .then((r) => r.data),
+    pendingProfilesKey(workspaceId),
+    chartKey(workspaceId),
+  );
+
+// ── Reporting Lines ───────────────────────────────────────────────────────────
+export const useDeleteReportingLine = (workspaceId) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (lineId) =>
+      api.delete(`/api/workspaces/${workspaceId}/org/reporting-lines/${lineId}/`),
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: chartKey(workspaceId) });
     },
   });
