@@ -8,7 +8,6 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from core.fields import parse_id, format_id
 from .importers.registry import SUPPORTED_SOURCES, get_parser
 from .models import (
     ImportJob,
@@ -38,40 +37,27 @@ from .tasks import deliver_webhook, run_import
 
 
 # ── SHARED PRODUCTION UTILITIES ──────────────────────────────────────────────────
-def _parse_pk(value):
-    """Accepts a prefixed ID (e.g. 'tsk_018e...') or a plain UUID string."""
-    try:
-        return parse_id(value)
-    except (ValueError, AttributeError, TypeError):
-        return value
-
-
 def _get_workspace(workspace_id, user):
     """
     Safely retrieves a workspace ensuring the requesting user is a member.
     Prevents side-channel leaks by raising a 404 if the workspace doesn't exist
     OR if the user has no access to it.
     """
-    return get_object_or_404(Workspace, id=_parse_pk(workspace_id), members__user=user)
+    return get_object_or_404(Workspace, id=workspace_id, members__user=user)
 
 
 def _is_workspace_admin(workspace, user) -> bool:
-    """Returns True if the user is the workspace owner or has admin-level permissions."""
-    from .rbac import has_workspace_permission
+    """Owner or holder of settings.manage. Thin alias over the central definition."""
+    from .access import is_workspace_admin
 
-    return workspace.owner_id == user.pk or has_workspace_permission(
-        user, workspace, "settings.manage"
-    )
+    return is_workspace_admin(user, workspace)
 
 
 def _require_admin(workspace, user):
-    """Raises PermissionDenied if the user is not the owner or does not have admin permissions."""
-    from .rbac import has_workspace_permission
+    """Raises PermissionDenied unless the user is a workspace admin."""
+    from .access import require_workspace_admin
 
-    if workspace.owner_id == user.pk:
-        return
-    if not has_workspace_permission(user, workspace, "settings.manage"):
-        raise PermissionDenied("Only workspace admins can perform this action.")
+    require_workspace_admin(user, workspace)
 
 
 # ==============================================================================
@@ -152,7 +138,7 @@ class WorkspaceMemberDetailView(APIView):
     def _get_member_and_workspace(self, workspace_id, member_id, user):
         workspace = _get_workspace(workspace_id, user)
         member = get_object_or_404(
-            WorkspaceMember, workspace=workspace, id=_parse_pk(member_id)
+            WorkspaceMember, workspace=workspace, id=member_id
         )
         return member, workspace
 
@@ -245,7 +231,7 @@ class InviteDetailView(APIView):
                 "role": invite.role,
                 "workspace": {
                     "name": invite.workspace.name,
-                    "id": format_id(invite.workspace.PREFIX, invite.workspace.id),
+                    "id": str(invite.workspace.id),
                 },
                 "invited_by": invite.invited_by.full_name or invite.invited_by.email,
             }
@@ -318,7 +304,7 @@ class InboxListView(APIView):
 
     def _filter_queryset(self, qs, tab, workspace_id=None, event_type=None):
         if workspace_id:
-            qs = qs.filter(workspace__id=_parse_pk(workspace_id))
+            qs = qs.filter(workspace__id=workspace_id)
         if event_type:
             qs = qs.filter(event_type=event_type)
 
@@ -345,7 +331,7 @@ class InboxUnreadCountView(APIView):
         workspace_id = request.query_params.get("workspace")
         qs = InboxItem.objects.filter(user=request.user, status=InboxItem.Status.UNREAD)
         if workspace_id:
-            qs = qs.filter(workspace__id=_parse_pk(workspace_id))
+            qs = qs.filter(workspace__id=workspace_id)
         return Response({"count": qs.count()})
 
 
@@ -353,7 +339,7 @@ class InboxItemUpdateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def patch(self, request, item_id):
-        item = get_object_or_404(InboxItem, id=_parse_pk(item_id), user=request.user)
+        item = get_object_or_404(InboxItem, id=item_id, user=request.user)
         serializer = InboxItemSerializer(item, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
@@ -375,7 +361,7 @@ class InboxBulkUpdateView(APIView):
             )
 
         qs = InboxItem.objects.filter(
-            user=request.user, id__in=[_parse_pk(i) for i in ids]
+            user=request.user, id__in=ids
         )
 
         if action == "read":
@@ -487,7 +473,7 @@ class APIKeyDetailView(APIView):
         ws = _get_workspace(workspace_id, request.user)
         _require_admin(ws, request.user)
 
-        key = get_object_or_404(WorkspaceAPIKey, id=_parse_pk(key_id), workspace=ws)
+        key = get_object_or_404(WorkspaceAPIKey, id=key_id, workspace=ws)
         key.is_active = False
         key.save(update_fields=["is_active"])
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -526,7 +512,7 @@ class WebhookDetailView(APIView):
         ws = _get_workspace(workspace_id, request.user)
         _require_admin(ws, request.user)
 
-        hook = get_object_or_404(Webhook, id=_parse_pk(hook_id), workspace=ws)
+        hook = get_object_or_404(Webhook, id=hook_id, workspace=ws)
         s = WebhookSerializer(hook, data=request.data, partial=True)
         s.is_valid(raise_exception=True)
         updated = s.save()
@@ -536,7 +522,7 @@ class WebhookDetailView(APIView):
         ws = _get_workspace(workspace_id, request.user)
         _require_admin(ws, request.user)
 
-        get_object_or_404(Webhook, id=_parse_pk(hook_id), workspace=ws).delete()
+        get_object_or_404(Webhook, id=hook_id, workspace=ws).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -546,7 +532,7 @@ class WebhookTestView(APIView):
     def post(self, request, workspace_id, hook_id):
         ws = _get_workspace(workspace_id, request.user)
         _require_admin(ws, request.user)
-        hook = get_object_or_404(Webhook, id=_parse_pk(hook_id), workspace=ws)
+        hook = get_object_or_404(Webhook, id=hook_id, workspace=ws)
 
         deliver_webhook.delay(
             str(hook.id),
@@ -567,7 +553,7 @@ class WebhookDeliveryListView(APIView):
         ws = _get_workspace(workspace_id, request.user)
         _require_admin(ws, request.user)
 
-        hook = get_object_or_404(Webhook, id=_parse_pk(hook_id), workspace=ws)
+        hook = get_object_or_404(Webhook, id=hook_id, workspace=ws)
         deliveries = hook.deliveries.all()[:50]
         return Response(WebhookDeliverySerializer(deliveries, many=True).data)
 
@@ -668,7 +654,7 @@ class ImportJobDetailView(APIView):
 
     def _get_job(self, workspace_id, job_id, user):
         ws = _get_workspace(workspace_id, user)
-        return get_object_or_404(ImportJob, id=_parse_pk(job_id), workspace=ws)
+        return get_object_or_404(ImportJob, id=job_id, workspace=ws)
 
     def get(self, request, workspace_id, job_id):
         job = self._get_job(workspace_id, job_id, request.user)
@@ -698,7 +684,7 @@ class ImportJobRunView(APIView):
 
     def post(self, request, workspace_id, job_id):
         ws = _get_workspace(workspace_id, request.user)
-        job = get_object_or_404(ImportJob, id=_parse_pk(job_id), workspace=ws)
+        job = get_object_or_404(ImportJob, id=job_id, workspace=ws)
 
         if job.status not in (ImportJob.Status.MAPPED, ImportJob.Status.FAILED):
             return Response(
@@ -716,7 +702,7 @@ class ImportJobRollbackView(APIView):
         from projects.models import Task
 
         ws = _get_workspace(workspace_id, request.user)
-        job = get_object_or_404(ImportJob, id=_parse_pk(job_id), workspace=ws)
+        job = get_object_or_404(ImportJob, id=job_id, workspace=ws)
 
         serializer = ImportJobSerializer(job)
         if not serializer.data["can_rollback"]:
@@ -749,7 +735,7 @@ class WorkspacePermissionsView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_id):
-        from .permissions import get_enabled_apps, get_enabled_permissions
+        from .access import get_enabled_apps, get_enabled_permissions
 
         workspace = _get_workspace(workspace_id, request.user)
         return Response(
@@ -830,7 +816,7 @@ class CustomRoleDetailView(APIView):
         from .models import CustomRole
 
         workspace = _get_workspace(workspace_id, user)
-        role = get_object_or_404(CustomRole, workspace=workspace, id=_parse_pk(role_id))
+        role = get_object_or_404(CustomRole, workspace=workspace, id=role_id)
         return role, workspace
 
     def get(self, request, workspace_id, role_id):
@@ -910,7 +896,7 @@ class MemberAssignRoleView(APIView):
         _require_admin(workspace, request.user)
 
         member = get_object_or_404(
-            WorkspaceMember, workspace=workspace, id=_parse_pk(member_id)
+            WorkspaceMember, workspace=workspace, id=member_id
         )
 
         serializer = RoleAssignmentSerializer(
@@ -992,17 +978,9 @@ class MemberBulkAssignRoleView(APIView):
 
         from .models import CustomRole
 
-        role = get_object_or_404(CustomRole, workspace=workspace, id=_parse_pk(role_id))
+        role = get_object_or_404(CustomRole, workspace=workspace, id=role_id)
 
-        parsed_ids = []
-        for mid in member_ids:
-            try:
-                parsed_ids.append(_parse_pk(mid))
-            except Exception:
-                return Response(
-                    {"detail": f"Invalid member id: {mid}"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+        parsed_ids = list(member_ids)
 
         members = list(
             WorkspaceMember.objects.filter(

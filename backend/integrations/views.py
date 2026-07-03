@@ -2,12 +2,10 @@ import logging
 import requests
 from django.shortcuts import get_object_or_404
 from rest_framework import permissions, status
-from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from core.fields import parse_id
-from workspaces.models import Workspace
+from workspaces import access
 from .models import GoogleChatIntegration, IntegrationChannelMapping, TeamsIntegration
 from .serializers import (
     GoogleChatIntegrationSerializer,
@@ -34,23 +32,15 @@ ALL_EVENTS = [
 # ==============================================================================
 
 
-def _parse_pk(value):
-    """Safely handles custom prefixed IDs or native UUID strings."""
-    try:
-        return parse_id(value)
-    except (ValueError, AttributeError, TypeError):
-        return value
+def _read_ws(request, workspace_id):
+    """Integration reads (status, config view, mapping list) — any member, read scope."""
+    return access.authorize(request, workspace_id, scope="read")
 
 
-def _get_workspace(workspace_id, user):
-    """
-    Fetches a workspace by its parsed ID and verifies user access.
-    Raises 404 if the workspace doesn't exist, 403 if they are not a member.
-    """
-    ws = get_object_or_404(Workspace, id=_parse_pk(workspace_id))
-    if not ws.members.filter(user=user).exists():
-        raise PermissionDenied("You do not have permission to access this workspace.")
-    return ws
+def _admin_ws(request, workspace_id):
+    """Integration config changes — workspace admin, admin scope. Outbound webhook
+    delivery config is workspace-admin trust (see backend/ACCESS.md)."""
+    return access.authorize(request, workspace_id, admin=True, scope="admin")
 
 
 def _ensure_default_mapping(ws, platform):
@@ -111,7 +101,7 @@ class IntegrationStatusView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_id):
-        ws = _get_workspace(workspace_id, request.user)
+        ws = _read_ws(request, workspace_id)
         return Response(
             {
                 "teams": _get_teams_data_or_none(ws),
@@ -130,11 +120,11 @@ class TeamsIntegrationView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_id):
-        ws = _get_workspace(workspace_id, request.user)
+        ws = _read_ws(request, workspace_id)
         return Response(_get_teams_data_or_none(ws), status=status.HTTP_200_OK)
 
     def put(self, request, workspace_id):
-        ws = _get_workspace(workspace_id, request.user)
+        ws = _admin_ws(request, workspace_id)
         s = TeamsIntegrationSerializer(data=request.data)
         s.is_valid(raise_exception=True)
         integration = s.save(workspace=ws)
@@ -145,7 +135,7 @@ class TeamsIntegrationView(APIView):
         )
 
     def delete(self, request, workspace_id):
-        ws = _get_workspace(workspace_id, request.user)
+        ws = _admin_ws(request, workspace_id)
         TeamsIntegration.objects.filter(workspace=ws).delete()
         IntegrationChannelMapping.objects.filter(
             workspace=ws, platform=IntegrationChannelMapping.Platform.TEAMS
@@ -157,7 +147,7 @@ class TeamsTestView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, workspace_id):
-        ws = _get_workspace(workspace_id, request.user)
+        ws = _admin_ws(request, workspace_id)
         try:
             integration = ws.teams_integration
         except TeamsIntegration.DoesNotExist:
@@ -192,11 +182,11 @@ class GoogleChatIntegrationView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_id):
-        ws = _get_workspace(workspace_id, request.user)
+        ws = _read_ws(request, workspace_id)
         return Response(_get_gchat_data_or_none(ws), status=status.HTTP_200_OK)
 
     def put(self, request, workspace_id):
-        ws = _get_workspace(workspace_id, request.user)
+        ws = _admin_ws(request, workspace_id)
         s = GoogleChatIntegrationSerializer(data=request.data)
         s.is_valid(raise_exception=True)
         integration = s.save(workspace=ws)
@@ -207,7 +197,7 @@ class GoogleChatIntegrationView(APIView):
         )
 
     def delete(self, request, workspace_id):
-        ws = _get_workspace(workspace_id, request.user)
+        ws = _admin_ws(request, workspace_id)
         GoogleChatIntegration.objects.filter(workspace=ws).delete()
         IntegrationChannelMapping.objects.filter(
             workspace=ws, platform=IntegrationChannelMapping.Platform.GOOGLE_CHAT
@@ -219,7 +209,7 @@ class GoogleChatTestView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, workspace_id):
-        ws = _get_workspace(workspace_id, request.user)
+        ws = _admin_ws(request, workspace_id)
         try:
             integration = ws.google_chat_integration
         except GoogleChatIntegration.DoesNotExist:
@@ -248,7 +238,7 @@ class ChannelMappingListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_id):
-        ws = _get_workspace(workspace_id, request.user)
+        ws = _read_ws(request, workspace_id)
         qs = IntegrationChannelMapping.objects.filter(workspace=ws).select_related(
             "board"
         )
@@ -263,7 +253,7 @@ class ChannelMappingListCreateView(APIView):
         )
 
     def post(self, request, workspace_id):
-        ws = _get_workspace(workspace_id, request.user)
+        ws = _admin_ws(request, workspace_id)
         s = IntegrationChannelMappingSerializer(data=request.data)
         s.is_valid(raise_exception=True)
         return Response(
@@ -275,14 +265,14 @@ class ChannelMappingListCreateView(APIView):
 class ChannelMappingDetailView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
-    def _get_mapping(self, workspace_id, mapping_id, user):
-        ws = _get_workspace(workspace_id, user)
+    def _get_mapping(self, request, workspace_id, mapping_id):
+        ws = _admin_ws(request, workspace_id)
         return get_object_or_404(
-            IntegrationChannelMapping, id=_parse_pk(mapping_id), workspace=ws
+            IntegrationChannelMapping, id=mapping_id, workspace=ws
         )
 
     def patch(self, request, workspace_id, mapping_id):
-        mapping = self._get_mapping(workspace_id, mapping_id, request.user)
+        mapping = self._get_mapping(request, workspace_id, mapping_id)
         s = IntegrationChannelMappingSerializer(
             mapping, data=request.data, partial=True
         )
@@ -293,5 +283,5 @@ class ChannelMappingDetailView(APIView):
         )
 
     def delete(self, request, workspace_id, mapping_id):
-        self._get_mapping(workspace_id, mapping_id, request.user).delete()
+        self._get_mapping(request, workspace_id, mapping_id).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)

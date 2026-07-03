@@ -15,7 +15,6 @@ from django.utils import timezone
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from workspaces.models import Workspace, WorkspaceMember, InboxItem
-from core.fields import parse_id, format_id
 import datetime
 import csv
 import re
@@ -94,35 +93,27 @@ from ..serializers import (
 from ..permissions import has_project_permission, log_audit
 
 
-def _parse_pk(value):
-    """Accepts a prefixed ID (e.g. 'brd_018e...') or a plain UUID string."""
-    try:
-        return parse_id(value)
-    except (ValueError, AttributeError, TypeError):
-        return value
-
-
 def get_workspace_for_user(workspace_id, user):
-    return get_object_or_404(Workspace, id=_parse_pk(workspace_id), members__user=user)
+    return get_object_or_404(Workspace, id=workspace_id, members__user=user)
 
 
 def _is_workspace_admin(workspace, user):
-    from workspaces.rbac import has_workspace_permission
-    return workspace.owner_id == user.pk or has_workspace_permission(user, workspace, "board.admin")
+    from workspaces.access import has_perm
+    return workspace.owner_id == user.pk or has_perm(user, workspace, "board.admin")
 
 
 # ── Shared object-lookup helpers ──────────────────────────────────────────────
 def _get_board(workspace_id, board_id, user):
     """Return a Board that belongs to a workspace the user is a member of."""
     workspace = get_workspace_for_user(workspace_id, user)
-    return get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
+    return get_object_or_404(Board, id=board_id, workspace=workspace)
 
 
 def _get_task(workspace_id, board_id, task_id, user, *, qs=None):
     """Return a Task within the given board. Pass qs= to attach eager-loading."""
     board = _get_board(workspace_id, board_id, user)
     base = qs if qs is not None else Task.objects
-    return get_object_or_404(base, id=_parse_pk(task_id), board=board)
+    return get_object_or_404(base, id=task_id, board=board)
 
 
 def _get_subtask(workspace_id, board_id, task_id, subtask_id, user):
@@ -330,7 +321,7 @@ def _fire_webhooks(workspace_id, event_type, data):
 
         # Only fetch webhooks that are active; inactive ones are soft-disabled.
         hooks = Webhook.objects.filter(
-            workspace__id=_parse_pk(workspace_id),
+            workspace__id=workspace_id,
             is_active=True,
         )
 
@@ -377,7 +368,7 @@ def notify(recipient, actor, verb, workspace, task):
         "task_id": str(task.id),
         "task_title": task.title,
         "board_id": str(task.board_id),
-        "workspace_id": format_id(workspace.PREFIX, workspace.id),
+        "workspace_id": str(workspace.id),
     }
 
     inbox_item = InboxItem.objects.create(
@@ -397,7 +388,7 @@ def notify(recipient, actor, verb, workspace, task):
         str(recipient.id),
         "notification.created",
         {
-            "id": format_id(inbox_item.PREFIX, inbox_item.id),
+            "id": str(inbox_item.id),
             "actor_id": str(actor.id),
             "actor_name": actor.full_name or actor.email,
             "verb": verb,

@@ -59,6 +59,22 @@ class DepartmentSerializer(serializers.ModelSerializer):
     def get_member_count(self, obj):
         return len(obj.memberships.all())
 
+    def validate_head_id(self, value):
+        if value is None:
+            return value
+        workspace = self.context.get("workspace")
+        if workspace and not WorkspaceMember.objects.filter(id=value, workspace=workspace).exists():
+            raise serializers.ValidationError("Not a member of this workspace.")
+        return value
+
+    def validate_parent_id(self, value):
+        if value is None:
+            return value
+        workspace = self.context.get("workspace")
+        if workspace and not Department.objects.filter(id=value, workspace=workspace).exists():
+            raise serializers.ValidationError("Not a department in this workspace.")
+        return value
+
     def create(self, validated_data):
         validated_data["workspace"] = self.context["workspace"]
         validated_data["created_by"] = self.context["request"].user
@@ -81,6 +97,12 @@ class DepartmentMemberSerializer(serializers.ModelSerializer):
         # department (set by list/create views) to avoid a per-row FK fetch.
         dept = self.context.get("department") or obj.department
         return dept.head_id == obj.member_id
+
+    def validate_member_id(self, value):
+        dept = self.context["department"]
+        if not WorkspaceMember.objects.filter(id=value, workspace=dept.workspace).exists():
+            raise serializers.ValidationError("Not a member of this workspace.")
+        return value
 
     def create(self, validated_data):
         validated_data["department"] = self.context["department"]
@@ -115,6 +137,22 @@ class TeamSerializer(serializers.ModelSerializer):
     def get_member_count(self, obj):
         return len(obj.memberships.all())
 
+    def validate_lead_id(self, value):
+        if value is None:
+            return value
+        workspace = self.context.get("workspace")
+        if workspace and not WorkspaceMember.objects.filter(id=value, workspace=workspace).exists():
+            raise serializers.ValidationError("Not a member of this workspace.")
+        return value
+
+    def validate_department_id(self, value):
+        if value is None:
+            return value
+        workspace = self.context.get("workspace")
+        if workspace and not Department.objects.filter(id=value, workspace=workspace).exists():
+            raise serializers.ValidationError("Not a department in this workspace.")
+        return value
+
     def create(self, validated_data):
         validated_data["workspace"] = self.context["workspace"]
         validated_data["created_by"] = self.context["request"].user
@@ -137,6 +175,12 @@ class TeamMemberSerializer(serializers.ModelSerializer):
         # (set by list/create views) to avoid a per-row FK fetch.
         team = self.context.get("team") or obj.team
         return team.lead_id == obj.member_id
+
+    def validate_member_id(self, value):
+        team = self.context["team"]
+        if not WorkspaceMember.objects.filter(id=value, workspace=team.workspace).exists():
+            raise serializers.ValidationError("Not a member of this workspace.")
+        return value
 
     def create(self, validated_data):
         validated_data["team"] = self.context["team"]
@@ -168,6 +212,14 @@ class OrgProfileSerializer(serializers.ModelSerializer):
             "id", "member", "status", "submitted_at", "approved_at", "approved_by",
             "updated_at", "departments", "teams", "manager", "direct_reports_count",
         ]
+
+    def validate_job_title_id(self, value):
+        if value is None or self.instance is None:
+            return value
+        workspace = self.instance.member.workspace
+        if not JobTitle.objects.filter(id=value, workspace=workspace).exists():
+            raise serializers.ValidationError("Not a job title in this workspace.")
+        return value
 
     # Each of the four methods below prefers a bulk-prefetched map passed in via
     # context (see `bulk_relations_context()`) and falls back to a per-object query
@@ -273,6 +325,14 @@ class ReportingLineSerializer(serializers.ModelSerializer):
 
         if manager_id == report_id:
             raise serializers.ValidationError("A member cannot report to themselves.")
+
+        # One manager per report (unique_together on workspace+report). Check
+        # explicitly so a second assignment returns a clean 400 instead of the
+        # IntegrityError (500) the DB constraint would otherwise raise.
+        if ReportingLine.objects.filter(workspace=workspace, report_id=report_id).exists():
+            raise serializers.ValidationError(
+                {"report_id": "This member already has a manager. Delete the existing reporting line first."}
+            )
 
         # Both endpoints must be members of this workspace.
         valid_ids = set(

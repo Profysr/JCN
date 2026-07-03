@@ -107,6 +107,16 @@ RABBITMQ_URL = env("RABBITMQ_URL", default="amqp://guest:guest@localhost:5672//"
 # Redis — caching + rate limiting only (see projects/cache.py, DRF throttling).
 REDIS_URL = env("REDIS_URL", default="redis://localhost:6379")
 
+# Django cache framework → Redis. Backs DRF throttling (API-key rate limits) and
+# any use of django.core.cache. (projects/cache.py talks to Redis directly for its
+# own reaction/member caches.)
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": REDIS_URL,
+    }
+}
+
 # Channel layers broadcast messages between consumers. RabbitMQ fans out a WebSocket event to every subscribed consumer across all worker processes.
 CHANNEL_LAYERS = {
     "default": {
@@ -180,6 +190,14 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 50,
     # Tells drf-spectacular how to introspect views for OpenAPI schema generation
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    # Rate limiting — only API-key traffic is throttled (keyed on the key hash).
+    # JWT/browser requests are unaffected (see workspaces/throttling.py).
+    "DEFAULT_THROTTLE_CLASSES": [
+        "workspaces.throttling.APIKeyRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "api_key": env("API_KEY_THROTTLE_RATE", default="120/min"),
+    },
 }
 
 # JWT token lifetimes

@@ -9,7 +9,6 @@ import logging
 import requests
 from django.conf import settings
 from django.db import models
-from core.fields import format_id
 
 logger = logging.getLogger(__name__)
 
@@ -174,7 +173,7 @@ def fanout_notification(workspace, verb, task, actor):
 def _fanout(workspace, verb, task, actor):
     from integrations.models import IntegrationChannelMapping, TeamsIntegration, GoogleChatIntegration
 
-    workspace_id = format_id(workspace.PREFIX, workspace.id)
+    workspace_id = str(workspace.id)
 
     mappings = IntegrationChannelMapping.objects.filter(
         workspace=workspace,

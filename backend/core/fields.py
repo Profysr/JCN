@@ -25,68 +25,14 @@ def generate_uuid7():
     return _uuid_mod.UUID(int=i)
 
 
-def format_id(prefix: str, value) -> str:
-    """
-    Serialize a UUID to a prefixed string for API responses and logs.
-    Usage: format_id(Task.PREFIX, task.id)  →  "tsk_018e1a2b3c4d..."
-
-    The prefix is API-layer only — the DB stores a native 16-byte UUID.
-    """
-    if isinstance(value, _uuid_mod.UUID):
-        return f"{prefix}_{value.hex}"
-    return f"{prefix}_{_uuid_mod.UUID(str(value)).hex}"
-
-
-def parse_id(prefixed_id: str) -> _uuid_mod.UUID:
-    """
-    Parse a prefixed ID back to a UUID for DB lookups.
-    Usage: parse_id("tsk_018e1a2b3c4d...")  →  UUID("018e1a2b-...")
-
-    Raises ValueError if the string is not a valid prefixed ID.
-    """
-    if "_" not in prefixed_id:
-        raise ValueError(f"Not a prefixed ID: {prefixed_id!r}")
-    _, hex_part = prefixed_id.split("_", 1)
-    try:
-        return _uuid_mod.UUID(hex_part)
-    except ValueError:
-        raise ValueError(f"Invalid UUID in prefixed ID: {prefixed_id!r}")
-
-
-try:
-    from rest_framework import serializers as _drf
-
-    class PrefixedUUIDField(_drf.Field):
-        """
-        DRF field for model PKs.  Output: "tsk_018e...".  Input: accepts both
-        plain hex UUIDs and prefixed IDs — strips prefix before returning UUID.
-        Add to any ModelSerializer: id = PrefixedUUIDField(read_only=True)
-        """
-
-        def to_representation(self, value):
-            prefix = self.parent.Meta.model.PREFIX
-            return format_id(prefix, value)
-
-        def to_internal_value(self, data):
-            try:
-                if isinstance(data, str) and "_" in data:
-                    return parse_id(data)
-                return _uuid_mod.UUID(str(data))
-            except (ValueError, AttributeError):
-                raise _drf.ValidationError(f"Invalid ID: {data!r}")
-
-except ImportError:
-    pass
-
-
 class UUIDv7Field(models.UUIDField):
     """
     Drop-in replacement for UUIDField(primary_key=True, default=uuid.uuid4).
     Generates time-sortable UUIDv7 values so ORDER BY id == ORDER BY created_at
     with zero extra cost.
 
-    DB stores a native 16-byte UUID. Prefix lives on the model class (Model.PREFIX)
-    and is applied at the API layer via format_id() / parse_id().
+    DB stores a native 16-byte UUID, which is what the API exposes everywhere —
+    no prefixing is applied at any layer.
     """
 
     def __init__(self, *args, **kwargs):

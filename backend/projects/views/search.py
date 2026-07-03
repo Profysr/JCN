@@ -8,7 +8,6 @@ from django.utils import timezone
 from ..models import Board, Task
 from ..serializers import TaskSearchSerializer, BoardSearchSerializer
 from workspaces.models import WorkspaceMember
-from .helpers import _parse_pk
 
 _TASK_LIMIT_MAX = 25
 _TASK_LIMIT_DEFAULT = 25
@@ -84,9 +83,9 @@ def _apply_task_search_filters(qs, p):
     if p["status"]:
         qs = qs.filter(status__name__icontains=p["status"])
     if p["board_id"]:
-        qs = qs.filter(board_id=_parse_pk(p["board_id"]))
+        qs = qs.filter(board_id=p["board_id"])
     if p["sprint_id"]:
-        qs = qs.filter(sprint_id=_parse_pk(p["sprint_id"]))
+        qs = qs.filter(sprint_id=p["sprint_id"])
     if p["end_date"]:
         qs = qs.filter(Q(due_date__lte=p["end_date"]) | Q(due_date__isnull=True))
     if p["overdue"]:

@@ -6,15 +6,15 @@ from django.conf import settings
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import permissions, status
-from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from django.db import transaction
 from django.db.models import Count
 
-from workspaces.models import Workspace, WorkspaceMember
-from workspaces.permissions import require_app_access
+from workspaces.models import WorkspaceMember
+from workspaces import access
 from projects.views.helpers import notify
 from .models import Attendance, AttendancePolicy, EmployeeDocument, EmployeeNote, LeaveBalance, LeavePolicy, LeaveRequest
 from .serializers import (
@@ -44,27 +44,26 @@ MAX_DOC_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
 
 # ── Shared utilities ──────────────────────────────────────────────────────────
 
-def _get_workspace(workspace_id, user):
-    return get_object_or_404(Workspace, id=workspace_id, members__user=user)
-
-
 def _get_member(workspace, user):
     return get_object_or_404(WorkspaceMember, workspace=workspace, user=user)
 
 
-def _require_module(request, workspace):
-    require_app_access(request.user, workspace, "hr")
+# All access resolution lives in workspaces/access.py (see backend/ACCESS.md).
+# These thin helpers name the common HR gate combinations.
+
+def _view_ws(request, workspace_id):
+    """HR read — requires hr.view (implies HR app access) + a read scope."""
+    return access.authorize(request, workspace_id, perm="hr.view", scope="read")
 
 
-def _is_admin(workspace, user):
-    if workspace.owner == user:
-        return True
-    return WorkspaceMember.objects.filter(workspace=workspace, user=user, role="admin").exists()
+def _self_ws(request, workspace_id):
+    """Employee self-service (submit leave, clock in/out) — any HR-enabled member."""
+    return access.authorize(request, workspace_id, app="hr", scope="write")
 
 
-def _require_admin(workspace, user):
-    if not _is_admin(workspace, user):
-        raise PermissionDenied("Admin access required.")
+def _manage_ws(request, workspace_id, perm, scope="write"):
+    """HR management action gated on a specific fine-grained permission."""
+    return access.authorize(request, workspace_id, perm=perm, scope=scope)
 
 
 def _business_days(start, end):
@@ -107,15 +106,12 @@ class LeavePolicyListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_id):
-        workspace = _get_workspace(workspace_id, request.user)
-        _require_module(request, workspace)
+        workspace = _view_ws(request, workspace_id)
         policies = LeavePolicy.objects.filter(workspace=workspace)
         return Response(LeavePolicySerializer(policies, many=True).data)
 
     def post(self, request, workspace_id):
-        workspace = _get_workspace(workspace_id, request.user)
-        _require_module(request, workspace)
-        _require_admin(workspace, request.user)
+        workspace = _manage_ws(request, workspace_id, "hr.manage_leave")
         serializer = LeavePolicySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save(workspace=workspace)
@@ -125,23 +121,20 @@ class LeavePolicyListCreateView(APIView):
 class LeavePolicyDetailView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
-    def _get_policy(self, workspace_id, policy_id, user):
-        workspace = _get_workspace(workspace_id, user)
-        _require_module(request, workspace)
+    def _get_policy(self, request, workspace_id, policy_id):
+        workspace = _manage_ws(request, workspace_id, "hr.manage_leave")
         policy = get_object_or_404(LeavePolicy, id=policy_id, workspace=workspace)
         return workspace, policy
 
     def patch(self, request, workspace_id, policy_id):
-        workspace, policy = self._get_policy(workspace_id, policy_id, request.user)
-        _require_admin(workspace, request.user)
+        workspace, policy = self._get_policy(request, workspace_id, policy_id)
         serializer = LeavePolicySerializer(policy, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
 
     def delete(self, request, workspace_id, policy_id):
-        workspace, policy = self._get_policy(workspace_id, policy_id, request.user)
-        _require_admin(workspace, request.user)
+        workspace, policy = self._get_policy(request, workspace_id, policy_id)
         policy.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -152,15 +145,15 @@ class LeaveRequestListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_id):
-        workspace = _get_workspace(workspace_id, request.user)
-        _require_module(request, workspace)
+        workspace = _view_ws(request, workspace_id)
         member = _get_member(workspace, request.user)
 
         qs = LeaveRequest.objects.select_related(
             "employee__user", "policy", "approver"
         ).filter(employee__workspace=workspace)
 
-        if not _is_admin(workspace, request.user):
+        # Leave managers see every request; everyone else sees only their own.
+        if not access.has_perm(request.user, workspace, "hr.manage_leave"):
             qs = qs.filter(employee=member)
 
         status_filter = request.query_params.get("status")
@@ -176,8 +169,7 @@ class LeaveRequestListCreateView(APIView):
         return Response(LeaveRequestSerializer(qs, many=True).data)
 
     def post(self, request, workspace_id):
-        workspace = _get_workspace(workspace_id, request.user)
-        _require_module(request, workspace)
+        workspace = _self_ws(request, workspace_id)
         member = _get_member(workspace, request.user)
 
         serializer = LeaveRequestSerializer(data=request.data)
@@ -216,9 +208,8 @@ class LeaveRequestListCreateView(APIView):
             balance.pending_days = float(balance.pending_days) + days_requested
             balance.save(update_fields=["pending_days"])
 
-        # Notify admins
-        admins = WorkspaceMember.objects.filter(workspace=workspace, role="admin").select_related("user")
-        for admin_member in admins:
+        # Notify workspace admins (owner + settings.manage holders)
+        for admin_member in access.workspace_admins(workspace):
             if admin_member.user != request.user:
                 notify(
                     recipient=admin_member.user,
@@ -235,9 +226,7 @@ class LeaveRequestReviewView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, workspace_id, request_id):
-        workspace = _get_workspace(workspace_id, request.user)
-        _require_module(request, workspace)
-        _require_admin(workspace, request.user)
+        workspace = _manage_ws(request, workspace_id, "hr.manage_leave")
 
         leave_request = get_object_or_404(
             LeaveRequest.objects.select_related("employee__user", "policy"),
@@ -294,8 +283,7 @@ class LeaveBalanceListView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_id):
-        workspace = _get_workspace(workspace_id, request.user)
-        _require_module(request, workspace)
+        workspace = _view_ws(request, workspace_id)
         member = _get_member(workspace, request.user)
 
         current_year = timezone.localdate().year
@@ -303,7 +291,8 @@ class LeaveBalanceListView(APIView):
             "employee__user", "policy"
         ).filter(policy__workspace=workspace, year=current_year)
 
-        if not _is_admin(workspace, request.user):
+        # Leave managers see everyone's balances; everyone else sees only their own.
+        if not access.has_perm(request.user, workspace, "hr.manage_leave"):
             qs = qs.filter(employee=member)
 
         return Response(LeaveBalanceSerializer(qs, many=True).data)
@@ -315,8 +304,7 @@ class WhosOffView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_id):
-        workspace = _get_workspace(workspace_id, request.user)
-        _require_module(request, workspace)
+        workspace = _view_ws(request, workspace_id)
 
         today = timezone.localdate()
         window_end = today + timedelta(days=7)
@@ -366,15 +354,12 @@ class AttendancePolicyView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_id):
-        workspace = _get_workspace(workspace_id, request.user)
-        _require_module(request, workspace)
+        workspace = _view_ws(request, workspace_id)
         policy = _get_attendance_policy(workspace)
         return Response(AttendancePolicySerializer(policy).data)
 
     def patch(self, request, workspace_id):
-        workspace = _get_workspace(workspace_id, request.user)
-        _require_module(request, workspace)
-        _require_admin(workspace, request.user)
+        workspace = _manage_ws(request, workspace_id, "hr.manage_attendance")
         policy = _get_attendance_policy(workspace)
         serializer = AttendancePolicySerializer(policy, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
@@ -388,8 +373,7 @@ class ClockInView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, workspace_id):
-        workspace = _get_workspace(workspace_id, request.user)
-        _require_module(request, workspace)
+        workspace = _self_ws(request, workspace_id)
         member = _get_member(workspace, request.user)
 
         today = timezone.localdate()
@@ -417,8 +401,7 @@ class ClockOutView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, workspace_id):
-        workspace = _get_workspace(workspace_id, request.user)
-        _require_module(request, workspace)
+        workspace = _self_ws(request, workspace_id)
         member = _get_member(workspace, request.user)
 
         today = timezone.localdate()
@@ -447,9 +430,7 @@ class AttendanceListView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_id):
-        workspace = _get_workspace(workspace_id, request.user)
-        _require_module(request, workspace)
-        _require_admin(workspace, request.user)
+        workspace = _manage_ws(request, workspace_id, "hr.manage_attendance", scope="read")
 
         date_from, date_to = _parse_date_window(request)
         qs = Attendance.objects.select_related("employee__user").filter(
@@ -471,8 +452,7 @@ class MyAttendanceView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_id):
-        workspace = _get_workspace(workspace_id, request.user)
-        _require_module(request, workspace)
+        workspace = _view_ws(request, workspace_id)
         member = _get_member(workspace, request.user)
 
         date_from, date_to = _parse_date_window(request)
@@ -488,9 +468,7 @@ class AttendanceSummaryView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_id):
-        workspace = _get_workspace(workspace_id, request.user)
-        _require_module(request, workspace)
-        _require_admin(workspace, request.user)
+        workspace = _manage_ws(request, workspace_id, "hr.manage_attendance", scope="read")
 
         today = timezone.localdate()
         week_start = today - timedelta(days=today.weekday())
@@ -545,9 +523,7 @@ class AttendanceQRView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_id):
-        workspace = _get_workspace(workspace_id, request.user)
-        _require_module(request, workspace)
-        _require_admin(workspace, request.user)
+        workspace = _manage_ws(request, workspace_id, "hr.manage_attendance", scope="read")
 
         today = timezone.localdate()
         code = _make_qr_code(str(workspace_id), str(today))
@@ -575,8 +551,7 @@ class QRClockInView(APIView):
         if qr_date != timezone.localdate():
             raise ValidationError({"non_field_errors": "This QR code has expired."})
 
-        workspace = _get_workspace(workspace_id, request.user)
-        _require_module(request, workspace)
+        workspace = _self_ws(request, workspace_id)
         member = _get_member(workspace, request.user)
 
         now_time = timezone.localtime().time().replace(second=0, microsecond=0)
@@ -605,9 +580,7 @@ class HRDashboardView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_id):
-        workspace = _get_workspace(workspace_id, request.user)
-        _require_module(request, workspace)
-        _require_admin(workspace, request.user)
+        workspace = _manage_ws(request, workspace_id, "hr.manage_leave", scope="read")
 
         from organization.models import OrgProfile
         today = timezone.localdate()
@@ -722,17 +695,13 @@ class EmployeeDocumentListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_id, member_id):
-        workspace = _get_workspace(workspace_id, request.user)
-        _require_module(request, workspace)
-        _require_admin(workspace, request.user)
+        workspace = _manage_ws(request, workspace_id, "hr.manage_documents", scope="read")
         employee = get_object_or_404(WorkspaceMember, id=member_id, workspace=workspace)
         docs = EmployeeDocument.objects.filter(employee=employee).select_related("uploaded_by")
         return Response(EmployeeDocumentSerializer(docs, many=True).data)
 
     def post(self, request, workspace_id, member_id):
-        workspace = _get_workspace(workspace_id, request.user)
-        _require_module(request, workspace)
-        _require_admin(workspace, request.user)
+        workspace = _manage_ws(request, workspace_id, "hr.manage_documents")
         employee = get_object_or_404(WorkspaceMember, id=member_id, workspace=workspace)
 
         file_obj = request.FILES.get("file")
@@ -762,9 +731,7 @@ class EmployeeDocumentDetailView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def delete(self, request, workspace_id, member_id, doc_id):
-        workspace = _get_workspace(workspace_id, request.user)
-        _require_module(request, workspace)
-        _require_admin(workspace, request.user)
+        workspace = _manage_ws(request, workspace_id, "hr.manage_documents")
         doc = get_object_or_404(
             EmployeeDocument, id=doc_id, employee__workspace=workspace, employee_id=member_id
         )
@@ -779,17 +746,13 @@ class EmployeeNoteListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_id, member_id):
-        workspace = _get_workspace(workspace_id, request.user)
-        _require_module(request, workspace)
-        _require_admin(workspace, request.user)
+        workspace = _manage_ws(request, workspace_id, "hr.manage_notes", scope="read")
         employee = get_object_or_404(WorkspaceMember, id=member_id, workspace=workspace)
         notes = EmployeeNote.objects.filter(employee=employee).select_related("author")
         return Response(EmployeeNoteSerializer(notes, many=True).data)
 
     def post(self, request, workspace_id, member_id):
-        workspace = _get_workspace(workspace_id, request.user)
-        _require_module(request, workspace)
-        _require_admin(workspace, request.user)
+        workspace = _manage_ws(request, workspace_id, "hr.manage_notes")
         employee = get_object_or_404(WorkspaceMember, id=member_id, workspace=workspace)
         ser = EmployeeNoteSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
@@ -801,9 +764,7 @@ class EmployeeNoteDetailView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def patch(self, request, workspace_id, member_id, note_id):
-        workspace = _get_workspace(workspace_id, request.user)
-        _require_module(request, workspace)
-        _require_admin(workspace, request.user)
+        workspace = _manage_ws(request, workspace_id, "hr.manage_notes")
         note = get_object_or_404(
             EmployeeNote, id=note_id, employee__workspace=workspace, employee_id=member_id
         )
@@ -813,9 +774,7 @@ class EmployeeNoteDetailView(APIView):
         return Response(ser.data)
 
     def delete(self, request, workspace_id, member_id, note_id):
-        workspace = _get_workspace(workspace_id, request.user)
-        _require_module(request, workspace)
-        _require_admin(workspace, request.user)
+        workspace = _manage_ws(request, workspace_id, "hr.manage_notes")
         note = get_object_or_404(
             EmployeeNote, id=note_id, employee__workspace=workspace, employee_id=member_id
         )

@@ -114,9 +114,9 @@ authorize(request, workspace_id, *, app=None, perm=None, admin=False, scope=None
 your profile" wall) stays in the org app — it's business logic, not access
 control — and is composed after `authorize()`.
 
-`workspaces/permissions.py` and `workspaces/rbac.py` remain as thin re-export
-shims over `access.py` (plus `create_system_roles` and the audit-log helpers) so
-older imports keep working; **new code imports from `access.py`.**
+`workspaces/permissions.py` and `workspaces/rbac.py` have been **removed** — there
+is no compatibility shim. Everything (resolution, checks, scopes, and
+`create_system_roles`) lives in `access.py`; every app imports from it directly.
 
 ---
 

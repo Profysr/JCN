@@ -55,7 +55,6 @@ from ..serializers import (
 )
 from workspaces.models import InboxItem, WorkspaceMember
 from .helpers import (
-    _parse_pk,
     get_workspace_for_user,
     _get_board,
     _get_task,
@@ -297,7 +296,7 @@ class TaskMoveView(APIView):
 
     def patch(self, request, workspace_id, board_id, task_id):
         board = _get_board(workspace_id, board_id, request.user)
-        task = get_object_or_404(Task, id=_parse_pk(task_id), board=board)
+        task = get_object_or_404(Task, id=task_id, board=board)
         # Snapshot the current status so we can detect a column change below.
         old_status = task.status
 
@@ -667,8 +666,8 @@ class TaskAttachmentListCreateView(APIView):
 
     def _get_task(self, workspace_id, board_id, task_id, user):
         workspace = get_workspace_for_user(workspace_id, user)
-        board = get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
-        return get_object_or_404(Task, id=_parse_pk(task_id), board=board)
+        board = get_object_or_404(Board, id=board_id, workspace=workspace)
+        return get_object_or_404(Task, id=task_id, board=board)
 
     def get(self, request, workspace_id, board_id, task_id):
         task = self._get_task(workspace_id, board_id, task_id, request.user)
@@ -711,8 +710,8 @@ class TaskAttachmentDeleteView(APIView):
 
     def delete(self, request, workspace_id, board_id, task_id, attachment_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
-        task = get_object_or_404(Task, id=_parse_pk(task_id), board=board)
+        board = get_object_or_404(Board, id=board_id, workspace=workspace)
+        task = get_object_or_404(Task, id=task_id, board=board)
         attachment = get_object_or_404(TaskAttachment, id=attachment_id, task=task)
         attachment.file.delete(save=False)
         attachment.delete()
@@ -725,8 +724,8 @@ class TaskDependencyListCreateView(APIView):
 
     def _get_task(self, workspace_id, board_id, task_id, user):
         workspace = get_workspace_for_user(workspace_id, user)
-        board = get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
-        return get_object_or_404(Task, id=_parse_pk(task_id), board=board), board
+        board = get_object_or_404(Board, id=board_id, workspace=workspace)
+        return get_object_or_404(Task, id=task_id, board=board), board
 
     def get(self, request, workspace_id, board_id, task_id):
         task, _ = self._get_task(workspace_id, board_id, task_id, request.user)
@@ -775,8 +774,8 @@ class TaskDependencyDeleteView(APIView):
 
     def delete(self, request, workspace_id, board_id, task_id, dep_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
-        task = get_object_or_404(Task, id=_parse_pk(task_id), board=board)
+        board = get_object_or_404(Board, id=board_id, workspace=workspace)
+        task = get_object_or_404(Task, id=task_id, board=board)
         dep = get_object_or_404(TaskDependency, id=dep_id)
         if dep.blocker.board_id != board.id and dep.blocked.board_id != board.id:
             return Response(status=status.HTTP_404_NOT_FOUND)
@@ -790,17 +789,17 @@ class TaskChildrenView(APIView):
 
     def get(self, request, workspace_id, board_id, task_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
-        task = get_object_or_404(Task, id=_parse_pk(task_id), board=board)
+        board = get_object_or_404(Board, id=board_id, workspace=workspace)
+        task = get_object_or_404(Task, id=task_id, board=board)
         children = task.children.select_related("status").all()
         return Response(ChildTaskSerializer(children, many=True).data)
 
     def post(self, request, workspace_id, board_id, task_id):
         """Create a child task under this parent."""
         workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
+        board = get_object_or_404(Board, id=board_id, workspace=workspace)
         _require_board_perm(request.user, board, "edit")
-        parent = get_object_or_404(Task, id=_parse_pk(task_id), board=board)
+        parent = get_object_or_404(Task, id=task_id, board=board)
         data = request.data.copy()
         data["parent_id"] = str(parent.id)
         serializer = TaskSerializer(data=data, context={"request": request})
@@ -816,7 +815,7 @@ class TaskExportView(APIView):
 
     def get(self, request, workspace_id, board_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
+        board = get_object_or_404(Board, id=board_id, workspace=workspace)
         tasks = (
             Task.objects.filter(board=board)
             .select_related("status", "assignee", "sprint", "created_by")
@@ -867,9 +866,9 @@ class TaskCloneView(APIView):
 
     def post(self, request, workspace_id, board_id, task_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
+        board = get_object_or_404(Board, id=board_id, workspace=workspace)
         _require_board_perm(request.user, board, "edit")
-        task = get_object_or_404(Task, id=_parse_pk(task_id), board=board)
+        task = get_object_or_404(Task, id=task_id, board=board)
         new_task = task.clone(created_by=request.user)
         log_activity(
             new_task,
@@ -893,13 +892,13 @@ class TaskTemplateListCreateView(APIView):
 
     def get(self, request, workspace_id, board_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
+        board = get_object_or_404(Board, id=board_id, workspace=workspace)
         templates = board.task_templates.all()
         return Response(TaskTemplateSerializer(templates, many=True).data)
 
     def post(self, request, workspace_id, board_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
+        board = get_object_or_404(Board, id=board_id, workspace=workspace)
         _require_board_perm(request.user, board, "edit")
         serializer = TaskTemplateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -912,7 +911,7 @@ class TaskTemplateDetailView(APIView):
 
     def patch(self, request, workspace_id, board_id, template_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
+        board = get_object_or_404(Board, id=board_id, workspace=workspace)
         template = get_object_or_404(TaskTemplate, id=template_id, board=board)
         serializer = TaskTemplateSerializer(template, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
@@ -921,7 +920,7 @@ class TaskTemplateDetailView(APIView):
 
     def delete(self, request, workspace_id, board_id, template_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
+        board = get_object_or_404(Board, id=board_id, workspace=workspace)
         template = get_object_or_404(TaskTemplate, id=template_id, board=board)
         _require_board_perm(request.user, board, "edit")
         template.delete()
@@ -935,8 +934,8 @@ class TaskApplyTemplateView(APIView):
 
     def post(self, request, workspace_id, board_id, task_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
-        task = get_object_or_404(Task, id=_parse_pk(task_id), board=board)
+        board = get_object_or_404(Board, id=board_id, workspace=workspace)
+        task = get_object_or_404(Task, id=task_id, board=board)
         template_id = request.data.get("template_id")
         template = get_object_or_404(TaskTemplate, id=template_id, board=board)
         for i, sub in enumerate(template.default_subtasks):

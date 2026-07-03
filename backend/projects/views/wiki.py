@@ -5,7 +5,6 @@ from django.shortcuts import get_object_or_404
 from ..models import Board, WikiPage, WikiRevision, Document
 from ..serializers import WikiPageSerializer, WikiRevisionSerializer, DocumentSerializer
 from .helpers import (
-    _parse_pk,
     get_workspace_for_user,
     _require_board_perm,
 )
@@ -17,13 +16,13 @@ class WikiPageListCreateView(APIView):
 
     def get(self, request, workspace_id, board_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
+        board = get_object_or_404(Board, id=board_id, workspace=workspace)
         pages = board.wiki_pages.filter(parent=None).prefetch_related("children")
         return Response(WikiPageSerializer(pages, many=True).data)
 
     def post(self, request, workspace_id, board_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
+        board = get_object_or_404(Board, id=board_id, workspace=workspace)
         _require_board_perm(request.user, board, "edit")
         serializer = WikiPageSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -36,7 +35,7 @@ class WikiPageDetailView(APIView):
 
     def _get_page(self, workspace_id, board_id, page_id, user):
         workspace = get_workspace_for_user(workspace_id, user)
-        board = get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
+        board = get_object_or_404(Board, id=board_id, workspace=workspace)
         return get_object_or_404(WikiPage, id=page_id, board=board), board
 
     def get(self, request, workspace_id, board_id, page_id):
@@ -67,7 +66,7 @@ class WikiPageRevisionsView(APIView):
 
     def get(self, request, workspace_id, board_id, page_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
+        board = get_object_or_404(Board, id=board_id, workspace=workspace)
         page = get_object_or_404(WikiPage, id=page_id, board=board)
         revisions = page.revisions.select_related("author")[:20]
         return Response(WikiRevisionSerializer(revisions, many=True).data)

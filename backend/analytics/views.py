@@ -10,22 +10,14 @@ from rest_framework import permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from core.fields import parse_id
 from core.pagination import HeatmapPagination, TaskDrilldownPagination
 from .serializers import TaskDrilldownSerializer, TeamMemberSerializer
 from projects.models import Sprint, Task
-from workspaces.models import Workspace
+from workspaces import access
 
 logger = logging.getLogger(__name__)
 
 _MAX_DAYS = 365
-
-
-def _parse_pk(value):
-    try:
-        return parse_id(value)
-    except (ValueError, AttributeError, TypeError):
-        return value
 
 
 def _parse_days(params, default=30):
@@ -134,10 +126,10 @@ def _apply_task_filters(qs, params, workspace):
     """
     board_id = params.get("board")
     if board_id:
-        qs = qs.filter(board_id=_parse_pk(board_id))
+        qs = qs.filter(board_id=board_id)
 
     if params.get("status"):
-        ids = [_parse_pk(s) for s in params["status"].split(",") if s.strip()]
+        ids = [s for s in params["status"].split(",") if s.strip()]
         if ids:
             qs = qs.filter(status_id__in=ids)
 
@@ -152,12 +144,12 @@ def _apply_task_filters(qs, params, workspace):
         )
 
     if params.get("assignee"):
-        ids = [_parse_pk(a) for a in params["assignee"].split(",") if a.strip()]
+        ids = [a for a in params["assignee"].split(",") if a.strip()]
         if ids:
             qs = qs.filter(assignee_id__in=ids)
 
     if params.get("label"):
-        ids = [_parse_pk(l) for l in params["label"].split(",") if l.strip()]
+        ids = [l for l in params["label"].split(",") if l.strip()]
         if ids:
             qs = qs.filter(labels__id__in=ids).distinct()
 
@@ -196,7 +188,7 @@ def _apply_task_filters(qs, params, workspace):
             )
             qs = qs.filter(sprint_id=last["id"]) if last else qs.none()
         else:
-            qs = qs.filter(sprint_id=_parse_pk(f_sprint))
+            qs = qs.filter(sprint_id=f_sprint)
 
     f_blocked = (params.get("blocked") or "").lower()
     if f_blocked == "true":
@@ -329,8 +321,8 @@ class AnalyticsAggregateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_id):
-        workspace = get_object_or_404(
-            Workspace, id=_parse_pk(workspace_id), members__user=request.user
+        workspace = access.authorize(
+            request, workspace_id, perm="pm.view_analytics", scope="read"
         )
         params = request.query_params
 
@@ -428,8 +420,8 @@ class WorkspaceSummaryView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_id):
-        workspace = get_object_or_404(
-            Workspace, id=_parse_pk(workspace_id), members__user=request.user
+        workspace = access.authorize(
+            request, workspace_id, perm="pm.view_analytics", scope="read"
         )
         today = datetime.date.today()
         qs = _apply_task_filters(
@@ -467,8 +459,8 @@ class TeamWorkloadView(APIView):
 
     def get(self, request, workspace_id):
         User = get_user_model()
-        workspace = get_object_or_404(
-            Workspace, id=_parse_pk(workspace_id), members__user=request.user
+        workspace = access.authorize(
+            request, workspace_id, perm="pm.view_analytics", scope="read"
         )
         params = request.query_params
         days = _parse_days(params, 14)
@@ -559,8 +551,8 @@ class TaskDrilldownView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_id):
-        workspace = get_object_or_404(
-            Workspace, id=_parse_pk(workspace_id), members__user=request.user
+        workspace = access.authorize(
+            request, workspace_id, perm="pm.view_analytics", scope="read"
         )
         params = request.query_params
 

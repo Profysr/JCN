@@ -5,8 +5,8 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from workspaces.models import Workspace, WorkspaceMember
-from workspaces.permissions import has_permission, require_app_access
+from workspaces import access
+from workspaces.models import WorkspaceMember
 from .events import broadcast_org_event
 from .models import (
     Department,
@@ -28,37 +28,16 @@ from .serializers import (
     bulk_relations_context,
 )
 
-# ── Shared utilities ──────────────────────────────────────────────────────────
-def _get_workspace(workspace_id, user):
-    return get_object_or_404(Workspace, id=workspace_id, members__user=user)
-
-def _require_admin(workspace, user):
-    if workspace.owner == user:
-        return
-    if not WorkspaceMember.objects.filter(
-        workspace=workspace, user=user, role="admin"
-    ).exists():
-        raise PermissionDenied("Admin access required.")
-
-def _require_admin_or_self(workspace, requesting_user, target_member):
-    if target_member.user == requesting_user:
-        return
-    _require_admin(workspace, requesting_user)
-
-
-def _is_admin(workspace, user):
-    if workspace.owner == user:
-        return True
-    return WorkspaceMember.objects.filter(
-        workspace=workspace, user=user, role="admin"
-    ).exists()
-
+# ── Access helpers ──────────────────────────────────────────────────────────
+# All access resolution lives in workspaces/access.py (see backend/ACCESS.md).
+# The two helpers below add the org-specific ONBOARDING wall on top of the
+# centralized checks — that wall is business logic, not access control.
 
 def _require_onboarded(workspace, user):
     """Block non-admin members whose OrgProfile is still in draft status."""
-    if _is_admin(workspace, user):
+    if access.is_workspace_admin(user, workspace):
         return
-    member = WorkspaceMember.objects.filter(workspace=workspace, user=user).first()
+    member = access.get_membership(user, workspace)
     if not member:
         return
     profile = OrgProfile.objects.filter(member=member).first()
@@ -68,56 +47,33 @@ def _require_onboarded(workspace, user):
         )
 
 
-def _require_org_access(workspace, user):
-    """Require org app access AND completed onboarding. Used by all org read views."""
-    require_app_access(user, workspace, "org")
-    _require_onboarded(workspace, user)
+def _read_ws(request, workspace_id, *, onboarded=True):
+    """Resolve the workspace for an org READ: requires `org.view` (which implies
+    org app access) + a read scope, plus the onboarding wall for non-admins.
+
+    Pass onboarded=False for endpoints that must be readable before onboarding
+    completes (e.g. the job-title list needed to render the chart).
+    """
+    workspace = access.authorize(request, workspace_id, perm="org.view", scope="read")
+    if onboarded:
+        _require_onboarded(workspace, request.user)
+    return workspace
+
+
+def _manage_ws(request, workspace_id):
+    """Resolve the workspace for an org STRUCTURAL mutation: `org.manage` + write."""
+    return access.authorize(request, workspace_id, perm="org.manage", scope="write")
 
 
 def _require_profile_view_access(workspace, requesting_user, member):
-    """A member can always view their own profile; `has_permission` already treats
-    the workspace owner as allowed everything. Otherwise this is gated by the
-    `member.view_profile` permission (workspaces/constants.py) — enforced here so a
-    role with it turned off (e.g. the default Viewer) can't bypass a hidden frontend
-    button by hitting the API directly.
+    """A member can always view their own profile; otherwise the workspace-level
+    `member.view_profile` permission is required. Not tied to org app access —
+    this endpoint is also consumed workspace-wide (member directory, HR).
     """
     if member.user == requesting_user:
         return
-    if not has_permission(requesting_user, workspace, "workspace", "member.view_profile"):
+    if not access.has_perm(requesting_user, workspace, "member.view_profile"):
         raise PermissionDenied("You do not have permission to view member profiles.")
-
-
-def _get_workspace_with_org_access(workspace_id, user):
-    """Fetch the workspace and require org app access + completed onboarding.
-
-    Shorthand for the `_get_workspace` + `_require_org_access` pair repeated across
-    every org read view (departments/teams/reporting-lines list+detail, org chart).
-    """
-    workspace = _get_workspace(workspace_id, user)
-    _require_org_access(workspace, user)
-    return workspace
-
-
-def _get_workspace_as_admin(workspace_id, user):
-    """Fetch the workspace and require the caller to be a workspace admin.
-
-    Shorthand for the `_get_workspace` + `_require_admin` pair repeated across every
-    org write view (create/update/delete departments, teams, reporting lines, etc).
-    """
-    workspace = _get_workspace(workspace_id, user)
-    _require_admin(workspace, user)
-    return workspace
-
-
-def _get_scoped_object(workspace_id, model, obj_id, user, **filters):
-    """Fetch the workspace, then a `model` row scoped to it (`model.objects.get(id=obj_id, workspace=workspace)`).
-
-    Used for Department/Team/JobTitle detail lookups where the only scoping rule is
-    "belongs to this workspace" — callers add their own permission check afterwards.
-    """
-    workspace = _get_workspace(workspace_id, user)
-    obj = get_object_or_404(model, id=obj_id, workspace=workspace, **filters)
-    return workspace, obj
 
 
 def _finalize_profile_approval(profile):
@@ -140,7 +96,7 @@ class DepartmentListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_id):
-        workspace = _get_workspace_with_org_access(workspace_id, request.user)
+        workspace = _read_ws(request, workspace_id)
         depts = (
             Department.objects.filter(workspace=workspace)
             .select_related("head", "head__user", "parent")
@@ -150,7 +106,7 @@ class DepartmentListCreateView(APIView):
         return Response(DepartmentSerializer(depts, many=True).data)
 
     def post(self, request, workspace_id):
-        workspace = _get_workspace_as_admin(workspace_id, request.user)
+        workspace = _manage_ws(request, workspace_id)
         ser = DepartmentSerializer(
             data=request.data, context={"request": request, "workspace": workspace}
         )
@@ -166,13 +122,13 @@ class DepartmentDetailView(APIView):
     # the useDepartments() list cache instead of fetching it individually. Kept for
     # API completeness (e.g. a future deep-link into one department).
     def get(self, request, workspace_id, dept_id):
-        workspace, dept = _get_scoped_object(workspace_id, Department, dept_id, request.user)
-        _require_org_access(workspace, request.user)
+        workspace = _read_ws(request, workspace_id)
+        dept = get_object_or_404(Department, id=dept_id, workspace=workspace)
         return Response(DepartmentSerializer(dept).data)
 
     def patch(self, request, workspace_id, dept_id):
-        workspace, dept = _get_scoped_object(workspace_id, Department, dept_id, request.user)
-        _require_admin(workspace, request.user)
+        workspace = _manage_ws(request, workspace_id)
+        dept = get_object_or_404(Department, id=dept_id, workspace=workspace)
         ser = DepartmentSerializer(
             dept,
             data=request.data,
@@ -185,8 +141,8 @@ class DepartmentDetailView(APIView):
         return Response(ser.data)
 
     def delete(self, request, workspace_id, dept_id):
-        workspace, dept = _get_scoped_object(workspace_id, Department, dept_id, request.user)
-        _require_admin(workspace, request.user)
+        workspace = _manage_ws(request, workspace_id)
+        dept = get_object_or_404(Department, id=dept_id, workspace=workspace)
         dept_id_str = str(dept.id)
         dept.delete()
         broadcast_org_event(str(workspace.id), "org.department.deleted", {"id": dept_id_str})
@@ -197,8 +153,8 @@ class DepartmentMemberListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_id, dept_id):
-        workspace, dept = _get_scoped_object(workspace_id, Department, dept_id, request.user)
-        _require_org_access(workspace, request.user)
+        workspace = _read_ws(request, workspace_id)
+        dept = get_object_or_404(Department, id=dept_id, workspace=workspace)
         memberships = dept.memberships.select_related(
             "member", "member__user"
         ).order_by("id")
@@ -209,8 +165,8 @@ class DepartmentMemberListCreateView(APIView):
         )
 
     def post(self, request, workspace_id, dept_id):
-        workspace, dept = _get_scoped_object(workspace_id, Department, dept_id, request.user)
-        _require_admin(workspace, request.user)
+        workspace = _manage_ws(request, workspace_id)
+        dept = get_object_or_404(Department, id=dept_id, workspace=workspace)
         ser = DepartmentMemberSerializer(
             data=request.data, context={"request": request, "department": dept}
         )
@@ -227,7 +183,7 @@ class DepartmentMemberDetailView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def delete(self, request, workspace_id, dept_id, membership_id):
-        workspace = _get_workspace_as_admin(workspace_id, request.user)
+        workspace = _manage_ws(request, workspace_id)
         dept = get_object_or_404(Department, id=dept_id, workspace=workspace)
         membership = get_object_or_404(
             DepartmentMember, id=membership_id, department=dept
@@ -245,7 +201,7 @@ class TeamListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_id):
-        workspace = _get_workspace_with_org_access(workspace_id, request.user)
+        workspace = _read_ws(request, workspace_id)
         teams = (
             Team.objects.filter(workspace=workspace)
             .select_related("lead", "lead__user", "department")
@@ -255,7 +211,7 @@ class TeamListCreateView(APIView):
         return Response(TeamSerializer(teams, many=True).data)
 
     def post(self, request, workspace_id):
-        workspace = _get_workspace_as_admin(workspace_id, request.user)
+        workspace = _manage_ws(request, workspace_id)
         ser = TeamSerializer(
             data=request.data, context={"request": request, "workspace": workspace}
         )
@@ -272,13 +228,13 @@ class TeamDetailView(APIView):
     # useTeams() list cache instead of fetching it individually. Kept for API
     # completeness (e.g. a future deep-link into one team).
     def get(self, request, workspace_id, team_id):
-        workspace, team = _get_scoped_object(workspace_id, Team, team_id, request.user)
-        _require_org_access(workspace, request.user)
+        workspace = _read_ws(request, workspace_id)
+        team = get_object_or_404(Team, id=team_id, workspace=workspace)
         return Response(TeamSerializer(team).data)
 
     def patch(self, request, workspace_id, team_id):
-        workspace, team = _get_scoped_object(workspace_id, Team, team_id, request.user)
-        _require_admin(workspace, request.user)
+        workspace = _manage_ws(request, workspace_id)
+        team = get_object_or_404(Team, id=team_id, workspace=workspace)
         ser = TeamSerializer(
             team,
             data=request.data,
@@ -291,8 +247,8 @@ class TeamDetailView(APIView):
         return Response(ser.data)
 
     def delete(self, request, workspace_id, team_id):
-        workspace, team = _get_scoped_object(workspace_id, Team, team_id, request.user)
-        _require_admin(workspace, request.user)
+        workspace = _manage_ws(request, workspace_id)
+        team = get_object_or_404(Team, id=team_id, workspace=workspace)
         team_id_str = str(team.id)
         team.delete()
         broadcast_org_event(str(workspace.id), "org.team.deleted", {"id": team_id_str})
@@ -303,8 +259,8 @@ class TeamMemberListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_id, team_id):
-        workspace, team = _get_scoped_object(workspace_id, Team, team_id, request.user)
-        _require_org_access(workspace, request.user)
+        workspace = _read_ws(request, workspace_id)
+        team = get_object_or_404(Team, id=team_id, workspace=workspace)
         memberships = team.memberships.select_related(
             "member", "member__user"
         ).order_by("id")
@@ -313,8 +269,8 @@ class TeamMemberListCreateView(APIView):
         )
 
     def post(self, request, workspace_id, team_id):
-        workspace, team = _get_scoped_object(workspace_id, Team, team_id, request.user)
-        _require_admin(workspace, request.user)
+        workspace = _manage_ws(request, workspace_id)
+        team = get_object_or_404(Team, id=team_id, workspace=workspace)
         ser = TeamMemberSerializer(
             data=request.data, context={"request": request, "team": team}
         )
@@ -330,7 +286,7 @@ class TeamMemberDetailView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def delete(self, request, workspace_id, team_id, membership_id):
-        workspace = _get_workspace_as_admin(workspace_id, request.user)
+        workspace = _manage_ws(request, workspace_id)
         team = get_object_or_404(Team, id=team_id, workspace=workspace)
         membership = get_object_or_404(TeamMember, id=membership_id, team=team)
         membership.delete()
@@ -346,12 +302,14 @@ class JobTitleListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_id):
-        workspace = _get_workspace(workspace_id, request.user)
+        # No onboarding wall — a member needs to see job titles to read the org
+        # chart before their own profile is approved.
+        workspace = _read_ws(request, workspace_id, onboarded=False)
         titles = JobTitle.objects.filter(workspace=workspace).order_by("level", "name")
         return Response(JobTitleSerializer(titles, many=True).data)
 
     def post(self, request, workspace_id):
-        workspace = _get_workspace_as_admin(workspace_id, request.user)
+        workspace = _manage_ws(request, workspace_id)
         ser = JobTitleSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         ser.save(workspace=workspace)
@@ -362,12 +320,9 @@ class JobTitleListCreateView(APIView):
 class JobTitleDetailView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
-    def _get_title(self, workspace_id, title_id, user):
-        workspace = _get_workspace_as_admin(workspace_id, user)
-        return workspace, get_object_or_404(JobTitle, id=title_id, workspace=workspace)
-
     def patch(self, request, workspace_id, title_id):
-        workspace, title = self._get_title(workspace_id, title_id, request.user)
+        workspace = _manage_ws(request, workspace_id)
+        title = get_object_or_404(JobTitle, id=title_id, workspace=workspace)
         ser = JobTitleSerializer(title, data=request.data, partial=True)
         ser.is_valid(raise_exception=True)
         ser.save()
@@ -375,7 +330,8 @@ class JobTitleDetailView(APIView):
         return Response(ser.data)
 
     def delete(self, request, workspace_id, title_id):
-        workspace, title = self._get_title(workspace_id, title_id, request.user)
+        workspace = _manage_ws(request, workspace_id)
+        title = get_object_or_404(JobTitle, id=title_id, workspace=workspace)
         title_id_str = str(title.id)
         title.delete()
         broadcast_org_event(str(workspace.id), "org.job_title.deleted", {"id": title_id_str})
@@ -387,19 +343,28 @@ class OrgProfileView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_id, member_id):
-        workspace = _get_workspace(workspace_id, request.user)
-
+        workspace = access.authorize(request, workspace_id, scope="read")
         member = get_object_or_404(WorkspaceMember, id=member_id, workspace=workspace)
         _require_profile_view_access(workspace, request.user, member)
         profile, _ = OrgProfile.objects.get_or_create(member=member)
         return Response(OrgProfileSerializer(profile).data)
 
     def patch(self, request, workspace_id, member_id):
-        workspace = _get_workspace(workspace_id, request.user)
-
+        workspace = access.authorize(request, workspace_id, scope="write")
         member = get_object_or_404(WorkspaceMember, id=member_id, workspace=workspace)
-        _require_admin_or_self(workspace, request.user, member)
+
+        is_self = member.user == request.user
+        is_manager = access.has_perm(request.user, workspace, "org.manage")
+        if not is_self and not is_manager:
+            raise PermissionDenied("You do not have permission to edit this profile.")
+
         profile, _ = OrgProfile.objects.get_or_create(member=member)
+        # Approved profiles are locked to org managers/admins — a member can no
+        # longer edit their own profile once it has been approved (mirrors
+        # MyOrgProfileView.patch).
+        if profile.status == OrgProfile.OnboardingStatus.APPROVED and not is_manager:
+            raise PermissionDenied("Approved profiles can only be edited by an org manager.")
+
         ser = OrgProfileSerializer(profile, data=request.data, partial=True)
         ser.is_valid(raise_exception=True)
         ser.save()
@@ -418,7 +383,7 @@ class ReportingLineListCreateView(APIView):
     # reporting_line_id per node, which is the only place the UI needs this data.
     # Kept for API completeness / future consumers.
     def get(self, request, workspace_id):
-        workspace = _get_workspace_with_org_access(workspace_id, request.user)
+        workspace = _read_ws(request, workspace_id)
         lines = (
             ReportingLine.objects.filter(workspace=workspace)
             .select_related("manager", "manager__user", "report", "report__user")
@@ -427,7 +392,7 @@ class ReportingLineListCreateView(APIView):
         return Response(ReportingLineSerializer(lines, many=True).data)
 
     def post(self, request, workspace_id):
-        workspace = _get_workspace_as_admin(workspace_id, request.user)
+        workspace = _manage_ws(request, workspace_id)
         ser = ReportingLineSerializer(
             data=request.data, context={"request": request, "workspace": workspace}
         )
@@ -441,7 +406,7 @@ class ReportingLineDetailView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def delete(self, request, workspace_id, line_id):
-        workspace = _get_workspace_as_admin(workspace_id, request.user)
+        workspace = _manage_ws(request, workspace_id)
         line = get_object_or_404(ReportingLine, id=line_id, workspace=workspace)
         line_id_str = str(line.id)
         line.delete()
@@ -456,7 +421,7 @@ class OrgChartView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_id):
-        workspace = _get_workspace_with_org_access(workspace_id, request.user)
+        workspace = _read_ws(request, workspace_id)
         members = (
             WorkspaceMember.objects.filter(workspace=workspace)
             .select_related("user")
@@ -513,30 +478,32 @@ class OrgChartView(APIView):
 class MyOrgProfileView(APIView):
     """
     The current user's own org profile.
-    GET  — always accessible (needed to render the onboarding wall).
+    GET  — always accessible (needed to render the onboarding wall), so it is NOT
+           gated by `org.view`; membership + a read scope is enough.
     PATCH — edit own profile fields (draft or submitted state).
     POST  — submit: transitions draft → submitted, lifting the app gate.
     """
 
     permission_classes = [permissions.IsAuthenticated]
 
-    def _get_member_and_profile(self, workspace_id, user):
-        workspace = _get_workspace(workspace_id, user)
+    def _get_member_and_profile(self, workspace, user):
         member = get_object_or_404(
             WorkspaceMember.objects.select_related("user"),
             workspace=workspace, user=user,
         )
         profile, _ = OrgProfile.objects.get_or_create(member=member)
-        return workspace, member, profile
+        return member, profile
 
     def get(self, request, workspace_id):
-        _, _, profile = self._get_member_and_profile(workspace_id, request.user)
+        workspace = access.authorize(request, workspace_id, scope="read")
+        _, profile = self._get_member_and_profile(workspace, request.user)
         return Response(OrgProfileSerializer(profile).data)
 
     def patch(self, request, workspace_id):
-        workspace, member, profile = self._get_member_and_profile(workspace_id, request.user)
-        if profile.status == OrgProfile.OnboardingStatus.APPROVED and not _is_admin(
-            profile.member.workspace, request.user
+        workspace = access.authorize(request, workspace_id, scope="write")
+        member, profile = self._get_member_and_profile(workspace, request.user)
+        if profile.status == OrgProfile.OnboardingStatus.APPROVED and not access.is_workspace_admin(
+            request.user, workspace
         ):
             raise PermissionDenied("Approved profiles can only be edited by an admin.")
         ser = OrgProfileSerializer(profile, data=request.data, partial=True)
@@ -550,7 +517,8 @@ class MyOrgProfileView(APIView):
 
     def post(self, request, workspace_id):
         """Submit the profile — transitions draft → submitted."""
-        _, _, profile = self._get_member_and_profile(workspace_id, request.user)
+        workspace = access.authorize(request, workspace_id, scope="write")
+        _, profile = self._get_member_and_profile(workspace, request.user)
         if profile.status != OrgProfile.OnboardingStatus.DRAFT:
             return Response(
                 {"detail": "Profile has already been submitted."},
@@ -571,12 +539,12 @@ class MyOrgProfileView(APIView):
 
 # ── Pending Profiles (HR review queue) ───────────────────────────────────────
 class PendingProfilesView(APIView):
-    """Admin-only list of submitted (pending review) profiles."""
+    """List of submitted (pending review) profiles — requires org.approve_profiles."""
 
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, workspace_id):
-        workspace = _get_workspace_as_admin(workspace_id, request.user)
+        workspace = access.authorize(request, workspace_id, perm="org.approve_profiles", scope="read")
         profiles = list(
             OrgProfile.objects.filter(
                 member__workspace=workspace,
@@ -595,12 +563,12 @@ class PendingProfilesView(APIView):
 
 # ── Bulk Approve Profiles ─────────────────────────────────────────────────────
 class BulkApproveProfilesView(APIView):
-    """Admin approves multiple submitted profiles in one request."""
+    """Approve multiple submitted profiles in one request — org.approve_profiles."""
 
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, workspace_id):
-        workspace = _get_workspace_as_admin(workspace_id, request.user)
+        workspace = access.authorize(request, workspace_id, perm="org.approve_profiles", scope="write")
 
         profile_ids = request.data.get("profile_ids", [])
         if not profile_ids or not isinstance(profile_ids, list):
@@ -638,12 +606,12 @@ class BulkApproveProfilesView(APIView):
 
 # ── Approve Profile ───────────────────────────────────────────────────────────
 class ApproveProfileView(APIView):
-    """Admin approves a submitted profile (submitted → approved)."""
+    """Approve a submitted profile (submitted → approved) — org.approve_profiles."""
 
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, workspace_id, profile_id):
-        workspace = _get_workspace_as_admin(workspace_id, request.user)
+        workspace = access.authorize(request, workspace_id, perm="org.approve_profiles", scope="write")
         profile = get_object_or_404(
             OrgProfile, id=profile_id, member__workspace=workspace
         )

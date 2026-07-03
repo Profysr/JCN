@@ -10,12 +10,17 @@
 |-------|------|
 | Framework | Django 4.x + Django REST Framework |
 | Async / WebSocket | Django Channels (ASGI via Daphne) |
-| Background tasks | Celery + Redis broker |
-| Cache / Channel layer | Redis |
+| Message broker | **RabbitMQ** — backs both Celery tasks and the Channels WebSocket layer (`channels-rabbitmq`) |
+| Background tasks | Celery worker (broker = RabbitMQ, result backend = `rpc://`) |
+| Cache / rate limiting | **Redis** — caching + DRF throttling only (never a broker) |
 | Database | PostgreSQL 16 |
-| Auth | dj-rest-auth + SimpleJWT + APIKeyAuthentication |
+| Auth | dj-rest-auth + SimpleJWT + APIKeyAuthentication (scoped + rate-limited) |
 | Schema / Docs | drf-spectacular (OpenAPI) |
-| Dev | Docker for db, redis, backend, celery; Vite frontend runs locally |
+| Dev | Docker for db, redis, rabbitmq, backend, celery; Vite frontend runs locally |
+
+> **New to the codebase?** Read `FLOWS.md` first — it walks each system (HTTP
+> request, WebSocket, Celery, access control, API keys) as a step-by-step flow and
+> says which file to edit. Permissions are documented in full in `ACCESS.md`.
 
 ---
 
@@ -74,8 +79,9 @@ workspace:  member.invite, member.remove, member.view_profile, report.view,
 projects:   project.create, project.delete, project.admin, task.view,
             task.create, task.edit, task.delete, task.move, task.comment,
             sprint.manage, automation.manage
-org:        org.manage
-hr:         hr.manage_leave, hr.manage_attendance
+org:        org.view, org.manage, org.approve_profiles
+hr:         hr.view, hr.manage_leave, hr.manage_attendance,
+            hr.manage_documents, hr.manage_notes
 ```
 
 **How to add a new app:** Add to `APP_REGISTRY` + `PERMISSIONS` + `SYSTEM_ROLE_PERMISSIONS`. Frontend picks it up automatically from `GET /api/workspaces/{ws}/permissions/`.
@@ -156,16 +162,18 @@ hr:         hr.manage_leave, hr.manage_attendance
 - `Member` — all apps accessible; project/task/sprint perms on; destructive/admin perms off
 - `Viewer` — all apps accessible; read-only perms only
 
-**Permission helpers (`workspaces/permissions.py`):**
+**Access-control layer — one module: `workspaces/access.py`** (see `ACCESS.md` for the full concept + per-endpoint table). `workspaces/permissions.py` and `workspaces/rbac.py` have been **removed**; everything below lives in `access.py`:
 
 | Function | Purpose |
 |----------|---------|
-| `has_app_access(user, workspace, app_key)` | True if user's role has `app_access[app_key] = True` (or owner) |
-| `require_app_access(user, workspace, app_key)` | Raises 403 if no app access |
-| `has_permission(user, workspace, app_key, perm_key)` | True if user has the specific permission (implicitly checks app access first) |
-| `resolve_permission(user, workspace, perm_key)` | Looks up app via `_PERM_TO_APP` reverse map, then delegates to `has_permission` — O(1), no scanning |
-
-**`has_workspace_permission(user, workspace, action)`** in `workspaces/rbac.py` delegates to `resolve_permission` — kept for call sites that pass a bare action key without knowing the app.
+| `authorize(request, ws_id, *, app=, perm=, admin=, scope=)` | **The one-call view guard.** Resolves the workspace (membership/404) then enforces scope → admin → app → permission. Returns the workspace. Use this at the top of every protected view. |
+| `has_app_access` / `require_app_access(user, ws, app_key)` | Coarse "can enter this product area" check (`CustomRole.app_access`) |
+| `has_perm` / `require_perm(user, ws, perm_key)` | Fine-grained action check (app inferred from `_PERM_TO_APP`); owner short-circuits |
+| `is_workspace_admin` / `require_workspace_admin(user, ws)` | Owner OR `settings.manage` |
+| `get_workspace_or_404` / `member_workspace(user, ws_id)` | Membership-gated workspace fetch (raises 404 / returns None) |
+| `request_scopes` / `has_scope` / `require_scope(request, scope)` | API-key scope ceiling (`read ⊆ write ⊆ admin`); JWT users are unbounded |
+| `workspace_admins(workspace)` | List of admin members (owner + `settings.manage`) — for notification fan-out |
+| `create_system_roles(workspace)` | Seeds the Admin/Member/Viewer roles on workspace creation |
 
 ### Inbox
 
@@ -671,13 +679,16 @@ New module for real-time + webhook fan-out. Call from any org view or task after
 | `ApproveProfileView.post` | `org.profile.approved` |
 | `BulkApproveProfilesView.post` | `org.profile.approved` (one per profile) |
 
-### organization — Permission changes
+### organization — Permission model
 
-All org **read** views now call `_require_org_access(workspace, user)` which enforces:
-1. `require_app_access(user, workspace, "org")` — CustomRole must have `app_access["org"] = true`
-2. `_require_onboarded(workspace, user)` — non-admin profile must not be in draft state
+All gating goes through `workspaces/access.py` (see `ACCESS.md`). In `organization/views.py`:
+- **Reads** (`_read_ws`): `access.authorize(request, ws, perm="org.view", scope="read")` + `_require_onboarded` (non-admins with a draft/missing profile are walled off). Job-title *list* skips the onboarding wall so the chart can render pre-approval.
+- **Structural mutations** (`_manage_ws`): `perm="org.manage"`, `scope="write"` (departments, teams, job titles, reporting lines, and their memberships).
+- **Profile review/approval**: `perm="org.approve_profiles"`.
+- **Own profile** (`/org/me/profile/`) and **view-a-member's-profile** (`/org/members/{id}/profile/`): membership + `member.view_profile` for others' profiles — never gated on `org.view`, since these are consumed workspace-wide (directory, HR).
+`_require_onboarded` and `_require_profile_view_access` are the only org-local helpers left — both delegate their access checks to `access.py`.
 
-Previously only `_require_onboarded` was applied. Mutation views (`_require_admin`) implicitly pass app-access because Admin system role has all access true.
+Bug fixes bundled in this migration: the admin check no longer queries the removed `WorkspaceMember.role` field (was a 500); a duplicate reporting-line manager now returns a clean 400; write-only `*_id` fields reject cross-workspace IDs; `OrgProfileView.patch` now enforces the same "approved ⇒ manager-only" lock as `/org/me/profile/`.
 
 ### organization
 
@@ -705,7 +716,7 @@ Previously only `_require_onboarded` was applied. Mutation views (`_require_admi
 
 ### organization — URL Reference
 
-All org endpoints require `app_access["org"] = true` on the user's role (enforced via `require_app_access(user, workspace, "org")` in `_require_module`). Mutations require workspace admin; reads require membership only.
+Access via `workspaces/access.py`: reads require `org.view` (+ onboarding), structural mutations require `org.manage`, profile approval requires `org.approve_profiles`. All enforced with `access.authorize(...)`. See the "organization — Permission model" section above and `ACCESS.md`.
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -740,6 +751,73 @@ All org endpoints require `app_access["org"] = true` on the user's role (enforce
 | POST | `/api/workspaces/{ws}/org/profiles/{profile_id}/approve/` | Approve a single submitted profile; fires `notify_member_profile_approved`. |
 | POST | `/api/workspaces/{ws}/org/profiles/bulk-approve/` | Approve multiple profiles in one request. Body: `{ profile_ids: [uuid, …] }` (max 100). Returns `{ approved: N }`. Fires approval email per member. |
 
+### organization — Component Guide
+
+> What each piece is *for* (merged from the old `ORGANIZATION.md`). Access rules
+> are in the "organization — Permission model" section above and in `ACCESS.md`.
+
+**Models** — `JobTitle` (a named rank/level; fills the job-title dropdown and the
+label under a name on the chart). `Department` (top-level unit with a `head`,
+optional `parent` for sub-departments, color/identifier for UI chips) → frontend
+[DepartmentsPage.jsx](../frontend/src/apps/org-structure/pages/DepartmentsPage.jsx).
+`DepartmentMember` (join row; `is_head` is **computed** from `Department.head`, not
+stored, so promoting a head never rewrites membership rows). `Team` (smaller group,
+optionally under a `Department`, with its own `lead`) →
+[TeamsPage.jsx](../frontend/src/apps/org-structure/pages/TeamsPage.jsx). `TeamMember`
+(mirrors `DepartmentMember`; `is_lead` derived from `Team.lead`). `OrgProfile`
+(extends a member with org fields + onboarding `status` draft→submitted→approved;
+non-admins are walled off until approved) → the wall is
+[OrgOnboardingGate.jsx](../frontend/src/apps/org-structure/components/OrgOnboardingGate.jsx),
+the card is
+[MemberProfilePage.jsx](../frontend/src/apps/org-structure/pages/MemberProfilePage.jsx).
+`ReportingLine` (manager→report edge; `unique_together=[workspace, report]` = one
+manager per person) drawn as the connectors in
+[OrgChartPage.jsx](../frontend/src/apps/org-structure/pages/OrgChartPage.jsx).
+
+**Serializers** — Mini serializers (`MiniMemberSerializer`, `MiniDepartmentSerializer`,
+`MiniTeamSerializer`, `MiniJobTitleSerializer`) are the *nested* shape so a
+department's `head` or a profile's `manager` doesn't drag in unneeded fields.
+`DepartmentSerializer`/`TeamSerializer` are the writable full shapes: computed
+`member_count` + write-only `*_id` fields (`head_id`, `parent_id`, `lead_id`,
+`department_id`) so the client sends a plain UUID. Each `*_id` and `member_id` now
+**validates the referenced row is in the same workspace** (rejects cross-workspace
+IDs). `OrgProfileSerializer` adds computed `departments`/`teams`/`manager`/
+`direct_reports_count` so one request renders a full profile card; only `job_title_id`
++ freeform fields are writable, and `job_title_id` is workspace-validated.
+`ReportingLineSerializer.validate` rejects self-report, non-members, cycles, and a
+**second manager** for a report (clean 400 instead of a DB IntegrityError).
+
+**Views** (`organization/views.py`) — gating goes through `workspaces/access.py` via
+the local `_read_ws` (reads: `org.view` + onboarding) and `_manage_ws` (structural
+mutations: `org.manage`); profile approval uses `org.approve_profiles`. Every
+mutation calls `broadcast_org_event(...)` so other clients update without polling.
+- **Departments / Teams** — CRUD + membership management, backed by `useOrg.js`.
+- **Job Titles** — admin-managed lookup; the **list has no onboarding wall** so a
+  member can read titles to understand the chart before their profile is approved.
+- **Org Profiles** — `OrgProfileView` (view/patch one member's profile),
+  `MyOrgProfileView` (own profile: GET always allowed to render the wall; PATCH edit;
+  POST submit), `PendingProfilesView` + `ApproveProfileView`/`BulkApproveProfilesView`
+  (the review queue, gated on `org.approve_profiles`).
+- **Reporting Lines** / **Org Chart** — `OrgChartView` is a read-only denormalized
+  tree built in one prefetched query; `OrgChartPage.jsx` renders it directly.
+
+> **`OrgProfileView.get` is gated by `member.view_profile` (self always allowed)**,
+> **not** by `org.view` — because this endpoint is consumed workspace-wide
+> (`MemberProfilePanel.jsx` directory, HR `MemberDetailPage.jsx`), not just the org app.
+
+> **Currently unused by the frontend** (kept for API completeness / future deep-links):
+> `GET …/org/departments/{id}/`, `GET …/org/teams/{id}/`, `GET …/org/reporting-lines/`.
+> The pages read single rows out of their list cache instead.
+
+**Real-time & background** — `organization/events.py`:
+`broadcast_org_event(workspace_id, event_type, data)` pushes to the workspace WS group
+**and** fans out to subscribed `Webhook`s (a fan-out failure never fails the request).
+The webhook-eligible keys are in `_ORG_EVENT_MAP` — if you add a mutation, add its key
+there in the same commit or it stays WS-only (silently dropped for webhook
+subscribers). `organization/tasks.py`: `notify_hr_profile_submitted` (inbox + email to
+admins on submit) and `notify_member_profile_approved` (inbox + email to the member on
+approval), both `.delay()`-ed from views.
+
 ### hr — URL Reference
 
 | Method | Path | Description |
@@ -769,7 +847,7 @@ All org endpoints require `app_access["org"] = true` on the user's role (enforce
 
 `AttendanceSerializer` computed fields: `status` (on_time/late/absent — compared against `AttendancePolicy.work_start_time + grace_period_minutes`), `total_hours` (float, null if no clock_out).
 
-All hr endpoints require `app_access["hr"] = true` on the user's role (enforced via `require_app_access(user, workspace, "hr")` in `_require_module`).
+Access via `workspaces/access.py` (helpers `_view_ws` / `_self_ws` / `_manage_ws` in `hr/views.py`): reads require `hr.view`; employee self-service (submit leave, clock in/out) requires HR app access + write scope; management gates on `hr.manage_leave` (policies, reviews, dashboard), `hr.manage_attendance` (attendance policy/records/summary/QR), `hr.manage_documents` (employee docs), `hr.manage_notes` (private notes). All enforced with `access.authorize(...)`. See `ACCESS.md`.
 
 **hr helpers (`hr/views.py`):** `_business_days(start, end)` (Mon–Fri count, inclusive; holidays not modelled); `_parse_date_window(request, default_lookback_days=31, max_span_days=366)` (bounded date-range parser used by attendance lists). Leave balance create/review wrap the balance mutation in `transaction.atomic()` + `select_for_update()`. All "today" logic uses `timezone.localdate()`.
 
@@ -861,10 +939,12 @@ Permission resolution:
 3. Permission check: `role.permissions[app_key][perm_key]`
 4. No `RoleAssignment` → `False`.
 
-All logic lives in `workspaces/permissions.py`. `workspaces/rbac.py` is a thin wrapper that delegates to it.
-Admin-level actions gate on `settings.manage` (in the `workspace` group).
-Project-admin actions gate on `project.admin` (in the `projects` group).
-App access for hr/org/projects is enforced via `require_app_access()` at the top of each view.
+**All access logic lives in one module: `workspaces/access.py`** (full reference: `ACCESS.md`). The old `workspaces/permissions.py` and `workspaces/rbac.py` have been **removed** — every app now calls `access.authorize(...)` (or the `access.*` helpers) at the top of each view. An API-key request also carries a scope ceiling (`read ⊆ write ⊆ admin`) and is rate-limited (`workspaces/throttling.py`).
+- Admin-level actions gate on `settings.manage` (owner always passes).
+- Project-admin actions gate on `project.admin` / board `board.admin`.
+- App access for hr/org/projects/analytics is enforced via `authorize(request, ws, app="…")`.
+- Org mutations require `org.manage` (structure) or `org.approve_profiles`; org reads require `org.view` + onboarding.
+- HR management gates on `hr.manage_leave` / `hr.manage_attendance` / `hr.manage_documents` / `hr.manage_notes`; HR reads on `hr.view`; employee self-service on HR app access.
 
 ### Board-level (unchanged from v2.1)
 
@@ -909,10 +989,11 @@ Module-level helpers shared across all org-structure views:
 
 | Helper | Purpose |
 |--------|---------|
-| `_get_workspace(workspace_id, user)` | 404 if user not a member (same pattern as projects) |
-| `_require_module(request, workspace)` | 403 if user's role has no `app_access["org"]`; delegates to `require_app_access` |
-| `_require_admin(workspace, user)` | 403 if not workspace owner or admin member |
-| `_require_admin_or_self(workspace, requesting_user, target_member)` | Allows self-edit; otherwise delegates to `_require_admin`. Used by `OrgProfileView.patch`. |
+| `_read_ws(request, workspace_id, *, onboarded=True)` | `access.authorize(perm="org.view", scope="read")` + onboarding wall (skip with `onboarded=False` for the job-title list) |
+| `_manage_ws(request, workspace_id)` | `access.authorize(perm="org.manage", scope="write")` — structural mutations |
+| `_require_onboarded(workspace, user)` | Business rule: non-admins with a draft/missing profile are blocked (delegates admin check to `access.is_workspace_admin`) |
+| `_require_profile_view_access(workspace, user, member)` | Self, or `member.view_profile` — for viewing another member's profile |
+| Profile approval views | `access.authorize(perm="org.approve_profiles", …)` directly |
 
 **Serializer conventions:**
 - `DepartmentSerializer` and `TeamSerializer`: `get_member_count` uses `len(obj.memberships.all())` — reads from the prefetch cache set by `prefetch_related("memberships")` in list views.

@@ -11,7 +11,6 @@ from ..serializers import (
     PublicFormSerializer,
 )
 from .helpers import (
-    _parse_pk,
     get_workspace_for_user,
     _require_board_perm,
 )
@@ -25,13 +24,13 @@ class FormListCreateView(APIView):
 
     def get(self, request, workspace_id, board_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
+        board = get_object_or_404(Board, id=board_id, workspace=workspace)
         forms = board.forms.prefetch_related("fields").annotate(_submission_count=Count("submissions", distinct=True))
         return Response(FormSerializer(forms, many=True).data)
 
     def post(self, request, workspace_id, board_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
+        board = get_object_or_404(Board, id=board_id, workspace=workspace)
         _require_board_perm(request.user, board, "edit")
         serializer = FormSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -44,7 +43,7 @@ class FormDetailView(APIView):
 
     def _get_form(self, workspace_id, board_id, form_id, user):
         workspace = get_workspace_for_user(workspace_id, user)
-        board = get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
+        board = get_object_or_404(Board, id=board_id, workspace=workspace)
         return get_object_or_404(Form, id=form_id, board=board), board
 
     def get(self, request, workspace_id, board_id, form_id):
@@ -73,7 +72,7 @@ class FormFieldsBulkUpdateView(APIView):
 
     def put(self, request, workspace_id, board_id, form_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
+        board = get_object_or_404(Board, id=board_id, workspace=workspace)
         _require_board_perm(request.user, board, "edit")
         form = get_object_or_404(Form, id=form_id, board=board)
         form.fields.all().delete()
@@ -164,7 +163,7 @@ class FormSubmissionListView(APIView):
 
     def get(self, request, workspace_id, board_id, form_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
+        board = get_object_or_404(Board, id=board_id, workspace=workspace)
         form = get_object_or_404(Form, id=form_id, board=board)
         subs = form.submissions.select_related("task").order_by("-submitted_at")
         return Response(FormSubmissionSerializer(subs, many=True).data)
@@ -172,7 +171,7 @@ class FormSubmissionListView(APIView):
     def patch(self, request, workspace_id, board_id, form_id):
         """Update a submission status."""
         workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
+        board = get_object_or_404(Board, id=board_id, workspace=workspace)
         form = get_object_or_404(Form, id=form_id, board=board)
         sub_id = request.data.get("id")
         sub = get_object_or_404(FormSubmission, id=sub_id, form=form)

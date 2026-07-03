@@ -24,7 +24,7 @@ HOW TO ADD A BOARD ACTION
 """
 
 from workspaces.models import WorkspaceMember
-from workspaces.rbac import has_workspace_permission
+from workspaces.access import has_perm
 
 # ── Board role → action permission table ──────────────────────────────────────
 # Single source of truth for board-level role capabilities.
@@ -101,7 +101,7 @@ def has_project_permission(user, board, action):
 
     # Primary: workspace-level CustomRole permission.
     perm_key = _ACTION_TO_PERM.get(action)
-    if perm_key and has_workspace_permission(user, workspace, perm_key):
+    if perm_key and has_perm(user, workspace, perm_key):
         return True
 
     # Fallback: per-board BoardMember override.
@@ -114,8 +114,7 @@ def has_project_permission(user, board, action):
 
 def get_effective_role(user, board):
     """
-    Return the effective board role string for serializers, or None if the
-    user has no access. Checks from most to least privileged.
+    Return the effective board role string for serializers, or None if the user has no access. Checks from most to least privileged.
     """
     if not has_project_permission(user, board, "view"):
         return None
@@ -137,7 +136,7 @@ def user_can_be_board_participant(user, board):
     workspace = board.workspace
     if workspace.owner_id == user.pk:
         return True
-    if has_workspace_permission(user, workspace, "board.admin"):
+    if has_perm(user, workspace, "board.admin"):
         return True
     return BoardMember.objects.filter(board=board, user=user).exists()
 

@@ -53,7 +53,7 @@ class WorkspaceSerializer(serializers.ModelSerializer):
         return data
 
     def create(self, validated_data):
-        from .rbac import create_system_roles
+        from .access import create_system_roles
         from .models import RoleAssignment
 
         validated_data["owner"] = self.context["request"].user

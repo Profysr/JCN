@@ -37,7 +37,6 @@ from django.db import transaction
 from django.utils import timezone
 from .models import Webhook, WebhookDelivery
 from core.constants import DEFAULT_TASK_STATUSES
-from core.fields import format_id
 from projects.models import Board, Task, TaskStatus, Label
 
 from django.contrib.auth import get_user_model
@@ -291,7 +290,7 @@ def _initialize_job_status(job):
     """Updates database and triggers the initial 'started' WebSocket notification."""
     job.status = ImportJob.Status.IMPORTING
     job.save(update_fields=["status"])
-    _broadcast_import(format_id(job.workspace.PREFIX, job.workspace.id), job.id, "importing", 0)
+    _broadcast_import(str(job.workspace.id), job.id, "importing", 0)
 
 
 def _prepare_import_environment(job):
@@ -455,7 +454,7 @@ def _save_and_broadcast_progress(job, pct, imported_count, skipped, total):
     job.save(update_fields=["progress_pct", "imported_count", "skipped_count"])
 
     _broadcast_import(
-        format_id(job.workspace.PREFIX, job.workspace.id),
+        str(job.workspace.id),
         job.id,
         "importing",
         pct,
@@ -477,7 +476,7 @@ def _finalize_job_status(job, imported_ids, skipped, errors):
     job.save()
 
     _broadcast_import(
-        format_id(job.workspace.PREFIX, job.workspace.id),
+        str(job.workspace.id),
         job.id,
         "complete",
         100,

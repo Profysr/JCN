@@ -16,10 +16,9 @@ from ..serializers import (
 )
 from ..permissions import has_project_permission, BOARD_ROLE_PERMISSIONS, log_audit, bulk_log_audit
 
-from workspaces.permissions import has_app_access
+from workspaces.access import has_app_access
 
 from .helpers import (
-    _parse_pk,
     get_workspace_for_user,
     _is_workspace_admin,
     _require_board_admin,
@@ -67,7 +66,7 @@ class BoardDetailView(APIView):
             from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied("You don't have access to the Projects app.")
         return get_object_or_404(
-            Board.objects.for_user(workspace, user), id=_parse_pk(board_id)
+            Board.objects.for_user(workspace, user), id=board_id
         )
 
     def get(self, request, workspace_id, board_id):
@@ -134,7 +133,7 @@ class BoardMemberListCreateView(APIView):
 
     def get(self, request, workspace_id, board_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
-        board = get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
+        board = get_object_or_404(Board, id=board_id, workspace=workspace)
 
         if not has_project_permission(request.user, board, "view"):
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -251,7 +250,7 @@ class BoardPermissionsView(APIView):
 
     def get(self, request, workspace_id, board_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
-        get_object_or_404(Board, id=_parse_pk(board_id), workspace=workspace)
+        get_object_or_404(Board, id=board_id, workspace=workspace)
         return Response(BOARD_ROLE_PERMISSIONS)
 
 

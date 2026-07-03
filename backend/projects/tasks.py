@@ -26,7 +26,6 @@ def send_comment_notifications(
     try:
         # Local imports avoid circular imports at module load time.
         from django.utils import timezone
-        from core.fields import format_id
         from accounts.models import User
         from workspaces.models import InboxItem, Workspace
 
@@ -82,7 +81,7 @@ def send_comment_notifications(
             "task_id": str(task.id),
             "task_title": task.title,
             "board_id": str(task.board_id),
-            "workspace_id": format_id(workspace.PREFIX, workspace.id),
+            "workspace_id": str(workspace.id),
             "comment_id": str(comment.id),
         }
         actor_name = sender.full_name or sender.email
@@ -117,7 +116,7 @@ def send_comment_notifications(
                 user_id,
                 "notification.created",
                 {
-                    "id": format_id(item.PREFIX, item.id),
+                    "id": str(item.id),
                     "actor_id": str(sender.id),
                     "actor_name": actor_name,
                     "verb": verb,

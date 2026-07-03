@@ -67,13 +67,16 @@ PERMISSIONS = {
         "automation.manage": {"label": "Create and edit automation rules"},
     },
     "org": {
-        "org.manage": {
-            "label": "Create and edit departments, teams, and reporting lines"
-        },
+        "org.view": {"label": "View departments, teams, org chart, and the people directory"},
+        "org.manage": {"label": "Create and edit departments, teams, job titles, and reporting lines"},
+        "org.approve_profiles": {"label": "Review and approve member onboarding profiles"},
     },
     "hr": {
-        "hr.manage_leave": {"label": "Approve or reject leave requests"},
-        "hr.manage_attendance": {"label": "Manage attendance records and policies"},
+        "hr.view": {"label": "View the HR dashboard and team leave / attendance overviews"},
+        "hr.manage_leave": {"label": "Manage leave policies and approve or reject leave requests"},
+        "hr.manage_attendance": {"label": "Manage attendance policies and records"},
+        "hr.manage_documents": {"label": "Upload and manage employee documents"},
+        "hr.manage_notes": {"label": "Create and manage private employee notes"},
     },
 }
 
@@ -114,11 +117,16 @@ SYSTEM_ROLE_PERMISSIONS = {
                 "automation.manage": False,
             },
             "org": {
+                "org.view": True,
                 "org.manage": False,
+                "org.approve_profiles": False,
             },
             "hr": {
+                "hr.view": True,
                 "hr.manage_leave": False,
                 "hr.manage_attendance": False,
+                "hr.manage_documents": False,
+                "hr.manage_notes": False,
             },
         },
     },
@@ -148,11 +156,16 @@ SYSTEM_ROLE_PERMISSIONS = {
                 "automation.manage": False,
             },
             "org": {
+                "org.view": True,
                 "org.manage": False,
+                "org.approve_profiles": False,
             },
             "hr": {
+                "hr.view": True,
                 "hr.manage_leave": False,
                 "hr.manage_attendance": False,
+                "hr.manage_documents": False,
+                "hr.manage_notes": False,
             },
         },
     },
