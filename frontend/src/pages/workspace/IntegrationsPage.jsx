@@ -203,7 +203,7 @@ function MappingRow({ mapping, workspaceId, onDelete }) {
             )}
           />
           <span className="text-sm font-medium">
-            {mapping.project_name || "Workspace"}
+            {mapping.board_name || "Workspace"}
           </span>
           {mapping.webhook_url && (
             <span className="text-xs text-muted-foreground truncate max-w-[200px]">

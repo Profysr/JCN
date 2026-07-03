@@ -58,7 +58,7 @@ const SECTIONS = [
 function TaskRow({ task, sectionId, onOpen }) {
   const p = getPriority(task.priority);
   const Icon = p.icon;
-  const color = pickColor(task.project_name);
+  const color = pickColor(task.board_name);
   const status = task.status_detail;
   const isOverdue = sectionId === "overdue";
 
@@ -76,12 +76,12 @@ function TaskRow({ task, sectionId, onOpen }) {
       </span>
 
       {/* Project badge */}
-      {task.project_name && (
+      {task.board_name && (
         <span
           className="flex-shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full"
           style={{ backgroundColor: color + "18", color }}
         >
-          {task.project_name}
+          {task.board_name}
         </span>
       )}
 

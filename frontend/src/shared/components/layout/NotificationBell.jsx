@@ -235,7 +235,7 @@ export default function NotificationBell() {
   const grouped = useMemo(
     () =>
       visible.reduce((acc, item) => {
-        const key = item.project_name || "General";
+        const key = item.board_name || "General";
         (acc[key] ||= []).push(item);
         return acc;
       }, {}),

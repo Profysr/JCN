@@ -66,7 +66,7 @@ function TaskRow({ task, onOpen }) {
   const bucket = sectionFor(task);
   const p = getPriority(task.priority);
   const PIcon = p.icon;
-  const color = pickColor(task.project_name);
+  const color = pickColor(task.board_name);
   const status = task.status_detail;
 
   return (
@@ -78,12 +78,12 @@ function TaskRow({ task, onOpen }) {
       <span className="flex-1 text-sm truncate group-hover:text-primary transition-colors">
         {task.title}
       </span>
-      {task.project_name && (
+      {task.board_name && (
         <span
           className="flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full hidden sm:inline"
           style={{ backgroundColor: color + "18", color }}
         >
-          {task.project_name}
+          {task.board_name}
         </span>
       )}
       {status && (
@@ -420,9 +420,9 @@ function NotificationRow({ item, onItemClick }) {
           <span className="text-muted-foreground">{label}</span>{" "}
           <span className="font-medium">"{item.resource_name}"</span>
         </p>
-        {item.project_name && (
+        {item.board_name && (
           <p className="text-[10px] text-muted-foreground/70 mt-0.5 truncate">
-            {item.project_name}
+            {item.board_name}
           </p>
         )}
         <p className="text-[10px] text-muted-foreground mt-0.5">
