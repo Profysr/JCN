@@ -1,11 +1,10 @@
 import logging
 
-import resend
 from allauth.account.adapter import DefaultAccountAdapter
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
 from django.conf import settings
 
-from accounts.emails import render as render_email
+from core.emails import send_email
 
 logger = logging.getLogger(__name__)
 
@@ -36,42 +35,28 @@ class CustomAccountAdapter(DefaultAccountAdapter):
 
     # ── private helpers ────────────────────────────────────────────────────────
     def _send_password_reset(self, email, context):
-        reset_url = context.get("password_reset_url", "")
-        html = render_email("password_reset.html", {
-            "email": email,
-            "reset_url": reset_url,
-        })
-        self._send(
-            to=email,
+        send_email(
+            to=[email],
             subject="Reset your JCN password",
-            html=html,
+            app="accounts",
+            template="password_reset.html",
+            context={
+                "email": email,
+                "reset_url": context.get("password_reset_url", ""),
+            },
         )
 
     def _send_email_verification(self, email, context):
-        confirm_url = context.get("activate_url", "")
-        html = render_email("email_verification.html", {
-            "email": email,
-            "confirm_url": confirm_url,
-        })
-        self._send(
-            to=email,
+        send_email(
+            to=[email],
             subject="Confirm your JCN email address",
-            html=html,
+            app="accounts",
+            template="email_verification.html",
+            context={
+                "email": email,
+                "confirm_url": context.get("activate_url", ""),
+            },
         )
-
-    def _send(self, *, to: str, subject: str, html: str):
-        try:
-            resend.api_key = settings.RESEND_API_KEY
-            resend.Emails.send({
-                "from": settings.FROM_EMAIL,
-                "to": [to],
-                "subject": subject,
-                "html": html,
-            })
-            logger.info("[accounts_email] Sent '%s' to %s", subject, to)
-        except Exception as exc:
-            logger.error("[accounts_email] Failed to send '%s' to %s: %s", subject, to, exc)
-            raise
 
 
 class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):

@@ -54,6 +54,8 @@ from ..serializers import (
     ChildTaskSerializer,
 )
 from workspaces.models import InboxItem, WorkspaceMember
+from core.events import broadcast, notify
+from ..permissions import _is_workspace_admin, _require_board_perm
 from .helpers import (
     get_workspace_for_user,
     _get_board,
@@ -63,11 +65,7 @@ from .helpers import (
     _task_detail_qs,
     _apply_task_filters,
     _log_task_patch_changes,
-    _require_board_perm,
-    broadcast,
     log_activity,
-    notify,
-    _is_workspace_admin,
 )
 
 
@@ -214,14 +212,14 @@ class TaskListCreateView(APIView):
             notify(
                 task.assignee,
                 request.user,
-                InboxItem.Verb.TASK_ASSIGNED,
+                "task_assigned",
                 board.workspace,
                 task,
             )
 
         task = _task_list_qs().get(pk=task.pk)
         data = TaskCardSerializer(task).data
-        broadcast(workspace_id, "task.created", data)
+        broadcast(workspace_id, "task.created", data, task_id=task.pk, actor_id=request.user.id)
         return Response(data, status=status.HTTP_201_CREATED)
 
 
@@ -963,19 +961,22 @@ def _notify_reviewers(approval, actor, workspace, task):
         notify(
             recipient=reviewer.user,
             actor=actor,
-            verb=InboxItem.Verb.APPROVAL_REQUESTED,
+            verb="approval_requested",
             workspace=workspace,
             task=task,
         )
 
 
-def _broadcast_approval(workspace_id, board_id, task_id, event, approval):
-    """Broadcast an approval event with the standard task/board context."""
+def _broadcast_approval(workspace_id, board_id, task_id, event, approval, actor_id=None):
+    """Broadcast an approval event with the standard task/board context.
+
+    Pass actor_id for events with a chat surface (approval.created).
+    """
     broadcast(workspace_id, event, {
         "task_id": str(task_id),
         "board_id": str(board_id),
         "approval": ApprovalSerializer(approval).data,
-    })
+    }, task_id=task_id, actor_id=actor_id)
 
 
 class ApprovalListCreateView(APIView):
@@ -997,7 +998,7 @@ class ApprovalListCreateView(APIView):
         serializer.is_valid(raise_exception=True)
         approval = serializer.save(task=task, requested_by=request.user)
         _notify_reviewers(approval, request.user, task.board.workspace, task)
-        _broadcast_approval(workspace_id, board_id, task_id, "approval.created", approval)
+        _broadcast_approval(workspace_id, board_id, task_id, "approval.created", approval, actor_id=request.user.id)
         return Response(ApprovalSerializer(approval).data, status=status.HTTP_201_CREATED)
 
 

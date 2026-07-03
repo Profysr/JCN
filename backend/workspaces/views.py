@@ -49,14 +49,12 @@ def _get_workspace(workspace_id, user):
 def _is_workspace_admin(workspace, user) -> bool:
     """Owner or holder of settings.manage. Thin alias over the central definition."""
     from .access import is_workspace_admin
-
     return is_workspace_admin(user, workspace)
 
 
 def _require_admin(workspace, user):
     """Raises PermissionDenied unless the user is a workspace admin."""
     from .access import require_workspace_admin
-
     require_workspace_admin(user, workspace)
 
 

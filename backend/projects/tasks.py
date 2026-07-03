@@ -1,4 +1,8 @@
-"""Celery tasks for the projects app."""
+"""Celery tasks for the projects app.
+
+All inbox/WS delivery goes through core.events.push_inbox_items — this module
+only decides WHO gets notified; the payload/DB/WS mechanics live in core/events.py.
+"""
 
 import logging
 from celery import shared_task
@@ -18,19 +22,14 @@ def send_comment_notifications(
     mentioned_user_ids: list of UUIDs resolved by the frontend @mention picker.
         The frontend resolves display names → user IDs at selection time, so we
         never do regex matching or full-table scans here.
-
-    All InboxItem rows are written in a single bulk_create (one DB round-trip),
-    then each recipient's WebSocket channel is pushed individually — WS events
-    are per-user so they can't be batched, but they're Redis pub/sub (fast).
     """
     try:
         # Local imports avoid circular imports at module load time.
-        from django.utils import timezone
         from accounts.models import User
-        from workspaces.models import InboxItem, Workspace
+        from core.events import push_inbox_items
+        from workspaces.models import Workspace
 
         from .models import TaskComment
-        from .views.helpers import broadcast_to_user
 
         comment = TaskComment.objects.select_related(
             "task", "task__board", "parent__author"
@@ -49,11 +48,11 @@ def send_comment_notifications(
                 seen_ids.add(user_id_str)
 
         for uid in notified_ids:
-            _add(str(uid), InboxItem.Verb.TASK_COMMENTED)
+            _add(str(uid), "task_commented")
 
         # Parent comment author gets notified on replies.
         if comment.parent_id and str(comment.parent.author_id) != sender_id:
-            _add(str(comment.parent.author_id), InboxItem.Verb.TASK_COMMENTED)
+            _add(str(comment.parent.author_id), "task_commented")
 
         # @mentions — IDs already resolved by the frontend picker.
         # Validate membership to prevent notifying users from other workspaces.
@@ -65,18 +64,11 @@ def send_comment_notifications(
                 ).values_list("id", flat=True)
             )
             for uid in valid_ids:
-                _add(str(uid), InboxItem.Verb.TASK_MENTIONED)
+                _add(str(uid), "task_mentioned")
 
         if not recipients:
             return
 
-        # ── Shared payload fields (computed once, reused for every row) ───────
-        _VERB_TO_EVENT = {
-            InboxItem.Verb.TASK_COMMENTED: "commented",
-            InboxItem.Verb.TASK_MENTIONED: "mentioned",
-            InboxItem.Verb.TASK_ASSIGNED: "assigned",
-            InboxItem.Verb.APPROVAL_REQUESTED: "approved",
-        }
         meta = {
             "task_id": str(task.id),
             "task_title": task.title,
@@ -84,51 +76,22 @@ def send_comment_notifications(
             "workspace_id": str(workspace.id),
             "comment_id": str(comment.id),
         }
-        actor_name = sender.full_name or sender.email
-        board_id_str = str(task.board_id)
-        project_name = task.board.name if task.board_id else ""
 
-        # ── One INSERT for all notifications ──────────────────────────────────
-        # bulk_create skips save(), so auto_now_add (created_at) is set by the DB but NOT reflected on the returned Python objects — item.created_at is None. Capture now() here so the WS payload has a valid timestamp.
-        now = timezone.now()
-        items = InboxItem.objects.bulk_create(
-            [
-                InboxItem(
-                    user_id=user_id,
-                    workspace=workspace,
-                    actor_id=str(sender.id),
-                    actor_name=actor_name,
-                    verb=verb,
-                    event_type=_VERB_TO_EVENT.get(verb, "commented"),
-                    resource_name=task.title,
-                    board_id=board_id_str,
-                    project_name=project_name,
-                    meta=meta,
-                )
-                for user_id, verb in recipients
-            ]
-        )
-
-        # ── Push to each recipient's WebSocket channel ────────────────────────
-        # Can't batch across different user channels; Redis pub/sub keeps each call fast.
-        for item, (user_id, verb) in zip(items, recipients):
-            broadcast_to_user(
-                user_id,
-                "notification.created",
-                {
-                    "id": str(item.id),
-                    "actor_id": str(sender.id),
-                    "actor_name": actor_name,
-                    "verb": verb,
-                    "event_type": _VERB_TO_EVENT.get(verb, "commented"),
-                    "resource_name": task.title,
-                    "board_id": board_id_str,
-                    "project_name": project_name,
-                    "meta": meta,
-                    "status": "unread",
-                    "created_at": (item.created_at or now).isoformat(),
-                },
-            )
+        # One INSERT for all rows + per-recipient WS push, handled centrally.
+        push_inbox_items([
+            {
+                "user_id": user_id,
+                "workspace": workspace,
+                "actor_id": str(sender.id),
+                "actor_name": sender.full_name or sender.email,
+                "verb": verb,
+                "resource_name": task.title,
+                "board_id": str(task.board_id),
+                "board_name": task.board.name if task.board_id else "",
+                "meta": meta,
+            }
+            for user_id, verb in recipients
+        ])
 
     except Exception as exc:
         logger.exception(

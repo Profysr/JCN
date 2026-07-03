@@ -15,7 +15,7 @@ from django.db.models import Count
 
 from workspaces.models import WorkspaceMember
 from workspaces import access
-from projects.views.helpers import notify
+from core.events import broadcast, notify
 from .models import Attendance, AttendancePolicy, EmployeeDocument, EmployeeNote, LeaveBalance, LeavePolicy, LeaveRequest
 from .serializers import (
     AttendancePolicySerializer,
@@ -219,6 +219,23 @@ class LeaveRequestListCreateView(APIView):
                     task=None,
                 )
 
+        requester = request.user.full_name or request.user.email
+        broadcast(
+            workspace.id,
+            "leave.requested",
+            LeaveRequestSerializer(leave_request).data,
+            actor_id=request.user.id,
+            chat={
+                "title": f"{requester} requested {policy.name}",
+                "subtitle": workspace.name,
+                "facts": {
+                    "From": str(leave_request.start_date),
+                    "To": str(leave_request.end_date),
+                    "Days": days_requested,
+                },
+            },
+        )
+
         return Response(LeaveRequestSerializer(leave_request).data, status=status.HTTP_201_CREATED)
 
 
@@ -272,6 +289,23 @@ class LeaveRequestReviewView(APIView):
             verb=verb,
             workspace=workspace,
             task=None,
+        )
+
+        employee_name = leave_request.employee.user.full_name or leave_request.employee.user.email
+        broadcast(
+            workspace.id,
+            verb,
+            LeaveRequestSerializer(leave_request).data,
+            actor_id=request.user.id,
+            chat={
+                "title": f"{employee_name}'s {leave_request.policy.name}",
+                "subtitle": workspace.name,
+                "facts": {
+                    "From": str(leave_request.start_date),
+                    "To": str(leave_request.end_date),
+                    "Days": days,
+                },
+            },
         )
 
         return Response(LeaveRequestSerializer(leave_request).data)

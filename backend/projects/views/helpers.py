@@ -1,10 +1,9 @@
-﻿import logging
+import logging
 
 from rest_framework import permissions, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
-from rest_framework.exceptions import PermissionDenied
 
 logger = logging.getLogger(__name__)
 from django.shortcuts import get_object_or_404
@@ -12,9 +11,8 @@ from django.db import models as django_models
 from django.http import HttpResponse
 from django.db.models import Count, Sum, Avg, Min, Max, F, Q, Prefetch
 from django.utils import timezone
-from asgiref.sync import async_to_sync
-from channels.layers import get_channel_layer
-from workspaces.models import Workspace, WorkspaceMember, InboxItem
+from core.events import broadcast, notify
+from workspaces.models import Workspace, WorkspaceMember
 import datetime
 import csv
 import re
@@ -90,16 +88,10 @@ from ..serializers import (
     KeyResultSerializer,
     KeyResultLinkedTaskSerializer,
 )
-from ..permissions import has_project_permission, log_audit
 
 
 def get_workspace_for_user(workspace_id, user):
     return get_object_or_404(Workspace, id=workspace_id, members__user=user)
-
-
-def _is_workspace_admin(workspace, user):
-    from workspaces.access import has_perm
-    return workspace.owner_id == user.pk or has_perm(user, workspace, "board.admin")
 
 
 # ── Shared object-lookup helpers ──────────────────────────────────────────────
@@ -258,164 +250,29 @@ def _log_task_patch_changes(
             notify(
                 task.assignee,
                 user,
-                InboxItem.Verb.TASK_ASSIGNED,
+                "task_assigned",
                 task.board.workspace,
                 task,
+            )
+            broadcast(
+                task.board.workspace_id,
+                "task.assigned",
+                {
+                    "task_id": str(task.id),
+                    "board_id": str(task.board_id),
+                    "assignee_id": str(task.assignee_id),
+                },
+                task_id=task.id,
+                actor_id=user.id,
             )
 
     if not logged_any:
         log_activity(task, user, TaskActivity.Verb.UPDATED)
 
 
-# ── Shared object-lookup helpers ✅──────────────────────────────────────────────
-def broadcast(workspace_id, event_type, data):
-    """Push a real-time event to all WebSocket clients in this workspace."""
-    import json
-    from django.core.serializers.json import DjangoJSONEncoder
-
-    group = f"workspace_{workspace_id}"
-    logger.info("broadcast: group=%s event=%s", group, event_type)
-    channel_layer = get_channel_layer()
-    # msgpack (used by channels_redis) cannot serialize UUID, datetime, or
-    # Decimal objects. Round-trip through DjangoJSONEncoder to convert them all
-    # to plain strings/numbers before they reach the channel layer.
-    safe_data = json.loads(json.dumps(data, cls=DjangoJSONEncoder))
-    async_to_sync(channel_layer.group_send)(
-        group,
-        {"type": "workspace.event", "data": {"type": event_type, "payload": safe_data}},
-    )
-    # v4.5.0 — also fan out to registered webhooks
-    _fire_webhooks(workspace_id, event_type, data)
-
-
-def _fire_webhooks(workspace_id, event_type, data):
-    """Queue webhook deliveries for all active webhooks subscribed to this event."""
-    try:
-        from workspaces.models import Webhook
-        from workspaces.tasks import deliver_webhook
-
-        # Translate internal event names to the public webhook API surface.
-        # Several internal events (e.g. task.moved, tasks.bulk_updated) collapse into a single public event so external consumers get a stable contract.
-        # Events absent from this map (presence.updated, reaction.updated, etc.) are internal-only and must never be forwarded to external endpoints.
-        _EVENT_MAP = {
-            "task.created": "task.created",
-            "task.updated": "task.updated",
-            "task.moved": "task.updated",
-            "task.deleted": "task.deleted",
-            # Internal event is "comment.created"; public webhook surface is "task.commented"
-            "comment.created": "task.commented",
-            "tasks.bulk_updated": "task.updated",
-            "tasks.bulk_deleted": "task.deleted",
-            "status.updated": "status.updated",
-            "sprint.started": "sprint.started",
-            "sprint.completed": "sprint.completed",
-            "objective.created": "objective.created",
-            "objective.updated": "objective.updated",
-            "objective.deleted": "objective.deleted",
-        }
-
-        webhook_event = _EVENT_MAP.get(event_type)
-        if not webhook_event:
-            # This event is internal-only — nothing to deliver.
-            return
-
-        # Only fetch webhooks that are active; inactive ones are soft-disabled.
-        hooks = Webhook.objects.filter(
-            workspace__id=workspace_id,
-            is_active=True,
-        )
-
-        payload = {"event": webhook_event, "workspace": workspace_id, "data": data}
-
-        for hook in hooks:
-            # hook.events is a JSON list of subscribed event types.
-            # An empty list means "all events" — the hook owner opted into everything.
-            if not hook.events or webhook_event in hook.events:
-                # Queue the HTTP delivery as a Celery task so the outbound
-                # network call never blocks or slows down the API response.
-                deliver_webhook.delay(str(hook.id), webhook_event, payload)
-
-    except Exception as exc:
-        logger.exception("_fire_webhooks failed for event=%s workspace=%s: %s", event_type, workspace_id, exc)
-
-
+# NOTE: real-time fan-out (broadcast / broadcast_to_user / notify / webhooks)
+# lives in core/events.py — import from there. Permission guards
+# (_require_board_perm / _require_board_admin / _is_workspace_admin) live in
+# projects/permissions.py. This module keeps only query/lookup helpers.
 def log_activity(task, actor, verb, meta=None):
     TaskActivity.objects.create(task=task, actor=actor, verb=verb, meta=meta or {})
-
-
-def broadcast_to_user(user_id, event_type, data):
-    channel_layer = get_channel_layer()
-    async_to_sync(channel_layer.group_send)(
-        f"user_{user_id}",
-        {"type": "user.notification", "data": {"type": event_type, "payload": data}},
-    )
-
-
-_VERB_TO_EVENT_TYPE = {
-    InboxItem.Verb.TASK_ASSIGNED: "assigned",
-    InboxItem.Verb.TASK_COMMENTED: "commented",
-    InboxItem.Verb.TASK_MENTIONED: "mentioned",
-    InboxItem.Verb.APPROVAL_REQUESTED: "approved",
-}
-
-
-def notify(recipient, actor, verb, workspace, task):
-    """Create an InboxItem and push to the recipient's WS group. No-op if actor == recipient."""
-    if recipient == actor:
-        return
-
-    meta = {
-        "task_id": str(task.id),
-        "task_title": task.title,
-        "board_id": str(task.board_id),
-        "workspace_id": str(workspace.id),
-    }
-
-    inbox_item = InboxItem.objects.create(
-        user=recipient,
-        workspace=workspace,
-        actor_id=str(actor.id),
-        actor_name=actor.full_name or actor.email,
-        verb=verb,
-        event_type=_VERB_TO_EVENT_TYPE.get(verb, "assigned"),
-        resource_name=task.title,
-        board_id=str(task.board_id),
-        project_name=task.board.name if task.board_id else "",
-        meta=meta,
-    )
-
-    broadcast_to_user(
-        str(recipient.id),
-        "notification.created",
-        {
-            "id": str(inbox_item.id),
-            "actor_id": str(actor.id),
-            "actor_name": actor.full_name or actor.email,
-            "verb": verb,
-            "event_type": _VERB_TO_EVENT_TYPE.get(verb, "assigned"),
-            "resource_name": task.title,
-            "board_id": str(task.board_id),
-            "project_name": task.board.name if task.board_id else "",
-            "meta": meta,
-            "status": "unread",
-            "created_at": inbox_item.created_at.isoformat(),
-        },
-    )
-
-
-_PERM_MSG = {"admin": "Admin role required.", "edit": "Editor role required."}
-
-
-def _require_board_perm(user, board, role):
-    if not has_project_permission(user, board, role):
-        raise PermissionDenied(
-            _PERM_MSG.get(role, f"{role.capitalize()} role required.")
-        )
-
-
-def _require_board_admin(request, workspace_id, board_id):
-    """Return (workspace, board) or raise 403/404."""
-    workspace = get_workspace_for_user(workspace_id, request.user)
-    board = get_object_or_404(Board, id=board_id, workspace=workspace)
-    _require_board_perm(request.user, board, "admin")
-    return workspace, board

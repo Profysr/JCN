@@ -54,12 +54,12 @@ class GoogleChatIntegrationSerializer(serializers.ModelSerializer):
 
 
 class IntegrationChannelMappingSerializer(serializers.ModelSerializer):
-    # board_name = serializers.CharField(source="board.name", read_only=True, default=None)
+    board_name = serializers.CharField(source="board.name", read_only=True, default=None)
 
     class Meta:
         model  = IntegrationChannelMapping
         fields = [
-            "id", "board", "platform",
+            "id", "board", "board_name", "platform",
             "webhook_url", "notification_format", "enabled_events", "is_active",
             "created_at",
         ]

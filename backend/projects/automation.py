@@ -138,9 +138,9 @@ def fire_automation(trigger_type, task, actor=None, context=None):
 #                     user=recipient, workspace=workspace,
 #                     actor_id=str(actor.id) if actor else "",
 #                     actor_name=((actor.full_name or actor.email) if actor else "Automation"),
-#                     verb=InboxItem.Verb.TASK_ASSIGNED, event_type="automated",
+#                     verb="task_assigned", event_type="automated",
 #                     resource_name=task.title, board_id=str(task.board_id),
-#                     project_name=task.board.name, meta=meta,
+#                     board_name=task.board.name, meta=meta,
 #                 )
 #                 return True, "send_notification: ok"
 #             except User.DoesNotExist:

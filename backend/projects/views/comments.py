@@ -10,9 +10,9 @@ from ..cache import invalidate_reactions, set_reactions as cache_set
 from ..models import CommentReaction, TaskActivity, TaskComment
 from ..serializers import TaskCommentReplySerializer, TaskCommentSerializer
 from ..tasks import send_comment_notifications
+from core.events import broadcast
 from .helpers import (
     _get_task,
-    broadcast,
     get_workspace_for_user,
     log_activity,
 )
@@ -112,6 +112,8 @@ class TaskCommentListCreateView(APIView):
             workspace_id,
             "comment.created",
             {"task_id": str(task.id), "board_id": str(task.board_id), "comment": data, "is_reply": is_reply},
+            task_id=task.id,
+            actor_id=request.user.id,
         )
         return Response(data, status=status.HTTP_201_CREATED)
 

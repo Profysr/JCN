@@ -141,6 +141,36 @@ def user_can_be_board_participant(user, board):
     return BoardMember.objects.filter(board=board, user=user).exists()
 
 
+# ── View guards (raise DRF exceptions) ────────────────────────────────────────
+_PERM_MSG = {"admin": "Admin role required.", "edit": "Editor role required."}
+
+
+def _is_workspace_admin(workspace, user):
+    return workspace.owner_id == user.pk or has_perm(user, workspace, "board.admin")
+
+
+def _require_board_perm(user, board, role):
+    """Raise 403 unless *user* can perform *role* (board action) on *board*."""
+    from rest_framework.exceptions import PermissionDenied
+
+    if not has_project_permission(user, board, role):
+        raise PermissionDenied(
+            _PERM_MSG.get(role, f"{role.capitalize()} role required.")
+        )
+
+
+def _require_board_admin(request, workspace_id, board_id):
+    """Return (workspace, board) or raise 403/404."""
+    from django.shortcuts import get_object_or_404
+    from workspaces.models import Workspace
+    from .models import Board
+
+    workspace = get_object_or_404(Workspace, id=workspace_id, members__user=request.user)
+    board = get_object_or_404(Board, id=board_id, workspace=workspace)
+    _require_board_perm(request.user, board, "admin")
+    return workspace, board
+
+
 def log_audit(
     actor, workspace, action, resource_type, resource_id, before=None, after=None
 ):

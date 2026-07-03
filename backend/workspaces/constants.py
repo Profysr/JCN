@@ -175,7 +175,7 @@ SYSTEM_ROLE_PERMISSIONS = {
 # These are the public event names exposed to webhook subscribers.
 # They are used:
 #   • In the role-builder UI as valid event choices (WebhookCreateSerializer)
-#   • In _fire_webhooks() (projects/views/helpers.py) to filter subscriber lists
+#   • In core.events._fire_webhooks() to filter subscriber lists
 #   • As the value of the X-JCN-Event header sent in each HTTP delivery
 #
 # Active count: 8 events (6 more commented out — not yet wired to broadcast())
@@ -189,8 +189,9 @@ SYSTEM_ROLE_PERMISSIONS = {
 #   Add a string to WEBHOOK_EVENTS below, e.g. "sprint.archived".
 #   Use dot-notation: "<domain>.<action>" (all lowercase).
 #
-# Step 2 — Map the internal broadcast key → public name (_EVENT_MAP)
-#   File: backend/projects/views/helpers.py  (look for _EVENT_MAP dict, ~line 296)
+# Step 2 — Register the event in the EVENTS registry
+#   File: backend/core/events.py  (EVENTS dict)
+#   Set its "webhook" key to the public name (add "chat" too for a chat card).
 #   Add an entry:
 #       "sprint.archived": "sprint.archived",
 #   The left side is the internal key passed to broadcast(); the right side
@@ -200,7 +201,7 @@ SYSTEM_ROLE_PERMISSIONS = {
 #
 # Step 3 — Fire the event from the relevant view or signal
 #   Call broadcast() wherever the action happens:
-#       from .helpers import broadcast
+#       from core.events import broadcast
 #       broadcast(workspace_id, "sprint.archived", serializer.data)
 #   Files to edit: whichever view/signal handles the domain action
 #   (projects/views/tasks.py, projects/views/objectives.py, workspaces/views.py, etc.)

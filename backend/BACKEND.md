@@ -56,6 +56,8 @@ IDs are plain UUIDs end-to-end. Serializers return plain UUIDs, URL route kwargs
 
 Default permission: `IsAuthenticated`. Public endpoints (forms, invite detail) use `AllowAny`.
 
+**WebSocket auth** (`workspaces/middleware.py::JWTAuthMiddleware`) accepts the JWT from two transports, first match wins: (1) `Sec-WebSocket-Protocol: jwt, <token>` subprotocol — what the frontend uses (`useWorkspaceSocket.js` passes `["jwt", token]`); keeps the token out of URLs/logs; the consumer echoes `jwt` back on accept; (2) `Authorization: Bearer <token>` header — non-browser clients. The old `?token=` query param has been **removed**. The middleware only resolves `scope["user"]`; workspace membership is checked in `WorkspaceConsumer.connect()`. Close codes: **4401** unauthenticated (client should refresh the JWT and reconnect), **4403** not a workspace member (do not retry).
+
 ---
 
 ## App & Permission Registry (`workspaces/constants.py`)
@@ -537,7 +539,7 @@ Four dedicated views replace the old `AnalyticsMetricView` dynamic router. All f
 
 `GET …/boards/{pid}/role-permissions/` returns this table verbatim (consumed by the frontend `useBoardRoleDefinitions`).
 
-**Where checks are enforced** (helpers `_require_board_perm` / `_require_board_admin` / `_is_workspace_admin`):
+**Where checks are enforced** (guards `_require_board_perm` / `_require_board_admin` / `_is_workspace_admin` — all in `projects/permissions.py`):
 
 | Endpoint | Required |
 |----------|----------|
@@ -610,7 +612,7 @@ Four dedicated views replace the old `AnalyticsMetricView` dynamic router. All f
 | `Workspace` | `id` (UUIDv7), `name`, `logo`, `owner` (FK→User) | No slug — routes use UUID `id`. ordering: -id |
 | `WorkspaceMember` | `workspace` (FK), `user` (FK), `role` (ADMIN/MEMBER/VIEWER), `invited_by`, `joined_at` | unique: workspace+user; index: workspace+role |
 | `WorkspaceInvite` | `workspace` (FK), `email`, `role`, `token` (UUID4), `status` (PENDING/ACCEPTED/DECLINED) | unique: workspace+email; index: workspace+status |
-| `InboxItem` | `user` (FK), `workspace` (FK), `actor_id` (str, denorm), `actor_name` (str, denorm), `verb`, `event_type`, `resource_name`, `board_id`, `project_name`, `meta` (JSON), `status` (UNREAD/READ/ARCHIVED/SNOOZED), `snoozed_until` | indexes: user+status, user+workspace+status; ordering: -id. Verbs: `task_assigned`, `task_commented`, `task_mentioned`, `approval_requested`, `org_profile_submitted`, `org_profile_approved`. EventTypes: `assigned`, `mentioned`, `commented`, `approved`, `automated`, `org`. |
+| `InboxItem` | `user` (FK), `workspace` (FK), `actor_id` (str, denorm), `actor_name` (str, denorm), `verb`, `event_type`, `resource_name`, `board_id`, `board_name` (renamed from `project_name`), `meta` (JSON), `status` (UNREAD/READ/ARCHIVED/SNOOZED), `snoozed_until` | indexes: user+status, user+workspace+status; ordering: -id. `verb`/`event_type` have **no model choices** — the contract is `core.events.NOTIFICATION_VERBS` (verb → event_type + label); `event_type` is always derived, never passed by callers. |
 | `WorkspaceAPIKey` | `workspace` (FK), `name`, `key_prefix`, `key_hash`, `scopes` (JSON), `is_active`, `expires_at`, `last_used_at`, `created_by` (FK) | Raw key shown once; soft-delete via is_active. `generate()` classmethod returns (instance, raw_key) |
 | `Webhook` | `workspace` (FK), `name`, `url`, `events` (JSON), `secret`, `is_active` | HMAC-SHA256 signing. `create_with_secret()` classmethod |
 | `WebhookDelivery` | `webhook` (FK), `event`, `request_body`, `response_code`, `response_body`, `duration_ms`, `success`, `attempt` | indexes: webhook+created_at, webhook+success |
@@ -654,14 +656,9 @@ Four dedicated views replace the old `AnalyticsMetricView` dynamic router. All f
 | `CommentReaction` | `comment` (FK), `user` (FK), `emoji` | unique: comment+user+emoji |
 | `AuditEvent` | `workspace` (FK), `actor` (FK), `action`, `resource_type`, `resource_id`, `before` (JSON), `after` (JSON) | indexes: workspace+created_at, workspace+resource_type |
 
-### organization — Org Events (`organization/events.py`)
+### organization — Org Events
 
-New module for real-time + webhook fan-out. Call from any org view or task after a mutation.
-
-| Function | Purpose |
-|----------|---------|
-| `broadcast_org_event(workspace_id, event_type, data)` | Push WS event to `workspace_{id}` group + fan-out to registered webhooks |
-| `broadcast_to_user(user_id, event_type, data)` | Push to a single user's `user_{id}` WS group (used by tasks for per-admin inbox push) |
+`organization/events.py` has been **removed** — org views call `core.events.broadcast(workspace_id, event_type, data)` directly (see the Eventing section). All org event names are registered in `core.events.EVENTS`.
 
 **Event types wired so far:**
 
@@ -809,14 +806,12 @@ mutation calls `broadcast_org_event(...)` so other clients update without pollin
 > `GET …/org/departments/{id}/`, `GET …/org/teams/{id}/`, `GET …/org/reporting-lines/`.
 > The pages read single rows out of their list cache instead.
 
-**Real-time & background** — `organization/events.py`:
-`broadcast_org_event(workspace_id, event_type, data)` pushes to the workspace WS group
-**and** fans out to subscribed `Webhook`s (a fan-out failure never fails the request).
-The webhook-eligible keys are in `_ORG_EVENT_MAP` — if you add a mutation, add its key
-there in the same commit or it stays WS-only (silently dropped for webhook
-subscribers). `organization/tasks.py`: `notify_hr_profile_submitted` (inbox + email to
-admins on submit) and `notify_member_profile_approved` (inbox + email to the member on
-approval), both `.delay()`-ed from views.
+**Real-time & background** — `organization/events.py` has been **removed**; org views
+call `core.events.broadcast(workspace_id, event_type, data)` directly. Org event names
+are registered in `core.events.EVENTS` (all map to identical public webhook names;
+profile submit/approve also carry a chat surface). `organization/tasks.py`:
+`notify_hr_profile_submitted` and `notify_member_profile_approved` build recipient
+lists and call `core.events.push_inbox_items()`, `.delay()`-ed from views.
 
 ### hr — URL Reference
 
@@ -865,12 +860,15 @@ Access via `workspaces/access.py` (helpers `_view_ws` / `_self_ws` / `_manage_ws
 
 | Task | Module | Retries | Purpose |
 |------|--------|---------|---------|
-| `deliver_webhook` | `workspaces.tasks` | 3 (5min → 30min backoff) | POST signed webhook payload; log WebhookDelivery |
-| `send_invite_email` | `workspaces.tasks` | 2 (60s delay) | Send invite email via Resend SDK. Fetches invite with `select_related(workspace, invited_by)`, builds inline HTML, sends from `settings.FROM_EMAIL`. Fired by `POST /api/workspaces/{ws}/invites/` immediately after invite row is created. |
-| `run_import` | `workspaces.tasks` | — | Parse file → create board/statuses → bulk insert tasks; push progress via WebSocket `import.progress` |
-| `send_comment_notifications` | `projects.tasks` | — | Collect all recipients (task assignee/creator, parent comment author, @mentioned users), validate workspace membership for mentions, `bulk_create` all `InboxItem` rows in one DB round-trip, then broadcast per-user via WebSocket. Called with `.delay()` immediately after `POST /comments/` returns. |
-| `notify_hr_profile_submitted` | `organization.tasks` | 2 (60s delay) | **InboxItem** `bulk_create` for all admins + WS push per admin + email batch. Fired by `POST /org/me/profile/` (submit action). |
-| `notify_member_profile_approved` | `organization.tasks` | 2 (60s delay) | **InboxItem** for the member + WS push + email. Fired by single-approve and bulk-approve views. |
+| `deliver_webhook` | `workspaces.tasks` | 3 (5min → 30min backoff) | POST signed webhook payload; log WebhookDelivery. Queued only by `core.events._fire_webhooks()` (via `broadcast()`) and `WebhookTestView`. |
+| `send_invite_email` | `workspaces.tasks` | 2 (60s delay) | Invite email via `core.emails.send_email(app="workspaces", template="invite.html")`. Fired by `POST /api/workspaces/{ws}/invites/`. |
+| `run_import` | `workspaces.tasks` | — | Parse file → create board/statuses → bulk insert tasks; progress via `core.events.broadcast("import.progress", …)` (internal-only event) |
+| `send_comment_notifications` | `projects.tasks` | 3 (30s) | Collect recipients (notified users, parent comment author, validated @mentions), then one `core.events.push_inbox_items()` call (bulk INSERT + per-user WS push). Fired by `POST /comments/`. |
+| `send_chat_notification` | `integrations.tasks` | 2 (30s) | Teams/Google Chat fan-out for one event. Queued ONLY through `core.events.broadcast()` when the event has a `"chat"` entry in `EVENTS`. Builds the card `resource` from the task (task events) or receives a generic resource dict (org/HR events). |
+| `notify_hr_profile_submitted` | `organization.tasks` | 2 (60s delay) | `push_inbox_items()` for all admins. Fired by `POST /org/me/profile/` (submit action). |
+| `notify_member_profile_approved` | `organization.tasks` | 2 (60s delay) | `push_inbox_items()` for the member. Fired by single-approve and bulk-approve views. |
+
+**Rule:** tasks never hand-roll `group_send` / InboxItem payloads / Resend calls — they go through `core.events.*` and `core.emails.send_email`.
 
 ---
 
@@ -899,18 +897,20 @@ Access via `workspaces/access.py` (helpers `_view_ws` / `_self_ws` / `_manage_ws
 ## Cross-App Event Flow
 
 ```
-Task mutated in projects/views/
-  → broadcast()               → WebSocket group "workspace_{id}" + _fire_webhooks()
-  → _fire_webhooks()          → workspaces.tasks.deliver_webhook.delay()
-  → notify()                  → InboxItem.create() + WebSocket group "user_{id}"
-  → integrations.services     → Teams / Google Chat (fanout_notification)
+Mutation in any app's view/task
+  → core.events.broadcast(ws_id, event, data, task_id=?, actor_id=?, chat=?)
+      → WebSocket group "workspace_{id}"                          (always)
+      → workspaces.tasks.deliver_webhook.delay()                  (if EVENTS[event]["webhook"])
+      → integrations.tasks.send_chat_notification.delay()        (if EVENTS[event]["chat"] + actor)
+          → services.fanout_notification() → Teams / Google Chat cards
+  → core.events.notify(recipient, actor, verb, ws, task?)         (inbox bell, per recipient)
+      → push_inbox_items() → InboxItem bulk INSERT + WS group "user_{id}"
 
 Comment posted (POST /comments/)
   → view returns 201 immediately (non-blocking)
   → send_comment_notifications.delay(comment_id, workspace_id, sender_id, notified_ids, mentioned_user_ids)
       → validates mentioned_user_ids against workspace membership
-      → InboxItem.objects.bulk_create([...])   ← one DB round-trip for all recipients
-      → broadcast_to_user() per recipient      ← WebSocket push (can't batch, per-user groups)
+      → core.events.push_inbox_items([...])   ← one INSERT + per-recipient WS push
 
 Comment reaction toggled (POST /comments/{id}/reactions/)
   → CommentReaction get_or_create (concurrent-safe)
@@ -1012,32 +1012,44 @@ Module-level helpers shared across all org-structure views:
 | `_task_list_qs()` | Annotated queryset for task list — 7 count annotations (`_child_count`, `_done_child_count`, `_subtask_count`, `_done_subtask_count`, `_comment_count`, `_pending_approval_count`, `_approved_approval_count`), no N+1. `TaskSerializer` and `TaskCardSerializer` read these via `getattr(obj, "_<annotation>", fallback)` so they're safe for both list (annotation) and single-object (fallback) contexts. |
 | `_task_detail_qs()` | Lean queryset for single-task detail — `select_related(status, assignee, created_by, sprint, parent)` + `prefetch_related(labels, field_values__field)`. No subtasks/comments/activities prefetch — those are served by their own endpoints. |
 | `_apply_task_filters(qs, params, user)` | Apply FilterBar params to a Task queryset |
-| `_require_board_perm(user, board, role)` | Raise 403 if insufficient role |
-| `_require_board_admin(request, workspace_id, board_id)` | Return (workspace, board) or raise 403/404 |
-| `broadcast(workspace_id, event_type, data)` | WebSocket push + webhook fan-out |
-| `broadcast_to_user(user_id, event_type, data)` | Push to a single user's WS group |
-| `notify(recipient, actor, verb, workspace, task)` | InboxItem + WS push; no-op if actor==recipient |
 | `log_activity(task, actor, verb, meta)` | Write TaskActivity row |
 
-### Webhook event mapping (internal → public)
+> `broadcast` / `broadcast_to_user` / `notify` moved to **`core/events.py`**; the board
+> guards `_require_board_perm` / `_require_board_admin` / `_is_workspace_admin` moved to
+> **`projects/permissions.py`**. helpers.py is query/lookup helpers only.
 
-| Internal event | Public webhook event |
-|---------------|---------------------|
-| `task.created` | `task.created` |
-| `task.updated` | `task.updated` |
-| `task.moved` | `task.updated` |
-| `task.deleted` | `task.deleted` |
-| `task.commented` | `task.commented` |
-| `tasks.bulk_updated` | `task.updated` |
-| `tasks.bulk_deleted` | `task.deleted` |
-| `status.updated` | `status.updated` |
-| `sprint.started` | `sprint.started` |
-| `sprint.completed` | `sprint.completed` |
-| `objective.created` | `objective.created` |
-| `objective.updated` | `objective.updated` |
-| `objective.deleted` | `objective.deleted` |
+---
 
-All other events (presence, reactions, typing, etc.) are internal-only and never forwarded.
+## Eventing & Notifications — `core/events.py` (single source of truth)
+
+Every real-time / fan-out primitive lives in this ONE module. Two registries drive everything:
+
+**`EVENTS`** — one entry per internal event, declaring the external surfaces it reaches. `broadcast()` reads it; call sites never wire webhooks/chat themselves.
+- `"webhook"` — public webhook event name (several internal events collapse into one public name, e.g. `task.moved` → `task.updated`). Must stay a subset of `workspaces/constants.py::WEBHOOK_EVENTS`.
+- `"chat"` — NOTIFICATION_VERBS key for Teams/Google Chat cards.
+- An event absent from `EVENTS` is WebSocket-only (`import.progress`, `presence.updated`, `reaction.updated`, `approval.updated`, …).
+
+**`NOTIFICATION_VERBS`** — one entry per notification verb: its InboxItem `event_type` and human label. `InboxItem.verb`/`event_type` model choices were **removed** — this registry is the contract (used by inbox rows, WS payloads, and chat card labels).
+
+| Function | Purpose |
+|----------|---------|
+| `broadcast(workspace_id, event, data, *, task_id=, actor_id=, chat=)` | **THE one fan-out call after a mutation**: WS group push, plus webhooks and chat per the `EVENTS` entry. Pass `task_id`+`actor_id` for task events (chat card built from the task; board-mapped channels included) or `chat={"title", "subtitle"?, "facts"?, "url"?}`+`actor_id` for anything else (org/HR — workspace-wide channels only). |
+| `broadcast_to_user(user_id, event, data)` | Push to a single user's WS group |
+| `notify(recipient, actor, verb, workspace, task=None)` | One InboxItem + WS bell push; no-op if actor==recipient; `task=None` supported (HR/org) |
+| `push_inbox_items(rows)` | Bulk InboxItem INSERT + per-recipient WS push; `event_type` derived from verb — never passed |
+| `verb_event_type(verb)` / `verb_label(verb)` | Registry lookups |
+
+All functions are fire-and-forget: failures are logged, never raised.
+
+**How to add a new event:** add one `EVENTS` entry (+ the public name in `WEBHOOK_EVENTS` if new), then call `broadcast()` at the mutation site. **New notification verb:** one `NOTIFICATION_VERBS` entry.
+
+**Chat integrations** (`integrations/`): `broadcast()` queues `integrations.tasks.send_chat_notification` (Celery), which builds a generic `resource` dict and calls `services.fanout_notification()` — generic card formatters, no event constants in the integrations app. Wired events: `task.created`, `task.assigned`, `comment.created`, `approval.created` (task-scoped), `org.profile.submitted`, `org.profile.approved`, `leave.requested/approved/rejected` (workspace-scoped). `IntegrationChannelMapping.enabled_events` filters on the chat verb strings.
+
+---
+
+## Email — `core/emails.py` (single dispatch helper)
+
+`send_email(to, subject, *, app=, template=, context=, html=)` — renders `<app>/emails/<template>` (`{{key}}` substitution) and sends via Resend. Raises on failure so Celery callers can retry. No app imports `resend` directly. Templates stay per-app in `<app>/emails/*.html` (accounts: password reset + verification, workspaces: invite, organization: profile submitted/approved — currently unused). The per-app `render()` loaders were **removed**.
 
 ---
 
@@ -1115,11 +1127,11 @@ All paginated responses follow DRF's standard envelope: `{count, next, previous,
 The model edits above changed schema. Generate and apply:
 
 ```
-python manage.py makemigrations hr organization
+python manage.py makemigrations hr organization workspaces
 python manage.py migrate
 ```
 
-Expected: `hr` initial migration (no migrations existed yet) reflecting the dropped `attendance_employee_date_idx`; `organization` migration dropping `DepartmentMember.is_head`, `TeamMember.is_lead`, and the stale `deptmember_dept_head_idx` / `teammember_team_lead_idx` indexes (plus the previously-uncommitted `OrgProfile.employment_type` from vB.2).
+Expected: `hr` initial migration (no migrations existed yet) reflecting the dropped `attendance_employee_date_idx`; `organization` migration dropping `DepartmentMember.is_head`, `TeamMember.is_lead`, and the stale `deptmember_dept_head_idx` / `teammember_team_lead_idx` indexes (plus the previously-uncommitted `OrgProfile.employment_type` from vB.2); `workspaces` migration renaming `InboxItem.project_name` → `board_name` (**answer "y" to Django's rename prompt** so it emits `RenameField`, not drop+add) and altering `verb`/`event_type` (choices removed).
 
 ---
 

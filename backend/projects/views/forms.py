@@ -10,10 +10,8 @@ from ..serializers import (
     FormSubmissionSerializer,
     PublicFormSerializer,
 )
-from .helpers import (
-    get_workspace_for_user,
-    _require_board_perm,
-)
+from ..permissions import _require_board_perm
+from .helpers import get_workspace_for_user
 
 
 # ── v2.6.0 — Forms & Intake ───────────────────────────────────────────────────

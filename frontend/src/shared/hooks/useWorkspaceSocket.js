@@ -278,9 +278,12 @@ export function useWorkspaceSocket(workspaceId) {
   useEffect(() => {
     if (!workspaceId) return;
 
+    // Auth via Sec-WebSocket-Protocol ["jwt", <token>] — the server echoes
+    // "jwt" back on accept. Keeps the token out of URLs and proxy logs.
     const token = localStorage.getItem("access_token");
     const ws = new WebSocket(
-      `${BACKEND_WS_URL}/ws/workspaces/${workspaceId}/?token=${token}`,
+      `${BACKEND_WS_URL}/ws/workspaces/${workspaceId}/`,
+      ["jwt", token],
     );
     wsRef.current = ws;
 
@@ -294,6 +297,7 @@ export function useWorkspaceSocket(workspaceId) {
     ws.onerror = () =>
       console.warn("[WS] error — realtime updates unavailable");
 
+    // 4401 = token missing/expired (refresh + reconnect), 4403 = not a member (don't retry)
     ws.onclose = (ev) =>
       console.debug("[WS] closed", ev.code, ev.reason);
 

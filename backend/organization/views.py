@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import permissions, status
@@ -7,7 +8,7 @@ from rest_framework.views import APIView
 
 from workspaces import access
 from workspaces.models import WorkspaceMember
-from .events import broadcast_org_event
+from core.events import broadcast
 from .models import (
     Department,
     DepartmentMember,
@@ -76,18 +77,24 @@ def _require_profile_view_access(workspace, requesting_user, member):
         raise PermissionDenied("You do not have permission to view member profiles.")
 
 
-def _finalize_profile_approval(profile):
-    """Fire the approval inbox/email notification + workspace broadcast for one profile.
+def _finalize_profile_approval(profile, approver):
+    """Fire the approval inbox notification + workspace broadcast for one profile.
 
     Shared by `ApproveProfileView` (single) and `BulkApproveProfilesView` (loop).
     """
     from .tasks import notify_member_profile_approved
 
     notify_member_profile_approved.delay(str(profile.id))
-    broadcast_org_event(
+    member_name = profile.member.user.full_name or profile.member.user.email
+    broadcast(
         str(profile.member.workspace_id),
         "org.profile.approved",
         {"profile_id": str(profile.id), "member_id": str(profile.member_id)},
+        actor_id=approver.id,
+        chat={
+            "title": f"{member_name}'s org profile was approved",
+            "subtitle": profile.member.workspace.name,
+        },
     )
 
 
@@ -112,7 +119,7 @@ class DepartmentListCreateView(APIView):
         )
         ser.is_valid(raise_exception=True)
         ser.save()
-        broadcast_org_event(str(workspace.id), "org.department.created", ser.data)
+        broadcast(str(workspace.id), "org.department.created", ser.data)
         return Response(ser.data, status=status.HTTP_201_CREATED)
 
 class DepartmentDetailView(APIView):
@@ -137,7 +144,7 @@ class DepartmentDetailView(APIView):
         )
         ser.is_valid(raise_exception=True)
         ser.save()
-        broadcast_org_event(str(workspace.id), "org.department.updated", ser.data)
+        broadcast(str(workspace.id), "org.department.updated", ser.data)
         return Response(ser.data)
 
     def delete(self, request, workspace_id, dept_id):
@@ -145,7 +152,7 @@ class DepartmentDetailView(APIView):
         dept = get_object_or_404(Department, id=dept_id, workspace=workspace)
         dept_id_str = str(dept.id)
         dept.delete()
-        broadcast_org_event(str(workspace.id), "org.department.deleted", {"id": dept_id_str})
+        broadcast(str(workspace.id), "org.department.deleted", {"id": dept_id_str})
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -172,7 +179,7 @@ class DepartmentMemberListCreateView(APIView):
         )
         ser.is_valid(raise_exception=True)
         ser.save()
-        broadcast_org_event(
+        broadcast(
             str(workspace.id), "org.department_member.added",
             {"department_id": str(dept.id), **ser.data},
         )
@@ -189,7 +196,7 @@ class DepartmentMemberDetailView(APIView):
             DepartmentMember, id=membership_id, department=dept
         )
         membership.delete()
-        broadcast_org_event(
+        broadcast(
             str(workspace.id), "org.department_member.removed",
             {"department_id": str(dept.id), "id": str(membership_id)},
         )
@@ -217,7 +224,7 @@ class TeamListCreateView(APIView):
         )
         ser.is_valid(raise_exception=True)
         ser.save()
-        broadcast_org_event(str(workspace.id), "org.team.created", ser.data)
+        broadcast(str(workspace.id), "org.team.created", ser.data)
         return Response(ser.data, status=status.HTTP_201_CREATED)
 
 
@@ -243,7 +250,7 @@ class TeamDetailView(APIView):
         )
         ser.is_valid(raise_exception=True)
         ser.save()
-        broadcast_org_event(str(workspace.id), "org.team.updated", ser.data)
+        broadcast(str(workspace.id), "org.team.updated", ser.data)
         return Response(ser.data)
 
     def delete(self, request, workspace_id, team_id):
@@ -251,7 +258,7 @@ class TeamDetailView(APIView):
         team = get_object_or_404(Team, id=team_id, workspace=workspace)
         team_id_str = str(team.id)
         team.delete()
-        broadcast_org_event(str(workspace.id), "org.team.deleted", {"id": team_id_str})
+        broadcast(str(workspace.id), "org.team.deleted", {"id": team_id_str})
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -276,7 +283,7 @@ class TeamMemberListCreateView(APIView):
         )
         ser.is_valid(raise_exception=True)
         ser.save()
-        broadcast_org_event(
+        broadcast(
             str(workspace.id), "org.team_member.added",
             {"team_id": str(team.id), **ser.data},
         )
@@ -290,7 +297,7 @@ class TeamMemberDetailView(APIView):
         team = get_object_or_404(Team, id=team_id, workspace=workspace)
         membership = get_object_or_404(TeamMember, id=membership_id, team=team)
         membership.delete()
-        broadcast_org_event(
+        broadcast(
             str(workspace.id), "org.team_member.removed",
             {"team_id": str(team.id), "id": str(membership_id)},
         )
@@ -313,7 +320,7 @@ class JobTitleListCreateView(APIView):
         ser = JobTitleSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         ser.save(workspace=workspace)
-        broadcast_org_event(str(workspace.id), "org.job_title.created", ser.data)
+        broadcast(str(workspace.id), "org.job_title.created", ser.data)
         return Response(ser.data, status=status.HTTP_201_CREATED)
 
 
@@ -326,7 +333,7 @@ class JobTitleDetailView(APIView):
         ser = JobTitleSerializer(title, data=request.data, partial=True)
         ser.is_valid(raise_exception=True)
         ser.save()
-        broadcast_org_event(str(workspace.id), "org.job_title.updated", ser.data)
+        broadcast(str(workspace.id), "org.job_title.updated", ser.data)
         return Response(ser.data)
 
     def delete(self, request, workspace_id, title_id):
@@ -334,7 +341,7 @@ class JobTitleDetailView(APIView):
         title = get_object_or_404(JobTitle, id=title_id, workspace=workspace)
         title_id_str = str(title.id)
         title.delete()
-        broadcast_org_event(str(workspace.id), "org.job_title.deleted", {"id": title_id_str})
+        broadcast(str(workspace.id), "org.job_title.deleted", {"id": title_id_str})
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -368,7 +375,7 @@ class OrgProfileView(APIView):
         ser = OrgProfileSerializer(profile, data=request.data, partial=True)
         ser.is_valid(raise_exception=True)
         ser.save()
-        broadcast_org_event(
+        broadcast(
             str(workspace.id), "org.profile.updated",
             {"profile_id": str(profile.id), "member_id": str(member.id)},
         )
@@ -398,7 +405,7 @@ class ReportingLineListCreateView(APIView):
         )
         ser.is_valid(raise_exception=True)
         ser.save()
-        broadcast_org_event(str(workspace.id), "org.reporting_line.created", ser.data)
+        broadcast(str(workspace.id), "org.reporting_line.created", ser.data)
         return Response(ser.data, status=status.HTTP_201_CREATED)
 
 
@@ -410,7 +417,7 @@ class ReportingLineDetailView(APIView):
         line = get_object_or_404(ReportingLine, id=line_id, workspace=workspace)
         line_id_str = str(line.id)
         line.delete()
-        broadcast_org_event(str(workspace.id), "org.reporting_line.deleted", {"id": line_id_str})
+        broadcast(str(workspace.id), "org.reporting_line.deleted", {"id": line_id_str})
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -509,7 +516,7 @@ class MyOrgProfileView(APIView):
         ser = OrgProfileSerializer(profile, data=request.data, partial=True)
         ser.is_valid(raise_exception=True)
         ser.save()
-        broadcast_org_event(
+        broadcast(
             str(workspace.id), "org.profile.updated",
             {"profile_id": str(profile.id), "member_id": str(member.id)},
         )
@@ -529,10 +536,17 @@ class MyOrgProfileView(APIView):
         profile.save(update_fields=["status", "submitted_at"])
         from .tasks import notify_hr_profile_submitted
         notify_hr_profile_submitted.delay(str(profile.id))
-        broadcast_org_event(
+        member_name = request.user.full_name or request.user.email
+        broadcast(
             str(profile.member.workspace_id),
             "org.profile.submitted",
             {"profile_id": str(profile.id), "member_id": str(profile.member_id)},
+            actor_id=request.user.id,
+            chat={
+                "title": f"{member_name} submitted their org profile",
+                "subtitle": workspace.name,
+                "url": f"{settings.FRONTEND_URL}/w/{workspace.id}/org/pending",
+            },
         )
         return Response(OrgProfileSerializer(profile).data)
 
@@ -599,7 +613,7 @@ class BulkApproveProfilesView(APIView):
 
         OrgProfile.objects.bulk_update(profiles, ["status", "approved_at", "approved_by"])
         for profile in profiles:
-            _finalize_profile_approval(profile)
+            _finalize_profile_approval(profile, request.user)
 
         return Response({"approved": len(profiles)})
 
@@ -625,5 +639,5 @@ class ApproveProfileView(APIView):
         profile.approved_at = timezone.now()
         profile.approved_by = approver
         profile.save(update_fields=["status", "approved_at", "approved_by"])
-        _finalize_profile_approval(profile)
+        _finalize_profile_approval(profile, request.user)
         return Response(OrgProfileSerializer(profile).data)

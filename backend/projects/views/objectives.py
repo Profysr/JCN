@@ -8,7 +8,8 @@ from ..serializers import (
     KeyResultSerializer,
     KeyResultLinkedTaskSerializer,
 )
-from .helpers import get_workspace_for_user, broadcast
+from core.events import broadcast
+from .helpers import get_workspace_for_user
 
 
 # ── v3.8.0 — OKR & Goal Tracking ─────────────────────────────────────────────

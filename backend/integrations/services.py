@@ -2,130 +2,106 @@
 Integration notification services.
 
 Formats and dispatches outbound messages to Teams and Google Chat.
-Called by fanout_notification() which is hooked into projects.views.notify().
+Entry point: fanout_notification(), invoked by the Celery task
+integrations.tasks.send_chat_notification — which is queued via
+core.events.broadcast() (the "chat" surface of the EVENTS registry).
+
+Cards are GENERIC — they render a `resource` dict, so any app can post to
+chat without this file changing:
+
+    resource = {
+        "title":    "Fix login redirect",          # required
+        "subtitle": "Platform board",              # optional (header line)
+        "facts":    {"Priority": "🟠 High"},       # optional key→value rows
+        "url":      "https://…",                   # optional "Open in JCN" button
+    }
+
+Verb strings and their labels live in core.events.NOTIFICATION_VERBS —
+nothing event-related is defined here, only payload formatting + HTTP dispatch.
 """
 import logging
 
 import requests
-from django.conf import settings
 from django.db import models
+
+from core.events import verb_label
 
 logger = logging.getLogger(__name__)
 
-PRIORITY_EMOJI = {
-    "urgent": "🔴",
-    "high":   "🟠",
-    "medium": "🟡",
-    "low":    "🔵",
-    "none":   "⚪",
-}
-
-VERB_LABEL = {
-    "task_created":       "📋 Task Created",
-    "task_assigned":      "👤 Task Assigned",
-    "task_commented":     "💬 New Comment",
-    "task_completed":     "✅ Task Completed",
-    "task_mentioned":     "💬 You Were Mentioned",
-    "sprint_started":     "🚀 Sprint Started",
-    "sprint_completed":   "🏁 Sprint Completed",
-    "approval_requested": "✋ Approval Requested",
-}
-
 
 # ── Message formatters ────────────────────────────────────────────────────────
-def _task_url(workspace_id, board_id, task_id):
-    frontend = getattr(settings, "FRONTEND_URL", "http://localhost:5173")
-    return f"{frontend}/w/{workspace_id}/boards/{board_id}?task={task_id}"
-
-
-def format_teams_card(verb, task, actor, workspace_id):
+def format_teams_card(verb, resource, actor):
     """Returns a Teams MessageCard dict (legacy connector card — no Power Apps needed)."""
-    label     = VERB_LABEL.get(verb, verb.replace("_", " ").title())
-    pri_emoji = PRIORITY_EMOJI.get(getattr(task, "priority", "none"), "⚪")
-    url       = _task_url(workspace_id, str(task.board_id), str(task.id))
+    label = verb_label(verb)
+    actor_name = actor.full_name or actor.email.split("@")[0]
+    facts = [{"name": k, "value": str(v)} for k, v in (resource.get("facts") or {}).items()]
+    facts.append({"name": "By", "value": actor_name})
 
-    return {
+    card = {
         "@type":      "MessageCard",
         "@context":   "https://schema.org/extensions",
         "themeColor": "6366f1",
-        "summary":    f"{label}: {task.title}",
+        "summary":    f"{label}: {resource['title']}",
         "sections": [
             {
                 "activityTitle":    f"**{label}**",
-                "activitySubtitle": task.title,
-                "activityText":     (
-                    f"**Project:** {task.board.name}  \n"
-                    f"**Priority:** {pri_emoji} {(task.priority or 'none').title()}  \n"
-                    f"**By:** {actor.full_name or actor.email.split('@')[0]}"
-                ),
-                "facts": [
-                    {"name": "Project",  "value": task.board.name},
-                    {"name": "Priority", "value": f"{pri_emoji} {(task.priority or 'none').title()}"},
-                    {"name": "Actor",    "value": actor.full_name or actor.email.split("@")[0]},
-                ],
-            }
-        ],
-        "potentialAction": [
-            {
-                "@type": "OpenUri",
-                "name":  "Open in JCN",
-                "targets": [{"os": "default", "uri": url}],
+                "activitySubtitle": resource["title"],
+                "activityText":     resource.get("subtitle", ""),
+                "facts": facts,
             }
         ],
     }
+    if resource.get("url"):
+        card["potentialAction"] = [
+            {
+                "@type": "OpenUri",
+                "name":  "Open in JCN",
+                "targets": [{"os": "default", "uri": resource["url"]}],
+            }
+        ]
+    return card
 
 
-def format_google_chat_card(verb, task, actor, workspace_id):
+def format_google_chat_card(verb, resource, actor):
     """Returns a Google Chat card payload."""
-    label     = VERB_LABEL.get(verb, verb.replace("_", " ").title())
-    pri_emoji = PRIORITY_EMOJI.get(getattr(task, "priority", "none"), "⚪")
-    url       = _task_url(workspace_id, str(task.board_id), str(task.id))
+    label = verb_label(verb)
+    actor_name = actor.full_name or actor.email.split("@")[0]
+
+    widgets = [{"textParagraph": {"text": f"<b>{resource['title']}</b>"}}]
+    for key, value in (resource.get("facts") or {}).items():
+        widgets.append({"decoratedText": {"topLabel": key, "text": str(value)}})
+    widgets.append({"decoratedText": {"topLabel": "By", "text": actor_name}})
+
+    sections = [{"widgets": widgets}]
+    if resource.get("url"):
+        sections.append({
+            "widgets": [
+                {
+                    "buttonList": {
+                        "buttons": [
+                            {
+                                "text": "Open in JCN",
+                                "onClick": {"openLink": {"url": resource["url"]}},
+                                "color": {"red": 0.388, "green": 0.4, "blue": 0.945, "alpha": 1},
+                            }
+                        ]
+                    }
+                }
+            ]
+        })
 
     return {
         "cardsV2": [
             {
-                "cardId": f"jcn-{task.id}",
+                "cardId": f"jcn-{verb}",
                 "card": {
                     "header": {
                         "title":    label,
-                        "subtitle": task.board.name,
+                        "subtitle": resource.get("subtitle", ""),
                         "imageUrl": "https://fonts.gstatic.com/s/i/short-term/release/materialsymbolsoutlined/task/default/48px.svg",
                         "imageType": "CIRCLE",
                     },
-                    "sections": [
-                        {
-                            "widgets": [
-                                {"textParagraph": {"text": f"<b>{task.title}</b>"}},
-                                {
-                                    "decoratedText": {
-                                        "topLabel": "Priority",
-                                        "text":     f"{pri_emoji} {(task.priority or 'none').title()}",
-                                    }
-                                },
-                                {
-                                    "decoratedText": {
-                                        "topLabel": "By",
-                                        "text":     actor.full_name or actor.email.split("@")[0],
-                                    }
-                                },
-                            ]
-                        },
-                        {
-                            "widgets": [
-                                {
-                                    "buttonList": {
-                                        "buttons": [
-                                            {
-                                                "text": "Open in JCN",
-                                                "onClick": {"openLink": {"url": url}},
-                                                "color": {"red": 0.388, "green": 0.4, "blue": 0.945, "alpha": 1},
-                                            }
-                                        ]
-                                    }
-                                }
-                            ]
-                        },
-                    ],
+                    "sections": sections,
                 },
             }
         ]
@@ -154,33 +130,32 @@ def send_google_chat(webhook_url, payload):
 
 
 # ── Main fanout entry point ───────────────────────────────────────────────────
-def fanout_notification(workspace, verb, task, actor):
+def fanout_notification(workspace, verb, actor, resource, board=None):
     """
-    Called by projects.views after every task event.
-    Fans out to all active integration channels mapped to the task's project.
-    Failures are caught and logged — never raises so the main request isn't broken.
+    Fan a workspace event out to all active mapped integration channels.
 
-    Why called from projects and not workspaces: task events (created, assigned, etc.)
-    originate in the projects app. The integration layer is workspace-scoped but the
-    trigger is always a task action, so projects.views is the correct call site.
+    board: pass the Board for task-scoped events — board-mapped channels only
+    receive events for their board. Workspace-level events (org, HR) go to
+    workspace-wide mappings (board is NULL) only.
+    Failures are caught and logged — never raises.
     """
     try:
-        _fanout(workspace, verb, task, actor)
+        _fanout(workspace, verb, actor, resource, board)
     except Exception as exc:
         logger.exception("fanout_notification uncaught error: %s", exc)
 
 
-def _fanout(workspace, verb, task, actor):
+def _fanout(workspace, verb, actor, resource, board):
     from integrations.models import IntegrationChannelMapping, TeamsIntegration, GoogleChatIntegration
 
-    workspace_id = str(workspace.id)
+    board_q = models.Q(board__isnull=True)
+    if board is not None:
+        board_q |= models.Q(board=board)
 
     mappings = IntegrationChannelMapping.objects.filter(
         workspace=workspace,
         is_active=True,
-    ).filter(
-        models.Q(board=task.board) | models.Q(board__isnull=True)
-    ).select_related("board")
+    ).filter(board_q).select_related("board")
 
     if not mappings.exists():
         return
@@ -198,7 +173,7 @@ def _fanout(workspace, verb, task, actor):
                     continue
             if not webhook:
                 continue
-            send_teams(webhook, format_teams_card(verb, task, actor, workspace_id))
+            send_teams(webhook, format_teams_card(verb, resource, actor))
 
         elif mapping.platform == IntegrationChannelMapping.Platform.GOOGLE_CHAT:
             webhook = mapping.webhook_url
@@ -209,4 +184,4 @@ def _fanout(workspace, verb, task, actor):
                     continue
             if not webhook:
                 continue
-            send_google_chat(webhook, format_google_chat_card(verb, task, actor, workspace_id))
+            send_google_chat(webhook, format_google_chat_card(verb, resource, actor))

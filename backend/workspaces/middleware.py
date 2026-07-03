@@ -1,36 +1,55 @@
 """
 JWTAuthMiddleware — ASGI middleware that authenticates WebSocket connections
-using a Bearer JWT passed as ?token=<jwt> in the URL query string.
+with a SimpleJWT access token, mirroring what AuthMiddlewareStack does for
+session auth: it resolves scope["user"] before the consumer runs.
 
-Django Channels' AuthMiddlewareStack handles session/cookie auth. Our app uses
-JWT (stored in localStorage, not cookies), so we need this middleware to bridge
-the gap. It runs before the consumer and populates scope["user"] identically to
-how AuthMiddlewareStack does it — the consumer sees no difference.
+The token is accepted from two places (first match wins):
+
+  1. Sec-WebSocket-Protocol header — the client requests subprotocols
+     ["jwt", "<token>"]. This is what the frontend uses: browsers can't set arbitrary WS headers, but they CAN set subprotocols, and the token stays out of URLs / access logs / proxy logs. The consumer must echo the "jwt"
+     subprotocol back on accept() — scope["jwt_subprotocol"] is set to signal that.
+  2. Authorization: Bearer <token> header — for non-browser clients.
+
+Auth here answers only "who is this?". "May they join workspace X?" is the
+consumer's job (membership check per URL route).
 
 Usage in asgi.py:
     "websocket": JWTAuthMiddlewareStack(URLRouter(websocket_urlpatterns))
 """
 
-import urllib.parse
 import logging
-from django.contrib.auth.models import AnonymousUser
+
 from channels.db import database_sync_to_async
 from channels.middleware import BaseMiddleware
+from django.contrib.auth.models import AnonymousUser
 
 logger = logging.getLogger(__name__)
+
+SUBPROTOCOL_PREFIX = "jwt"
+
+
+def _resolve_token(scope):
+    """Extract the raw JWT from the connection scope. Returns (token, via_subprotocol)."""
+    # 1. Sec-WebSocket-Protocol: "jwt, <token>"
+    subprotocols = scope.get("subprotocols") or []
+    if len(subprotocols) >= 2 and subprotocols[0] == SUBPROTOCOL_PREFIX:
+        return subprotocols[1], True
+
+    # 2. Authorization: Bearer <token>
+    headers = dict(scope.get("headers") or [])
+    auth_header = headers.get(b"authorization", b"").decode()
+    if auth_header.lower().startswith("bearer "):
+        return auth_header[7:].strip(), False
+
+    return None, False
 
 
 @database_sync_to_async
 def _get_user_from_jwt(token_str):
-    """
-    Validate a JWT access token and return the associated User, or
-    AnonymousUser if the token is missing, expired, or invalid.
-    """
+    """Validate a JWT access token → User, or AnonymousUser if missing/expired/invalid."""
     from django.contrib.auth import get_user_model
     from rest_framework_simplejwt.tokens import AccessToken
-    from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
-
-    User = get_user_model()
+    from rest_framework_simplejwt.exceptions import TokenError
 
     if not token_str:
         return AnonymousUser()
@@ -40,37 +59,29 @@ def _get_user_from_jwt(token_str):
         user_id = validated.get("user_id")
         if not user_id:
             return AnonymousUser()
-        user = User.objects.filter(id=user_id).first()
-        return user if user else AnonymousUser()
-    except (TokenError, InvalidToken, Exception) as exc:
-        logger.debug("WS JWT auth failed: %s", exc)
+        user = get_user_model().objects.filter(id=user_id).first()
+        return user or AnonymousUser()
+    except TokenError as exc:
+        logger.debug("WS JWT rejected: %s", exc)
+        return AnonymousUser()
+    except Exception:
+        logger.exception("WS JWT auth unexpected failure")
         return AnonymousUser()
 
 
 class JWTAuthMiddleware(BaseMiddleware):
-    """
-    Reads ?token=<jwt> from the WebSocket URL, validates the JWT, and
-    injects the resolved user into scope["user"] before handing off to
-    the next layer (usually URLRouter → consumer).
-    """
+    """Resolve the JWT into scope["user"] before handing off to the URLRouter/consumer."""
 
     async def __call__(self, scope, receive, send):
         if scope["type"] == "websocket":
-            query_string = scope.get("query_string", b"")
-            if isinstance(query_string, bytes):
-                query_string = query_string.decode()
-
-            params = urllib.parse.parse_qs(query_string)
-            token_str = params.get("token", [None])[0]
-
-            scope["user"] = await _get_user_from_jwt(token_str)
+            token, via_subprotocol = _resolve_token(scope)
+            scope["user"] = await _get_user_from_jwt(token)
+            # Consumers must echo the subprotocol on accept() or browsers drop the connection.
+            scope["jwt_subprotocol"] = via_subprotocol
 
         return await super().__call__(scope, receive, send)
 
 
 def JWTAuthMiddlewareStack(inner):
-    """
-    Drop-in replacement for AuthMiddlewareStack for JWT-authenticated
-    WebSocket endpoints. Wrap URLRouter with this in asgi.py.
-    """
+    """Drop-in replacement for AuthMiddlewareStack for JWT-authenticated WebSockets."""
     return JWTAuthMiddleware(inner)

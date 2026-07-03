@@ -101,27 +101,13 @@ class InboxItem(models.Model):
 
     PREFIX = "ibx"
 
-    class Verb(models.TextChoices):
-        TASK_ASSIGNED = "task_assigned", "assigned you a task"
-        TASK_COMMENTED = "task_commented", "commented on your task"
-        TASK_MENTIONED = "task_mentioned", "mentioned you in a comment"
-        APPROVAL_REQUESTED = "approval_requested", "requested your approval"
-        ORG_PROFILE_SUBMITTED = "org_profile_submitted", "submitted their org profile"
-        ORG_PROFILE_APPROVED = "org_profile_approved", "approved your org profile"
-
+    # Verb strings and their event_type mapping live in ONE place:
+    # core.events.NOTIFICATION_VERBS. No choices here — the registry is the contract.
     class Status(models.TextChoices):
         UNREAD = "unread", "Unread"
         READ = "read", "Read"
         ARCHIVED = "archived", "Archived"
         SNOOZED = "snoozed", "Snoozed"
-
-    class EventType(models.TextChoices):
-        ASSIGNED = "assigned", "Assigned"
-        MENTIONED = "mentioned", "Mentioned"
-        COMMENTED = "commented", "Commented"
-        APPROVED = "approved", "Approval"
-        AUTOMATED = "automated", "Automated"
-        ORG = "org", "Org"
 
     id = UUIDv7Field()
     user = models.ForeignKey(
@@ -133,13 +119,11 @@ class InboxItem(models.Model):
     # Denormalized so the inbox renders without extra queries — avoids joins on every list load.
     actor_id = models.CharField(max_length=100, blank=True)
     actor_name = models.CharField(max_length=255, blank=True)
-    verb = models.CharField(max_length=50, choices=Verb.choices)
-    event_type = models.CharField(
-        max_length=20, choices=EventType.choices, default=EventType.ASSIGNED
-    )
+    verb = models.CharField(max_length=50)
+    event_type = models.CharField(max_length=20, default="assigned")
     resource_name = models.CharField(max_length=500, blank=True)
     board_id = models.CharField(max_length=100, blank=True)
-    project_name = models.CharField(max_length=255, blank=True)
+    board_name = models.CharField(max_length=255, blank=True)
     meta = models.JSONField(default=dict)
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.UNREAD

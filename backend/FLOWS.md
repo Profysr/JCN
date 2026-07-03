@@ -124,7 +124,9 @@ Browser opens ws://.../ws/workspaces/<uuid>/
   ▼
 core/asgi.py                     ← the WebSocket entry point
   ▼
-workspaces/middleware.py         ← reads the JWT from ?token= and finds the user
+workspaces/middleware.py         ← reads the JWT from the Sec-WebSocket-Protocol
+                                   subprotocol ["jwt", <token>] (or Authorization
+                                   header for non-browser clients) and finds the user
   ▼
 workspaces/routing.py            ← matches the URL → WorkspaceConsumer
   ▼
@@ -138,8 +140,9 @@ workspaces/consumers.py          ← WorkspaceConsumer.connect()
 ```
 Something happens in a view or task, e.g. a department is created
   ▼
-organization/events.py  →  broadcast_org_event(...)
-   (projects uses projects/views/helpers.py → broadcast(...))
+core/events.py  →  broadcast(workspace_id, event, data)   ← EVERY app uses this
+       └─ also fans out to webhooks and Teams/Google Chat if the event is
+          registered for those surfaces in core.events.EVENTS
   ▼
 channel_layer.group_send("workspace_<id>", {...})
   ▼
@@ -150,10 +153,10 @@ workspaces/consumers.py  →  workspace_event()  →  sends JSON down each socke
 Browser receives it live (no refresh)
 ```
 
-**To add a new live event:** call `broadcast_org_event(...)` (org) or
-`broadcast(...)` (projects) right after your change succeeds, and make sure the
-frontend socket handler knows the event name. Files: the app's `events.py`/
-`helpers.py` and the consumer.
+**To add a new live event:** add it to `core.events.EVENTS` (only needed if it
+should reach webhooks/chat — WS-only events don't need registering), call
+`broadcast(...)` right after your change succeeds, and make sure the frontend
+socket handler knows the event name. Files: `core/events.py` and the consumer.
 
 ---
 
@@ -171,10 +174,13 @@ RabbitMQ  ← the job sits in the "celery" queue
 Celery worker (the `celery` container)  ← picks the job up
   ▼
 organization/tasks.py  →  the @shared_task function runs
-       (sends email via Resend, writes InboxItem rows, maybe broadcasts)
+       (writes InboxItem rows + WS pushes via core.events.push_inbox_items;
+        emails go through core.emails.send_email)
 ```
 
 - Task functions live in each app's **`tasks.py`** and are decorated `@shared_task`.
+- Tasks never hand-roll fan-out or email plumbing — they call `core.events.*`
+  and `core.emails.send_email` (templates stay in each app's `emails/` folder).
 - The worker is started by `core/celery.py` (`celery -A core worker`).
 - The view returns to the user **immediately** — the job runs in the background.
 - Common tasks: `send_invite_email`, `run_import`, `deliver_webhook`
@@ -218,7 +224,9 @@ the view runs → access.authorize(..., scope="read"/"write")
 | The shape of a JSON response | that app's `serializers.py` |
 | A database table / field | that app's `models.py` (then `makemigrations` + `migrate`) |
 | Who is allowed to do something | the `authorize(...)` call in the view + `workspaces/constants.py` (see `ACCESS.md`) |
-| A live/real-time update | the app's `events.py`/`helpers.py` `broadcast…()` + `workspaces/consumers.py` |
+| A live/real-time update, webhook, or chat card | `core/events.py` (`broadcast()` + the `EVENTS` registry) + `workspaces/consumers.py` |
+| A notification verb / inbox bell | `core/events.py` (`NOTIFICATION_VERBS`, `notify()`, `push_inbox_items()`) |
+| An outgoing email | `core/emails.py` (`send_email`) + the app's `emails/*.html` templates |
 | A background job (email, import) | the app's `tasks.py` + `core/celery.py` |
 | Login / signup / password / Google | `accounts/` (`views`, `serializers`, `adapter.py`) + `core/settings.py` |
 | Message broker / queues | RabbitMQ — `RABBITMQ_URL`, `CELERY_*`, `CHANNEL_LAYERS` in `core/settings.py` |

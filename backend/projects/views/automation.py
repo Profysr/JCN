@@ -7,10 +7,8 @@ from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from ..models import Board, AutomationRule, AutomationLog
 from ..serializers import AutomationRuleSerializer, AutomationLogSerializer
-from .helpers import (
-    get_workspace_for_user,
-    _require_board_perm,
-)
+from ..permissions import _require_board_perm
+from .helpers import get_workspace_for_user
 
 
 # ‼️ ── v2.7.0 — Automation Engine (disabled) ──────────────────────────────────

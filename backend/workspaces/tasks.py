@@ -8,7 +8,7 @@
 # How deliver_webhook is triggered:
 #   Two places call deliver_webhook.delay(...):
 #     1. WebhookTestView (views.py) — when the user clicks "Test webhook" in the UI
-#     2. _fire_webhooks()  (projects/views.py) — after real task/sprint events happen
+#     2. core.events.broadcast() — fans out every external event after a mutation
 #
 #   .delay() is the Celery method that queues the task asynchronously.
 #   The Django view returns immediately; the worker runs this function in the background.
@@ -26,14 +26,14 @@ import logging
 import time
 from itertools import islice
 
-import resend
 from django.conf import settings
 
 import requests
-from asgiref.sync import async_to_sync
 from celery import shared_task
-from channels.layers import get_channel_layer
 from django.db import transaction
+
+from core.emails import send_email
+from core.events import broadcast
 from django.utils import timezone
 from .models import Webhook, WebhookDelivery
 from core.constants import DEFAULT_TASK_STATUSES
@@ -172,30 +172,24 @@ def send_invite_email(self, invite_id):
     except WorkspaceInvite.DoesNotExist:
         return
 
-    from .emails import render as render_email
-
     inviter = invite.invited_by.full_name or invite.invited_by.email
     workspace_name = invite.workspace.name
-    accept_url = f"{settings.FRONTEND_URL}/invites/{invite.token}"
-
-    html = render_email("invite.html", {
-        "inviter": inviter,
-        "workspace_name": workspace_name,
-        "initial": workspace_name[0].upper(),
-        "role": invite.role.capitalize(),
-        "accept_url": accept_url,
-        "recipient_email": invite.email,
-    })
 
     try:
-        resend.api_key = settings.RESEND_API_KEY
-        resend.Emails.send({
-            "from": settings.FROM_EMAIL,
-            "to": [invite.email],
-            "subject": f"{inviter} invited you to join {workspace_name} on JCN",
-            "html": html,
-        })
-        logger.info("[invite_email] Sent to %s for workspace %s", invite.email, workspace_name)
+        send_email(
+            to=[invite.email],
+            subject=f"{inviter} invited you to join {workspace_name} on JCN",
+            app="workspaces",
+            template="invite.html",
+            context={
+                "inviter": inviter,
+                "workspace_name": workspace_name,
+                "initial": workspace_name[0].upper(),
+                "role": invite.role.capitalize(),
+                "accept_url": f"{settings.FRONTEND_URL}/invites/{invite.token}",
+                "recipient_email": invite.email,
+            },
+        )
     except Exception as exc:
         logger.warning("[invite_email] Failed (attempt %d): %s", self.request.retries + 1, exc)
         raise self.retry(exc=exc)
@@ -233,29 +227,20 @@ def _broadcast_import(
     total=0,
     error=None,
 ):
-    """Push an import.progress event to the workspace WebSocket group."""
-    try:
-        channel_layer = get_channel_layer()
-        async_to_sync(channel_layer.group_send)(
-            f"workspace_{workspace_id}",
-            {
-                "type": "workspace.event",
-                "data": {
-                    "type": "import.progress",
-                    "payload": {
-                        "job_id": str(job_id),
-                        "status": status,
-                        "progress_pct": progress_pct,
-                        "imported": imported,
-                        "skipped": skipped,
-                        "total": total,
-                        "error": error,
-                    },
-                },
-            },
-        )
-    except Exception as exc:
-        logger.warning("import broadcast failed: %s", exc)
+    """Push an import.progress event (internal-only) to the workspace WS group."""
+    broadcast(
+        workspace_id,
+        "import.progress",
+        {
+            "job_id": str(job_id),
+            "status": status,
+            "progress_pct": progress_pct,
+            "imported": imported,
+            "skipped": skipped,
+            "total": total,
+            "error": error,
+        },
+    )
 
 @shared_task(bind=True)
 def run_import(self, job_id):
