@@ -98,7 +98,7 @@ def _get_gchat_data_or_none(ws):
 class IntegrationStatusView(APIView):
     """Returns the current workspace connection state across all supported external ecosystems."""
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def get(self, request, workspace_id):
         ws = _read_ws(request, workspace_id)
@@ -117,7 +117,7 @@ class IntegrationStatusView(APIView):
 
 
 class TeamsIntegrationView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def get(self, request, workspace_id):
         ws = _read_ws(request, workspace_id)
@@ -144,7 +144,7 @@ class TeamsIntegrationView(APIView):
 
 
 class TeamsTestView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def post(self, request, workspace_id):
         ws = _admin_ws(request, workspace_id)
@@ -179,7 +179,7 @@ class TeamsTestView(APIView):
 
 
 class GoogleChatIntegrationView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def get(self, request, workspace_id):
         ws = _read_ws(request, workspace_id)
@@ -206,7 +206,7 @@ class GoogleChatIntegrationView(APIView):
 
 
 class GoogleChatTestView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def post(self, request, workspace_id):
         ws = _admin_ws(request, workspace_id)
@@ -235,7 +235,7 @@ class GoogleChatTestView(APIView):
 
 
 class ChannelMappingListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def get(self, request, workspace_id):
         ws = _read_ws(request, workspace_id)
@@ -263,7 +263,7 @@ class ChannelMappingListCreateView(APIView):
 
 
 class ChannelMappingDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def _get_mapping(self, request, workspace_id, mapping_id):
         ws = _admin_ws(request, workspace_id)

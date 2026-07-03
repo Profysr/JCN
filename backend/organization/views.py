@@ -100,7 +100,7 @@ def _finalize_profile_approval(profile, approver):
 
 # ── Departments ───────────────────────────────────────────────────────────────
 class DepartmentListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def get(self, request, workspace_id):
         workspace = _read_ws(request, workspace_id)
@@ -123,7 +123,7 @@ class DepartmentListCreateView(APIView):
         return Response(ser.data, status=status.HTTP_201_CREATED)
 
 class DepartmentDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     # Not called by the frontend — DepartmentsPage reads a single department out of
     # the useDepartments() list cache instead of fetching it individually. Kept for
@@ -157,7 +157,7 @@ class DepartmentDetailView(APIView):
 
 
 class DepartmentMemberListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def get(self, request, workspace_id, dept_id):
         workspace = _read_ws(request, workspace_id)
@@ -187,7 +187,7 @@ class DepartmentMemberListCreateView(APIView):
 
 
 class DepartmentMemberDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def delete(self, request, workspace_id, dept_id, membership_id):
         workspace = _manage_ws(request, workspace_id)
@@ -205,7 +205,7 @@ class DepartmentMemberDetailView(APIView):
 
 # ── Teams ─────────────────────────────────────────────────────────────────────
 class TeamListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def get(self, request, workspace_id):
         workspace = _read_ws(request, workspace_id)
@@ -229,7 +229,7 @@ class TeamListCreateView(APIView):
 
 
 class TeamDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     # Not called by the frontend — TeamsPage reads a single team out of the
     # useTeams() list cache instead of fetching it individually. Kept for API
@@ -263,7 +263,7 @@ class TeamDetailView(APIView):
 
 
 class TeamMemberListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def get(self, request, workspace_id, team_id):
         workspace = _read_ws(request, workspace_id)
@@ -290,7 +290,7 @@ class TeamMemberListCreateView(APIView):
         return Response(ser.data, status=status.HTTP_201_CREATED)
 
 class TeamMemberDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def delete(self, request, workspace_id, team_id, membership_id):
         workspace = _manage_ws(request, workspace_id)
@@ -306,7 +306,7 @@ class TeamMemberDetailView(APIView):
 
 # ── Job Titles ────────────────────────────────────────────────────────────────
 class JobTitleListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def get(self, request, workspace_id):
         # No onboarding wall — a member needs to see job titles to read the org
@@ -325,7 +325,7 @@ class JobTitleListCreateView(APIView):
 
 
 class JobTitleDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def patch(self, request, workspace_id, title_id):
         workspace = _manage_ws(request, workspace_id)
@@ -347,7 +347,7 @@ class JobTitleDetailView(APIView):
 
 # ── Org Profiles ──────────────────────────────────────────────────────────────
 class OrgProfileView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def get(self, request, workspace_id, member_id):
         workspace = access.authorize(request, workspace_id, scope="read")
@@ -384,7 +384,7 @@ class OrgProfileView(APIView):
 
 # ── Reporting Lines ───────────────────────────────────────────────────────────
 class ReportingLineListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     # Not called by the frontend — OrgChartView already returns manager_id and
     # reporting_line_id per node, which is the only place the UI needs this data.
@@ -410,7 +410,7 @@ class ReportingLineListCreateView(APIView):
 
 
 class ReportingLineDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def delete(self, request, workspace_id, line_id):
         workspace = _manage_ws(request, workspace_id)
@@ -425,7 +425,7 @@ class ReportingLineDetailView(APIView):
 class OrgChartView(APIView):
     """Tree of all workspace members with dept, team, title, and manager context."""
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def get(self, request, workspace_id):
         workspace = _read_ws(request, workspace_id)
@@ -491,7 +491,7 @@ class MyOrgProfileView(APIView):
     POST  — submit: transitions draft → submitted, lifting the app gate.
     """
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def _get_member_and_profile(self, workspace, user):
         member = get_object_or_404(
@@ -555,7 +555,7 @@ class MyOrgProfileView(APIView):
 class PendingProfilesView(APIView):
     """List of submitted (pending review) profiles — requires org.approve_profiles."""
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def get(self, request, workspace_id):
         workspace = access.authorize(request, workspace_id, perm="org.approve_profiles", scope="read")
@@ -579,7 +579,7 @@ class PendingProfilesView(APIView):
 class BulkApproveProfilesView(APIView):
     """Approve multiple submitted profiles in one request — org.approve_profiles."""
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def post(self, request, workspace_id):
         workspace = access.authorize(request, workspace_id, perm="org.approve_profiles", scope="write")
@@ -622,7 +622,7 @@ class BulkApproveProfilesView(APIView):
 class ApproveProfileView(APIView):
     """Approve a submitted profile (submitted → approved) — org.approve_profiles."""
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def post(self, request, workspace_id, profile_id):
         workspace = access.authorize(request, workspace_id, perm="org.approve_profiles", scope="write")

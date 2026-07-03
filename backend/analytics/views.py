@@ -318,7 +318,7 @@ class AnalyticsAggregateView(APIView):
       }
     """
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def get(self, request, workspace_id):
         workspace = access.authorize(
@@ -417,7 +417,7 @@ class WorkspaceSummaryView(APIView):
     (board, priority, assignee, …) as all other analytics views.
     """
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def get(self, request, workspace_id):
         workspace = access.authorize(
@@ -454,7 +454,7 @@ class TeamWorkloadView(APIView):
       days=N   Heatmap window width in days (default 14)
     """
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
     pagination_class = HeatmapPagination  # cursor by (full_name, id)
 
     def get(self, request, workspace_id):
@@ -548,7 +548,7 @@ class TaskDrilldownView(APIView):
       page_size=N
     """
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def get(self, request, workspace_id):
         workspace = access.authorize(

@@ -11,6 +11,7 @@ from ..serializers import (
     PublicFormSerializer,
 )
 from ..permissions import _require_board_perm
+from workspaces.access import APIKeyScopePermission
 from .helpers import get_workspace_for_user
 
 
@@ -18,7 +19,7 @@ from .helpers import get_workspace_for_user
 
 
 class FormListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request, workspace_id, board_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
@@ -37,7 +38,7 @@ class FormListCreateView(APIView):
 
 
 class FormDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def _get_form(self, workspace_id, board_id, form_id, user):
         workspace = get_workspace_for_user(workspace_id, user)
@@ -66,7 +67,7 @@ class FormDetailView(APIView):
 class FormFieldsBulkUpdateView(APIView):
     """PUT /forms/:id/fields/ — replace all fields in one shot (drag-drop reorder support)."""
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def put(self, request, workspace_id, board_id, form_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
@@ -157,7 +158,7 @@ class PublicFormSubmitView(APIView):
 class FormSubmissionListView(APIView):
     """GET /forms/:id/submissions/ — authenticated, returns all submissions."""
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request, workspace_id, board_id, form_id):
         workspace = get_workspace_for_user(workspace_id, request.user)

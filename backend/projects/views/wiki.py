@@ -5,12 +5,13 @@ from django.shortcuts import get_object_or_404
 from ..models import Board, WikiPage, WikiRevision, Document
 from ..serializers import WikiPageSerializer, WikiRevisionSerializer, DocumentSerializer
 from ..permissions import _require_board_perm
+from workspaces.access import APIKeyScopePermission
 from .helpers import get_workspace_for_user
 
 
 # ── v2.5.0 — Wiki & Documents ─────────────────────────────────────────────────
 class WikiPageListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request, workspace_id, board_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
@@ -29,7 +30,7 @@ class WikiPageListCreateView(APIView):
 
 
 class WikiPageDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def _get_page(self, workspace_id, board_id, page_id, user):
         workspace = get_workspace_for_user(workspace_id, user)
@@ -60,7 +61,7 @@ class WikiPageDetailView(APIView):
 
 
 class WikiPageRevisionsView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request, workspace_id, board_id, page_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
@@ -71,7 +72,7 @@ class WikiPageRevisionsView(APIView):
 
 
 class DocumentListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request, workspace_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
@@ -87,7 +88,7 @@ class DocumentListCreateView(APIView):
 
 
 class DocumentDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def _get_doc(self, workspace_id, doc_id, user):
         workspace = get_workspace_for_user(workspace_id, user)

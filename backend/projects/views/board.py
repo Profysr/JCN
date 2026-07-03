@@ -24,7 +24,7 @@ from ..permissions import (
     _require_board_perm,
 )
 
-from workspaces.access import has_app_access
+from workspaces.access import has_app_access, APIKeyScopePermission
 from core.events import broadcast
 
 from .helpers import get_workspace_for_user
@@ -32,7 +32,7 @@ from .helpers import get_workspace_for_user
 
 # ── Boards ✅─────────────────────────────────────────────────────────────────
 class BoardListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request, workspace_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
@@ -61,7 +61,7 @@ class BoardListCreateView(APIView):
 
 
 class BoardDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get_board(self, workspace_id, board_id, user):
         workspace = get_workspace_for_user(workspace_id, user)
@@ -104,7 +104,7 @@ class BoardDetailView(APIView):
 class PortfolioView(APIView):
     """GET /portfolio/ — cross-project health stats for a workspace. Similar to Get Method in Board Create List view"""
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request, workspace_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
@@ -132,7 +132,7 @@ class PortfolioView(APIView):
 
 # ── v2.1.0 — Project Members & Permissions ✅───────────────────────────────────
 class BoardMemberListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request, workspace_id, board_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
@@ -164,7 +164,7 @@ class BoardMemberListCreateView(APIView):
 
 
 class BoardMemberDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def _get_member(self, workspace_id, board_id, member_id, request):
         workspace, board = _require_board_admin(request, workspace_id, board_id)
@@ -209,7 +209,7 @@ class BoardMemberDetailView(APIView):
 
 
 class BoardMemberBulkCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def post(self, request, workspace_id, board_id):
         workspace, board = _require_board_admin(request, workspace_id, board_id)
@@ -249,7 +249,7 @@ class BoardMemberBulkCreateView(APIView):
 # Returns the full BOARD_ROLE_PERMISSIONS table — what each board role can do.
 # The frontend consumes this instead of hardcoding role capability tables.
 class BoardPermissionsView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request, workspace_id, board_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
@@ -265,7 +265,7 @@ class UserPresenceView(APIView):
     GET    /workspaces/:slug/presence/?resource_type=X&resource_id=Y — active viewers
     """
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def _get_workspace(self, slug, user):
         return get_workspace_for_user(slug, user)

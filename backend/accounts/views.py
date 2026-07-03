@@ -2,12 +2,13 @@ from rest_framework import generics, permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from allauth.account.models import EmailAddress
+from workspaces.access import APIKeyScopePermission
 from .serializers import UserSerializer
 
 
 class MeView(generics.RetrieveUpdateAPIView):
     serializer_class = UserSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get_object(self):
         return self.request.user

@@ -118,6 +118,20 @@ control — and is composed after `authorize()`.
 is no compatibility shim. Everything (resolution, checks, scopes, and
 `create_system_roles`) lives in `access.py`; every app imports from it directly.
 
+**`APIKeyScopePermission`** — a DRF permission class in `access.py`, wired into
+`REST_FRAMEWORK.DEFAULT_PERMISSION_CLASSES` in `core/settings.py`. It is the
+**global floor** for scope #6 above: every view in every app gets
+`permission_classes = [IsAuthenticated, APIKeyScopePermission]`, which maps
+GET/HEAD/OPTIONS → `scope:read` and POST/PUT/PATCH/DELETE → `scope:write`
+automatically — no per-view `authorize(..., scope=)` call required to get the
+baseline. A view still calls `authorize(..., admin=True, scope="admin")` itself
+when one specific action needs a stricter ceiling than the method default (e.g.
+deleting a webhook). This exists because `permission_classes` set on a view
+**replaces** the DRF default list rather than extending it — every `APIView`
+across the backend explicitly lists `APIKeyScopePermission` for this reason; a
+new view that copies an existing class picks it up automatically, but a view
+written from scratch must still include it explicitly.
+
 ---
 
 ## 4. Endpoint-by-endpoint
@@ -292,8 +306,17 @@ settings management).
    `access.is_workspace_admin` / `require_perm`.
 2. **Dead permissions:** `org.manage`, `hr.manage_leave`, `hr.manage_attendance`
    were defined but never checked. Now enforced on mutations.
-3. **Unenforced API-key scopes:** any key had full user rights. Now `scope`
-   ceilings apply, plus rate limiting keyed on the API-key hash.
+3. **Unenforced API-key scopes:** any key had full user rights. `hr`, `org`,
+   `analytics`, and `integrations` picked up per-endpoint `scope=` checks in
+   the first pass of this centralization, but `projects` and `workspaces`
+   (the two largest apps — boards, tasks, comments, members, invites,
+   API keys, webhooks) were missed: their view helpers (`get_workspace_for_user`,
+   `has_app_access`, `has_perm`, `_get_workspace`) never called `authorize()` or
+   `require_scope()`, so an API key could hit those endpoints with **no scope
+   ceiling at all**, regardless of its granted scopes. Closed by adding
+   `APIKeyScopePermission` (section 3) as a global `DEFAULT_PERMISSION_CLASSES`
+   floor, applied to every view across all six apps — plus rate limiting keyed
+   on the API-key hash.
 4. **Ungated areas:** `analytics` (membership-only) and `integrations`
    (membership-only) now require app access / admin as appropriate.
 5. **Reporting-line 500:** a duplicate manager for a report raised

@@ -103,7 +103,7 @@ def _parse_date_window(request, default_lookback_days=31, max_span_days=366):
 # ── Leave Policies ─────────────────────────────────────────────────────────────
 
 class LeavePolicyListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def get(self, request, workspace_id):
         workspace = _view_ws(request, workspace_id)
@@ -119,7 +119,7 @@ class LeavePolicyListCreateView(APIView):
 
 
 class LeavePolicyDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def _get_policy(self, request, workspace_id, policy_id):
         workspace = _manage_ws(request, workspace_id, "hr.manage_leave")
@@ -142,7 +142,7 @@ class LeavePolicyDetailView(APIView):
 # ── Leave Requests ─────────────────────────────────────────────────────────────
 
 class LeaveRequestListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def get(self, request, workspace_id):
         workspace = _view_ws(request, workspace_id)
@@ -240,7 +240,7 @@ class LeaveRequestListCreateView(APIView):
 
 
 class LeaveRequestReviewView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def post(self, request, workspace_id, request_id):
         workspace = _manage_ws(request, workspace_id, "hr.manage_leave")
@@ -314,7 +314,7 @@ class LeaveRequestReviewView(APIView):
 # ── Leave Balances ─────────────────────────────────────────────────────────────
 
 class LeaveBalanceListView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def get(self, request, workspace_id):
         workspace = _view_ws(request, workspace_id)
@@ -335,7 +335,7 @@ class LeaveBalanceListView(APIView):
 # ── Who's Off ─────────────────────────────────────────────────────────────────
 
 class WhosOffView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def get(self, request, workspace_id):
         workspace = _view_ws(request, workspace_id)
@@ -385,7 +385,7 @@ def _make_qr_code(workspace_id, date_str):
 
 
 class AttendancePolicyView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def get(self, request, workspace_id):
         workspace = _view_ws(request, workspace_id)
@@ -404,7 +404,7 @@ class AttendancePolicyView(APIView):
 # ── Clock In / Out ─────────────────────────────────────────────────────────────
 
 class ClockInView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def post(self, request, workspace_id):
         workspace = _self_ws(request, workspace_id)
@@ -432,7 +432,7 @@ class ClockInView(APIView):
 
 
 class ClockOutView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def post(self, request, workspace_id):
         workspace = _self_ws(request, workspace_id)
@@ -461,7 +461,7 @@ class ClockOutView(APIView):
 # ── Attendance List (admin) ────────────────────────────────────────────────────
 
 class AttendanceListView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def get(self, request, workspace_id):
         workspace = _manage_ws(request, workspace_id, "hr.manage_attendance", scope="read")
@@ -483,7 +483,7 @@ class AttendanceListView(APIView):
 # ── My Attendance ──────────────────────────────────────────────────────────────
 
 class MyAttendanceView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def get(self, request, workspace_id):
         workspace = _view_ws(request, workspace_id)
@@ -499,7 +499,7 @@ class MyAttendanceView(APIView):
 # ── Attendance Summary (admin) ─────────────────────────────────────────────────
 
 class AttendanceSummaryView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def get(self, request, workspace_id):
         workspace = _manage_ws(request, workspace_id, "hr.manage_attendance", scope="read")
@@ -554,7 +554,7 @@ class AttendanceSummaryView(APIView):
 # ── QR Clock-In ───────────────────────────────────────────────────────────────
 
 class AttendanceQRView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def get(self, request, workspace_id):
         workspace = _manage_ws(request, workspace_id, "hr.manage_attendance", scope="read")
@@ -570,7 +570,7 @@ class AttendanceQRView(APIView):
 
 
 class QRClockInView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def post(self, request, workspace_id, date_str, code):
         expected_code = _make_qr_code(str(workspace_id), date_str)
@@ -611,7 +611,7 @@ class QRClockInView(APIView):
 # ── HR Dashboard ───────────────────────────────────────────────────────────────
 
 class HRDashboardView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def get(self, request, workspace_id):
         workspace = _manage_ws(request, workspace_id, "hr.manage_leave", scope="read")
@@ -726,7 +726,7 @@ class HRDashboardView(APIView):
 # ── Employee Documents ─────────────────────────────────────────────────────────
 
 class EmployeeDocumentListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def get(self, request, workspace_id, member_id):
         workspace = _manage_ws(request, workspace_id, "hr.manage_documents", scope="read")
@@ -762,7 +762,7 @@ class EmployeeDocumentListCreateView(APIView):
 
 
 class EmployeeDocumentDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def delete(self, request, workspace_id, member_id, doc_id):
         workspace = _manage_ws(request, workspace_id, "hr.manage_documents")
@@ -777,7 +777,7 @@ class EmployeeDocumentDetailView(APIView):
 # ── Employee Notes ─────────────────────────────────────────────────────────────
 
 class EmployeeNoteListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def get(self, request, workspace_id, member_id):
         workspace = _manage_ws(request, workspace_id, "hr.manage_notes", scope="read")
@@ -795,7 +795,7 @@ class EmployeeNoteListCreateView(APIView):
 
 
 class EmployeeNoteDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def patch(self, request, workspace_id, member_id, note_id):
         workspace = _manage_ws(request, workspace_id, "hr.manage_notes")

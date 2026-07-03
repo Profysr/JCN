@@ -9,6 +9,7 @@ from ..serializers import (
     KeyResultLinkedTaskSerializer,
 )
 from core.events import broadcast
+from workspaces.access import APIKeyScopePermission
 from .helpers import get_workspace_for_user
 
 
@@ -16,7 +17,7 @@ from .helpers import get_workspace_for_user
 class ObjectiveListCreateView(APIView):
     """GET/POST /workspaces/:slug/objectives/"""
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def _get_workspace(self, slug, user):
         return get_workspace_for_user(slug, user)
@@ -50,7 +51,7 @@ class ObjectiveListCreateView(APIView):
 class ObjectiveDetailView(APIView):
     """GET/PATCH/DELETE /workspaces/:slug/objectives/:obj_id/"""
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def _get_obj(self, workspace_id, obj_id, user):
         workspace = get_workspace_for_user(workspace_id, user)
@@ -87,7 +88,7 @@ class ObjectiveDetailView(APIView):
 class KeyResultListCreateView(APIView):
     """GET/POST /workspaces/:slug/objectives/:obj_id/key-results/"""
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def _get_objective(self, workspace_id, obj_id, user):
         workspace = get_workspace_for_user(workspace_id, user)
@@ -121,7 +122,7 @@ class KeyResultListCreateView(APIView):
 class KeyResultDetailView(APIView):
     """GET/PATCH/DELETE /workspaces/:slug/objectives/:obj_id/key-results/:kr_id/"""
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def _get_kr(self, workspace_id, obj_id, kr_id, user):
         workspace = get_workspace_for_user(workspace_id, user)
@@ -169,7 +170,7 @@ class KeyResultLinkedTasksView(APIView):
     DELETE — unlink one task { task_id: "..." }
     """
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def _get_kr(self, workspace_id, obj_id, kr_id, user):
         workspace = get_workspace_for_user(workspace_id, user)

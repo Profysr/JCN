@@ -8,6 +8,7 @@ from django.utils import timezone
 from ..models import Board, Task
 from ..serializers import TaskSearchSerializer, BoardSearchSerializer
 from workspaces.models import WorkspaceMember
+from workspaces.access import APIKeyScopePermission
 
 _TASK_LIMIT_MAX = 25
 _TASK_LIMIT_DEFAULT = 25
@@ -108,7 +109,7 @@ def _search_boards(workspace_ids, q):
 # ── Global Search ──────────────────────────────────────────────────────────────
 
 class GlobalSearchView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request):
         p = _parse_search_params(request.query_params)

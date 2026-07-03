@@ -34,6 +34,7 @@ from .serializers import (
     WorkspaceSerializer,
 )
 from .tasks import deliver_webhook, run_import
+from .access import APIKeyScopePermission
 
 
 # ── SHARED PRODUCTION UTILITIES ──────────────────────────────────────────────────
@@ -64,7 +65,7 @@ def _require_admin(workspace, user):
 
 
 class WorkspaceListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request):
         workspaces = (
@@ -87,7 +88,7 @@ class WorkspaceListCreateView(APIView):
 
 
 class WorkspaceDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
     parser_classes = [MultiPartParser, FormParser]
 
     def get(self, request, workspace_id):
@@ -122,7 +123,7 @@ class WorkspaceDetailView(APIView):
 
 
 class WorkspaceMemberListView(ListAPIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
     serializer_class = WorkspaceMemberSerializer
 
     def get_queryset(self):
@@ -131,7 +132,7 @@ class WorkspaceMemberListView(ListAPIView):
 
 
 class WorkspaceMemberDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def _get_member_and_workspace(self, workspace_id, member_id, user):
         workspace = _get_workspace(workspace_id, user)
@@ -173,7 +174,7 @@ class WorkspaceMemberDetailView(APIView):
 
 
 class InviteMemberView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def post(self, request, workspace_id):
         from .tasks import send_invite_email
@@ -190,7 +191,7 @@ class InviteMemberView(APIView):
 
 
 class WorkspaceInviteListView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request, workspace_id):
         workspace = _get_workspace(workspace_id, request.user)
@@ -202,7 +203,7 @@ class WorkspaceInviteListView(APIView):
 
 
 class WorkspaceInviteCancelView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def delete(self, request, workspace_id, token):
         workspace = _get_workspace(workspace_id, request.user)
@@ -237,7 +238,7 @@ class InviteDetailView(APIView):
 
 
 class AcceptInviteView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def post(self, request, token):
         invite = get_object_or_404(
@@ -287,7 +288,7 @@ class AcceptInviteView(APIView):
 
 
 class InboxListView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request):
         workspace_id = request.query_params.get("workspace")
@@ -323,7 +324,7 @@ class InboxListView(APIView):
 
 
 class InboxUnreadCountView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request):
         workspace_id = request.query_params.get("workspace")
@@ -334,7 +335,7 @@ class InboxUnreadCountView(APIView):
 
 
 class InboxItemUpdateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def patch(self, request, item_id):
         item = get_object_or_404(InboxItem, id=item_id, user=request.user)
@@ -345,7 +346,7 @@ class InboxItemUpdateView(APIView):
 
 
 class InboxBulkUpdateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def post(self, request):
         ids = request.data.get("ids", [])
@@ -385,7 +386,7 @@ class InboxBulkUpdateView(APIView):
 
 
 class OnboardingStateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def _build_checklists(self, state, workspace, user_id):
         from workspaces.checklist import CHECKLIST_REGISTRY
@@ -441,7 +442,7 @@ class OnboardingStateView(APIView):
 
 
 class APIKeyListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request, workspace_id):
         ws = _get_workspace(workspace_id, request.user)
@@ -465,7 +466,7 @@ class APIKeyListCreateView(APIView):
 
 
 class APIKeyDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def delete(self, request, workspace_id, key_id):
         ws = _get_workspace(workspace_id, request.user)
@@ -483,7 +484,7 @@ class APIKeyDetailView(APIView):
 
 
 class WebhookListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request, workspace_id):
         ws = _get_workspace(workspace_id, request.user)
@@ -504,7 +505,7 @@ class WebhookListCreateView(APIView):
 
 
 class WebhookDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def patch(self, request, workspace_id, hook_id):
         ws = _get_workspace(workspace_id, request.user)
@@ -525,7 +526,7 @@ class WebhookDetailView(APIView):
 
 
 class WebhookTestView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def post(self, request, workspace_id, hook_id):
         ws = _get_workspace(workspace_id, request.user)
@@ -545,7 +546,7 @@ class WebhookTestView(APIView):
 
 
 class WebhookDeliveryListView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request, workspace_id, hook_id):
         ws = _get_workspace(workspace_id, request.user)
@@ -557,7 +558,7 @@ class WebhookDeliveryListView(APIView):
 
 
 class WebhookEventsView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request, workspace_id):
         from .constants import WEBHOOK_EVENTS
@@ -572,7 +573,7 @@ class WebhookEventsView(APIView):
 
 
 class ImportSourcesView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request, workspace_id):
         return Response(
@@ -584,7 +585,7 @@ class ImportSourcesView(APIView):
 
 
 class ImportJobListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
     parser_classes = [MultiPartParser, FormParser]
 
     def get(self, request, workspace_id):
@@ -648,7 +649,7 @@ class ImportJobListCreateView(APIView):
 
 
 class ImportJobDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def _get_job(self, workspace_id, job_id, user):
         ws = _get_workspace(workspace_id, user)
@@ -678,7 +679,7 @@ class ImportJobDetailView(APIView):
 
 
 class ImportJobRunView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def post(self, request, workspace_id, job_id):
         ws = _get_workspace(workspace_id, request.user)
@@ -694,7 +695,7 @@ class ImportJobRunView(APIView):
 
 
 class ImportJobRollbackView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def delete(self, request, workspace_id, job_id):
         from projects.models import Task
@@ -730,7 +731,7 @@ class WorkspacePermissionsView(APIView):
     so the frontend caches it indefinitely (staleTime: Infinity).
     """
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request, workspace_id):
         from .access import get_enabled_apps, get_enabled_permissions
@@ -750,7 +751,7 @@ class CustomRoleListCreateView(APIView):
     POST /api/workspaces/{ws}/roles/  — create a new custom role (admin only).
     """
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def _get_serializer_imports(self):
         from .serializers import CustomRoleSerializer
@@ -808,7 +809,7 @@ class CustomRoleDetailView(APIView):
     DELETE /api/workspaces/{ws}/roles/{id}/  — admin only; system roles cannot be deleted.
     """
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def _get_role(self, workspace_id, role_id, user):
         from .models import CustomRole
@@ -884,7 +885,7 @@ class MemberAssignRoleView(APIView):
     Admin only. The role must belong to the same workspace.
     """
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def post(self, request, workspace_id, member_id):
         from .models import RoleAssignment
@@ -946,7 +947,7 @@ class MemberBulkAssignRoleView(APIView):
     Admin only. All member_ids must belong to this workspace.
     """
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def post(self, request, workspace_id):
         from .models import RoleAssignment

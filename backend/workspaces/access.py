@@ -44,6 +44,7 @@ Registry helpers (for the /permissions/ endpoint & serializers)
 from django.core.exceptions import ObjectDoesNotExist
 from django.shortcuts import get_object_or_404
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.permissions import BasePermission
 
 from .constants import APP_REGISTRY, PERMISSIONS, SYSTEM_ROLE_PERMISSIONS
 from .models import Workspace, WorkspaceMember
@@ -215,6 +216,32 @@ def has_scope(request, scope: str) -> bool:
 def require_scope(request, scope: str):
     if not has_scope(request, scope):
         raise PermissionDenied({"detail": f"API key is missing the required scope: {scope}.", "scope": scope})
+
+
+# ── Global API-key scope floor (DRF permission) ────────────────────────────────
+_METHOD_SCOPE = {
+    "GET": "read", "HEAD": "read", "OPTIONS": "read",
+    "POST": "write", "PUT": "write", "PATCH": "write", "DELETE": "write",
+}
+
+
+class APIKeyScopePermission(BasePermission):
+    """Wired into REST_FRAMEWORK.DEFAULT_PERMISSION_CLASSES — applies to every
+    view in every app, so no app can forget to gate API-key scope.
+
+    Enforces the baseline every endpoint must meet: GET/HEAD/OPTIONS need
+    "read", everything else needs "write" (read ⊆ write ⊆ admin). A no-op for
+    JWT users — request_scopes() returns None for them, so has_scope() always
+    passes. Views that need a stricter ceiling for one specific action (e.g.
+    deleting a webhook) still call authorize(..., admin=True, scope="admin")
+    themselves; this permission only guarantees the floor is never skipped.
+    """
+
+    message = "API key is missing the required scope for this request."
+
+    def has_permission(self, request, view):
+        scope = _METHOD_SCOPE.get(request.method, "write")
+        return has_scope(request, scope)
 
 
 # ── One-call view guard ───────────────────────────────────────────────────────

@@ -175,9 +175,12 @@ REST_FRAMEWORK = {
         "workspaces.authentication.APIKeyAuthentication",
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
-    # Unauthenticated requests get 403 by default
+    # Unauthenticated requests get 403 by default. APIKeyScopePermission is the
+    # global API-key scope floor (read ⊆ write ⊆ admin) — applies to every view
+    # in every app; a no-op for JWT users. See workspaces/access.py.
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
+        "workspaces.access.APIKeyScopePermission",
     ],
     # Enables ?search=, ?ordering=, and ?field= query params across all list views
     "DEFAULT_FILTER_BACKENDS": [

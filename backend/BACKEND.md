@@ -940,6 +940,8 @@ Permission resolution:
 4. No `RoleAssignment` → `False`.
 
 **All access logic lives in one module: `workspaces/access.py`** (full reference: `ACCESS.md`). The old `workspaces/permissions.py` and `workspaces/rbac.py` have been **removed** — every app now calls `access.authorize(...)` (or the `access.*` helpers) at the top of each view. An API-key request also carries a scope ceiling (`read ⊆ write ⊆ admin`) and is rate-limited (`workspaces/throttling.py`).
+
+**API-key scope is enforced globally, not per-app.** `access.APIKeyScopePermission` is wired into `REST_FRAMEWORK.DEFAULT_PERMISSION_CLASSES` (`core/settings.py`) and every view across every app declares `permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]` — GET/HEAD/OPTIONS require `scope:read`, POST/PUT/PATCH/DELETE require `scope:write`; a no-op for JWT users. `hr`/`org`/`analytics`/`integrations` additionally call `authorize(..., scope="admin")` on specific admin-tier actions. Because DRF's `permission_classes` on a view **replaces** the default list rather than extending it, this must be listed explicitly on every view — there is no way to rely on the settings default alone.
 - Admin-level actions gate on `settings.manage` (owner always passes).
 - Project-admin actions gate on `project.admin` / board `board.admin`.
 - App access for hr/org/projects/analytics is enforced via `authorize(request, ws, app="…")`.

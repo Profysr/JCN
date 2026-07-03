@@ -241,8 +241,6 @@ the view runs → access.authorize(..., scope="read"/"write")
 2. **Is it a permission problem?** → `ACCESS.md`, then the view's `authorize(...)` line.
 3. **Is it slow / async (email, import, live update)?** → the app's `tasks.py`
    (Celery) or `events.py` (WebSocket), not the view's main path.
-4. **Did I change a model?** → run `python manage.py makemigrations` then
-   `migrate`, and update `BACKEND.md`.
 
 > After any change that adds/removes a model, view, URL, task, or permission,
 > update `BACKEND.md` (and `ACCESS.md` if permissions changed) in the same commit,

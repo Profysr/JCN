@@ -54,6 +54,7 @@ from ..serializers import (
     ChildTaskSerializer,
 )
 from workspaces.models import InboxItem, WorkspaceMember
+from workspaces.access import APIKeyScopePermission
 from core.events import broadcast, notify
 from ..permissions import _is_workspace_admin, _require_board_perm
 from .helpers import (
@@ -71,7 +72,7 @@ from .helpers import (
 
 # ── Task Statuses (Kanban columns) ✅───────────────────────────────────────────
 class TaskStatusListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request, workspace_id, board_id):
         board = _get_board(workspace_id, board_id, request.user)
@@ -141,7 +142,7 @@ def _apply_status_items(board, existing, items):
 
 
 class TaskStatusBulkUpdateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def put(self, request, workspace_id, board_id):
         board = _get_board(workspace_id, board_id, request.user)
@@ -192,7 +193,7 @@ def _broadcast_task_card(workspace_id, task_pk, event="task.updated"):
 
 # ── Tasks ✅────────────────────────────────────────────────────────────────────
 class TaskListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request, workspace_id, board_id):
         board = _get_board(workspace_id, board_id, request.user)
@@ -224,7 +225,7 @@ class TaskListCreateView(APIView):
 
 
 class TaskDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request, workspace_id, board_id, task_id):
         task = _get_task(
@@ -290,7 +291,7 @@ def _check_move_blocked(task, task_status):
 class TaskMoveView(APIView):
     """PATCH: atomically update a task's status column and sort order."""
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def patch(self, request, workspace_id, board_id, task_id):
         board = _get_board(workspace_id, board_id, request.user)
@@ -378,7 +379,7 @@ def _bulk_update(tasks, updates, workspace_id, board_id):
 
 
 class TaskBulkUpdateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def post(self, request, workspace_id, board_id):
         serializer = TaskBulkActionSerializer(data=request.data)
@@ -398,7 +399,7 @@ class TaskBulkUpdateView(APIView):
 
 # ── Subtasks ✅──────────────────────────────────────────────────────────────────
 class SubTaskListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request, workspace_id, board_id, task_id):
         task = _get_task(workspace_id, board_id, task_id, request.user)
@@ -416,7 +417,7 @@ class SubTaskListCreateView(APIView):
 
 
 class SubTaskDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def patch(self, request, workspace_id, board_id, task_id, subtask_id):
         subtask = _get_subtask(
@@ -437,7 +438,7 @@ class SubTaskDetailView(APIView):
 
 # ── Activity ✅──────────────────────────────────────────────────────────────────
 class TaskActivityListView(ListAPIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
     serializer_class = TaskActivitySerializer
     pagination_class = ActivityPagination
 
@@ -452,7 +453,7 @@ class TaskActivityListView(ListAPIView):
 
 # ── Labels ✅──────────────────────────────────────────────────────────────────
 class LabelListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request, workspace_id, board_id):
         board = _get_board(workspace_id, board_id, request.user)
@@ -467,7 +468,7 @@ class LabelListCreateView(APIView):
 
 
 class LabelDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get_label(self, workspace_id, board_id, label_id, user):
         board = _get_board(workspace_id, board_id, user)
@@ -488,7 +489,7 @@ class LabelDetailView(APIView):
 
 # ── Custom Fields (v0.8.0) ‼️────────────────────────────────────────────────────
 class BoardFieldListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request, workspace_id, board_id):
         board = _get_board(workspace_id, board_id, request.user)
@@ -505,7 +506,7 @@ class BoardFieldListCreateView(APIView):
 
 
 class BoardFieldDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get_field(self, workspace_id, board_id, field_id, user):
         board = _get_board(workspace_id, board_id, user)
@@ -527,7 +528,7 @@ class BoardFieldDetailView(APIView):
 class TaskFieldValueView(APIView):
     """Upsert a single custom field value for a task."""
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def post(self, request, workspace_id, board_id, task_id):
         task = _get_task(workspace_id, board_id, task_id, request.user)
@@ -540,7 +541,7 @@ class TaskFieldValueView(APIView):
 # ── Saved Views (v0.8.0) ✅─────────────────────────────────────────────────────
 class SavedViewListCreateView(APIView):
     """Helps to store the filter views so that user can choose from existing filtered views"""
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request, workspace_id, board_id):
         board = _get_board(workspace_id, board_id, request.user)
@@ -556,7 +557,7 @@ class SavedViewListCreateView(APIView):
 
 
 class SavedViewDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get_view(self, workspace_id, board_id, view_id, user):
         board = _get_board(workspace_id, board_id, user)
@@ -587,7 +588,7 @@ def _get_sprint(workspace_id, board_id, sprint_id, user):
 
 
 class SprintListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request, workspace_id, board_id):
         board = _get_board(workspace_id, board_id, request.user)
@@ -602,7 +603,7 @@ class SprintListCreateView(APIView):
 
 
 class SprintDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request, workspace_id, board_id, sprint_id):
         sprint = _get_sprint(workspace_id, board_id, sprint_id, request.user)
@@ -626,7 +627,7 @@ class SprintDetailView(APIView):
 class SprintBulkTaskView(APIView):
     """POST /sprints/{id}/tasks/bulk/ — assign or remove many tasks in one DB write."""
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def post(self, request, workspace_id, board_id, sprint_id):
         sprint = _get_sprint(workspace_id, board_id, sprint_id, request.user)
@@ -659,7 +660,7 @@ class SprintBulkTaskView(APIView):
 
 # ── File Attachments (v1.2.0) ─────────────────────────────────────────────────
 class TaskAttachmentListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
     parser_classes = [MultiPartParser, FormParser]
 
     def _get_task(self, workspace_id, board_id, task_id, user):
@@ -704,7 +705,7 @@ class TaskAttachmentListCreateView(APIView):
 
 
 class TaskAttachmentDeleteView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def delete(self, request, workspace_id, board_id, task_id, attachment_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
@@ -718,7 +719,7 @@ class TaskAttachmentDeleteView(APIView):
 
 # ── Task Dependencies (v1.4.0) ────────────────────────────────────────────────
 class TaskDependencyListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def _get_task(self, workspace_id, board_id, task_id, user):
         workspace = get_workspace_for_user(workspace_id, user)
@@ -768,7 +769,7 @@ class TaskDependencyListCreateView(APIView):
 
 
 class TaskDependencyDeleteView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def delete(self, request, workspace_id, board_id, task_id, dep_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
@@ -783,7 +784,7 @@ class TaskDependencyDeleteView(APIView):
 class TaskChildrenView(APIView):
     """GET /tasks/:id/children/ — list direct child tasks."""
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request, workspace_id, board_id, task_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
@@ -809,7 +810,7 @@ class TaskChildrenView(APIView):
 
 # ── CSV Export (v1.7.0) ‼️───────────────────────────────────────────────────────
 class TaskExportView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request, workspace_id, board_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
@@ -860,7 +861,7 @@ class TaskExportView(APIView):
 class TaskCloneView(APIView):
     """POST /tasks/:id/clone/ — deep-clone a task and return the new task."""
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def post(self, request, workspace_id, board_id, task_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
@@ -886,7 +887,7 @@ class TaskCloneView(APIView):
 
 # / ── Task Templates ‼️────────────────────────────────────────────
 class TaskTemplateListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request, workspace_id, board_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
@@ -905,7 +906,7 @@ class TaskTemplateListCreateView(APIView):
 
 
 class TaskTemplateDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def patch(self, request, workspace_id, board_id, template_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
@@ -928,7 +929,7 @@ class TaskTemplateDetailView(APIView):
 class TaskApplyTemplateView(APIView):
     """POST /tasks/:id/apply-template/ — apply a template to an existing task (fills subtasks)."""
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def post(self, request, workspace_id, board_id, task_id):
         workspace = get_workspace_for_user(workspace_id, request.user)
@@ -985,7 +986,7 @@ class ApprovalListCreateView(APIView):
     POST /tasks/:id/approvals/  — request a new approval
     """
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request, workspace_id, board_id, task_id):
         task = _get_task(workspace_id, board_id, task_id, request.user)
@@ -1009,7 +1010,7 @@ class ApprovalReviewView(APIView):
     Only the designated reviewer can submit their verdict.
     """
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def post(self, request, workspace_id, board_id, task_id, approval_id):
         approval = _get_approval(workspace_id, board_id, task_id, approval_id, request.user)
@@ -1050,7 +1051,7 @@ class ApprovalResubmitView(APIView):
     Only the original requester may resubmit.
     """
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def post(self, request, workspace_id, board_id, task_id, approval_id):
         approval = _get_approval(workspace_id, board_id, task_id, approval_id, request.user)
@@ -1070,7 +1071,7 @@ class ApprovalAdminOverrideView(APIView):
     The action is logged to TaskActivity so it appears in the Activity tab.
     """
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def post(self, request, workspace_id, board_id, task_id, approval_id):
         approval = _get_approval(workspace_id, board_id, task_id, approval_id, request.user)
@@ -1106,7 +1107,7 @@ class ApprovalAdminOverrideView(APIView):
 class MyWorkView(APIView):
     """GET /my-work/ — tasks assigned to the current user across all workspaces, sorted by urgency."""
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request):
         from datetime import timedelta

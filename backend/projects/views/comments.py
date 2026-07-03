@@ -11,6 +11,7 @@ from ..models import CommentReaction, TaskActivity, TaskComment
 from ..serializers import TaskCommentReplySerializer, TaskCommentSerializer
 from ..tasks import send_comment_notifications
 from core.events import broadcast
+from workspaces.access import APIKeyScopePermission
 from .helpers import (
     _get_task,
     get_workspace_for_user,
@@ -46,7 +47,7 @@ def _build_grouped_reactions(comment):
 
 
 class TaskCommentListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def get(self, request, workspace_id, board_id, task_id):
         task = _get_task(workspace_id, board_id, task_id, request.user)
@@ -119,7 +120,7 @@ class TaskCommentListCreateView(APIView):
 
 
 class TaskCommentDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def _get_comment(self, workspace_id, board_id, task_id, comment_id, user):
         task = _get_task(workspace_id, board_id, task_id, user)
@@ -158,7 +159,7 @@ class TaskCommentDetailView(APIView):
 
 
 class CommentReactionToggleView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
     def post(self, request, workspace_id, board_id, task_id, comment_id):
         task = _get_task(workspace_id, board_id, task_id, request.user)
