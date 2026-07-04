@@ -620,6 +620,7 @@ Four dedicated views replace the old `AnalyticsMetricView` dynamic router. All f
 | `OnboardingState` | `workspace` (O2O), `wizard_completed`, `team_type`, `module_dismissed_by_users` (JSONField `{"projects": ["uuid1"], "org": [], "hr": []}`) | Per-module per-user dismissal. Checklist items computed on-the-fly from `workspaces/checklist.py` registry — add new modules there, no model change needed. |
 | `CustomRole` | `workspace` (FK), `name`, `description`, `is_system` (bool), `app_access` (JSONField `{"projects": true, "hr": false, ...}`), `permissions` (JSONField `{"workspace": {"settings.manage": true}, "projects": {"task.create": true}, ...}`) | unique: workspace+name; ordering: -is_system, name; index: `crole_workspace_system_idx`. `is_system=True` protects built-in Admin/Member/Viewer roles. Auto-created per workspace via `create_system_roles()`. |
 | `RoleAssignment` | `workspace_member` (O2O→WorkspaceMember), `role` (FK→CustomRole, PROTECT), `assigned_by` (FK→User, nullable) | One per member; `update_or_create` on reassign; index: `rla_role_idx`. Auto-created for workspace owner (Admin) on workspace creation and for invited members on invite acceptance. |
+| `AuditEvent` | `workspace` (FK), `actor` (FK), `action`, `resource_type`, `resource_id`, `before` (JSON), `after` (JSON) | indexes: workspace+created_at, workspace+resource_type. Moved here from `projects/models.py` — it's workspace-wide infra, not project-specific. Write helpers `log_audit()`/`bulk_log_audit()` live in `workspaces/audit.py` (moved from `projects/permissions.py`); any app can call them. Still write-only — no audit-log viewer endpoint exists yet. **Requires `makemigrations projects workspaces` — see Pending migrations.** |
 
 ### projects
 
@@ -654,7 +655,8 @@ Four dedicated views replace the old `AnalyticsMetricView` dynamic router. All f
 | `ApprovalReviewer` | `approval` (FK), `user` (FK), `status`, `comment` | unique: approval+user |
 | `UserPresence` | `user` (FK), `workspace` (FK), `resource_type`, `resource_id`, `last_seen` | unique: user+workspace+resource_type+resource_id |
 | `CommentReaction` | `comment` (FK), `user` (FK), `emoji` | unique: comment+user+emoji |
-| `AuditEvent` | `workspace` (FK), `actor` (FK), `action`, `resource_type`, `resource_id`, `before` (JSON), `after` (JSON) | indexes: workspace+created_at, workspace+resource_type |
+
+`AuditEvent` moved to `workspaces/models.py` (see the "workspaces" table above) — it was never project-specific, and `organization` and `workspaces` itself both write to it now.
 
 ### organization — Org Events
 
@@ -672,9 +674,17 @@ Four dedicated views replace the old `AnalyticsMetricView` dynamic router. All f
 | `TeamDetailView.delete` | `org.team.deleted` |
 | `ReportingLineListCreateView.post` | `org.reporting_line.created` |
 | `ReportingLineDetailView.delete` | `org.reporting_line.deleted` |
+| `DepartmentMemberListCreateView.post` / `DepartmentMemberDetailView.delete` | `org.department_member.added` / `.removed` |
+| `TeamMemberListCreateView.post` / `TeamMemberDetailView.delete` | `org.team_member.added` / `.removed` |
+| `JobTitleListCreateView.post` / `JobTitleDetailView.patch` / `.delete` | `org.job_title.created` / `.updated` / `.deleted` |
 | `MyOrgProfileView.post` (submit) | `org.profile.submitted` |
+| `OrgProfileView.patch` / `MyOrgProfileView.patch` | `org.profile.updated` |
 | `ApproveProfileView.post` | `org.profile.approved` |
 | `BulkApproveProfilesView.post` | `org.profile.approved` (one per profile) |
+
+All of the above were already firing `broadcast()` and registered in `core.events.EVENTS`, but 8 of them (`department_member.*`, `team_member.*`, `job_title.*`, `profile.updated`) were missing from `workspaces/constants.py::WEBHOOK_EVENTS` — external webhook subscribers had no way to select them even though they fired over WebSocket. Fixed; see the `WEBHOOK_EVENTS` reference below.
+
+**Structural mutations are also audit-logged** via `workspaces.audit.log_audit()` — department/team create/update/delete, department/team member add/remove, and reporting-line create/delete each write an `AuditEvent` row (before/after snapshot where applicable). Job-title changes are not audit-logged (not considered a structural reorg).
 
 ### organization — Permission model
 
@@ -687,15 +697,17 @@ All gating goes through `workspaces/access.py` (see `ACCESS.md`). In `organizati
 
 Bug fixes bundled in this migration: the admin check no longer queries the removed `WorkspaceMember.role` field (was a 500); a duplicate reporting-line manager now returns a clean 400; write-only `*_id` fields reject cross-workspace IDs; `OrgProfileView.patch` now enforces the same "approved ⇒ manager-only" lock as `/org/me/profile/`.
 
+More bug fixes (later pass): removing the `DepartmentMember`/`TeamMember` row that held headship/leadership now also clears `Department.head`/`Team.lead` (was left dangling, pointing at a non-member); `DepartmentSerializer` now validates `parent_id` for self-reference and cycles the same way `ReportingLineSerializer` already did for manager chains; assigning `head_id`/`lead_id` now auto-creates the corresponding department/team membership if the appointee wasn't already a member (previously you could appoint a non-member head with no validation either way).
+
 ### organization
 
 | Model | Key Fields | Notes |
 |-------|-----------|-------|
 | `JobTitle` | `workspace` (FK), `name`, `level` (PositiveSmallInt, default 0) | unique: workspace+name; ordering: level, name |
-| `Department` | `workspace` (FK), `name`, `description`, `color`, `identifier` (max 6), `parent` (FK self, SET_NULL), `head` (FK→WorkspaceMember, SET_NULL), `created_by` (FK→User) | unique: workspace+name; index: `dept_workspace_parent_idx` (workspace+parent). `identifier` is **not** uniqueness-constrained or auto-generated. |
-| `DepartmentMember` | `department` (FK), `member` (FK→WorkspaceMember) | unique: department+member; index: `deptmember_member_idx` (member). No stored `is_head` — the serializer exposes a **computed** `is_head` derived from `Department.head` (single source of truth). |
-| `Team` | `workspace` (FK), `department` (FK, SET_NULL), `name`, `description`, `identifier` (max 6), `color`, `lead` (FK→WorkspaceMember, SET_NULL), `created_by` (FK→User) | unique: workspace+name; index: `team_workspace_dept_idx` (workspace+department) |
-| `TeamMember` | `team` (FK), `member` (FK→WorkspaceMember) | unique: team+member; index: `teammember_member_idx` (member). No stored `is_lead` — the serializer exposes a **computed** `is_lead` derived from `Team.lead` (single source of truth). |
+| `Department` | `workspace` (FK), `name`, `description`, `color`, `identifier` (max 6), `parent` (FK self, SET_NULL), `head` (FK→WorkspaceMember, SET_NULL), `created_by` (FK→User) | unique: workspace+name; index: `dept_workspace_parent_idx` (workspace+parent). `identifier` is **not** uniqueness-constrained or auto-generated. `DepartmentSerializer.validate` rejects self-reference and cycles in `parent` (ancestor walk, same pattern as `ReportingLine`). Setting `head_id` auto-creates a `DepartmentMember` row for that member if missing. |
+| `DepartmentMember` | `department` (FK), `member` (FK→WorkspaceMember) | unique: department+member; index: `deptmember_member_idx` (member). No stored `is_head` — the serializer exposes a **computed** `is_head` derived from `Department.head` (single source of truth). Deleting the membership that holds headship clears `Department.head` back to null. |
+| `Team` | `workspace` (FK), `department` (FK, SET_NULL), `name`, `description`, `identifier` (max 6), `color`, `lead` (FK→WorkspaceMember, SET_NULL), `created_by` (FK→User) | unique: workspace+name; index: `team_workspace_dept_idx` (workspace+department). Setting `lead_id` auto-creates a `TeamMember` row for that member if missing. |
+| `TeamMember` | `team` (FK), `member` (FK→WorkspaceMember) | unique: team+member; index: `teammember_member_idx` (member). No stored `is_lead` — the serializer exposes a **computed** `is_lead` derived from `Team.lead` (single source of truth). Deleting the membership that holds leadership clears `Team.lead` back to null. |
 | `OrgProfile` | `member` (O2O→WorkspaceMember), `job_title` (FK, SET_NULL), `employment_type` (full_time/part_time/contractor/intern), `employee_id`, `start_date`, `location`, `bio` | One per member; auto-created via `get_or_create` on first GET/PATCH. `HRDashboardView` reads `start_date` (joiners/anniversaries) and `employment_type` (headcount split). |
 | `ReportingLine` | `workspace` (FK), `manager` (FK→WorkspaceMember), `report` (FK→WorkspaceMember) | unique: workspace+report (one manager per person); index: `repline_workspace_manager_idx` (workspace+manager). `ReportingLineSerializer.validate` rejects self-reference, non-members, and cycles (walks manager's ancestor chain). |
 
@@ -715,9 +727,11 @@ Bug fixes bundled in this migration: the admin check no longer queries the remov
 
 Access via `workspaces/access.py`: reads require `org.view` (+ onboarding), structural mutations require `org.manage`, profile approval requires `org.approve_profiles`. All enforced with `access.authorize(...)`. See the "organization — Permission model" section above and `ACCESS.md`.
 
+Departments, teams, and reporting lines are paginated (`core.pagination.OrgListPagination`: page-based, `size` query param, default 50/max 100). The frontend hooks (`useDepartments`, `useTeams`) follow `next` until exhausted so dropdowns/grids still see the full set — see `frontend/src/apps/org-structure/hooks/useOrg.js::fetchAllPages`. The reporting-lines list isn't consumed by the frontend (kept for API completeness) so it wasn't given the same client-side unrolling.
+
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/workspaces/{ws}/org/departments/` | List departments (select_related head/parent, prefetch memberships for `member_count`) |
+| GET | `/api/workspaces/{ws}/org/departments/` | List departments, paginated (select_related head/parent, prefetch memberships for `member_count`) |
 | POST | `/api/workspaces/{ws}/org/departments/` | Create department (admin) |
 | GET | `/api/workspaces/{ws}/org/departments/{dept_id}/` | Department detail |
 | PATCH | `/api/workspaces/{ws}/org/departments/{dept_id}/` | Update department (admin) |
@@ -725,22 +739,25 @@ Access via `workspaces/access.py`: reads require `org.view` (+ onboarding), stru
 | GET | `/api/workspaces/{ws}/org/departments/{dept_id}/members/` | List department members |
 | POST | `/api/workspaces/{ws}/org/departments/{dept_id}/members/` | Add member to department (admin); body `{ member_id }`. Headship is set via `Department.head_id`, not here — `is_head` is read-only/computed. |
 | DELETE | `/api/workspaces/{ws}/org/departments/{dept_id}/members/{membership_id}/` | Remove department member (admin) |
-| GET | `/api/workspaces/{ws}/org/teams/` | List teams (select_related lead/department, prefetch memberships) |
+| GET | `/api/workspaces/{ws}/org/departments/{dept_id}/chart/` | Department's members as org-chart nodes — backs the lazy "By Department" chart view (see below). |
+| GET | `/api/workspaces/{ws}/org/teams/` | List teams, paginated (select_related lead/department, prefetch memberships) |
 | POST | `/api/workspaces/{ws}/org/teams/` | Create team (admin) |
 | GET/PATCH/DELETE | `/api/workspaces/{ws}/org/teams/{team_id}/` | Team detail / update / delete (admin for mutations) |
 | GET | `/api/workspaces/{ws}/org/teams/{team_id}/members/` | List team members |
 | POST | `/api/workspaces/{ws}/org/teams/{team_id}/members/` | Add member to team (admin); body `{ member_id }`. Lead is set via `Team.lead_id`, not here — `is_lead` is read-only/computed. |
 | DELETE | `/api/workspaces/{ws}/org/teams/{team_id}/members/{membership_id}/` | Remove team member (admin) |
-| GET | `/api/workspaces/{ws}/org/job-titles/` | List job titles (ordered by level, name) |
+| GET | `/api/workspaces/{ws}/org/job-titles/` | List job titles (ordered by level, name) — not paginated (small, bounded list) |
 | POST | `/api/workspaces/{ws}/org/job-titles/` | Create job title (admin) |
 | PATCH | `/api/workspaces/{ws}/org/job-titles/{title_id}/` | Update job title (admin) |
 | DELETE | `/api/workspaces/{ws}/org/job-titles/{title_id}/` | Delete job title (admin) |
 | GET | `/api/workspaces/{ws}/org/members/{member_id}/profile/` | Get member's org profile (auto-creates). Exposes `departments`, `teams`, `manager`, `direct_reports_count` (computed). |
 | PATCH | `/api/workspaces/{ws}/org/members/{member_id}/profile/` | Update org profile — **admin or self** (`_require_admin_or_self`) |
-| GET | `/api/workspaces/{ws}/org/reporting-lines/` | List reporting lines (manager → report) |
+| GET | `/api/workspaces/{ws}/org/reporting-lines/` | List reporting lines (manager → report), paginated. Not called by the frontend. |
 | POST | `/api/workspaces/{ws}/org/reporting-lines/` | Create reporting line (admin); body `{ manager_id, report_id }` |
 | DELETE | `/api/workspaces/{ws}/org/reporting-lines/{line_id}/` | Delete reporting line (admin) |
-| GET | `/api/workspaces/{ws}/org/chart/` | Org chart tree: all members with job_title, manager_id, departments, teams. Single query via `prefetch_related(department_memberships__department, team_memberships__team, org_profile__job_title, reports_to)`. |
+| GET | `/api/workspaces/{ws}/org/chart/` | **Lazy org chart, root level**: members with no manager only (each node carries `has_reports`/`direct_reports_count`). Was previously every member in one response — rewritten so a 1,000+ person workspace doesn't pay for the whole tree on first paint. |
+| GET | `/api/workspaces/{ws}/org/chart/{member_id}/reports/` | Direct reports (one level) of a member — the expand-on-click step for the hierarchy chart. |
+| GET | `/api/workspaces/{ws}/org/chart/unassigned/` | Members with no department — the "By Department" view's overflow bucket, fetched on click. |
 | GET | `/api/workspaces/{ws}/org/me/profile/` | Current user's own org profile (auto-creates). |
 | PATCH | `/api/workspaces/{ws}/org/me/profile/` | Update own org profile fields (draft or submitted). |
 | POST | `/api/workspaces/{ws}/org/me/profile/` | Submit profile — draft → submitted; fires `notify_hr_profile_submitted` Celery task. |
@@ -965,9 +982,9 @@ get_effective_role resolution (projects/permissions.py):
 
 get_effective_role(user, board)         → role string or None
 has_project_permission(user, board, action) → bool
-log_audit(actor, workspace, action, resource_type, resource_id, before, after)  → AuditEvent
-bulk_log_audit(actor, workspace, action, resource_type, entries)                → bulk AuditEvent
 ```
+
+`log_audit()` / `bulk_log_audit()` moved to `workspaces/audit.py` (they write `AuditEvent`, which is workspace-wide infra, not project-specific — see the `workspaces` model table). Every app imports from there now; `projects/permissions.py` no longer defines them.
 
 ---
 
@@ -1000,7 +1017,7 @@ Module-level helpers shared across all org-structure views:
 **Serializer conventions:**
 - `DepartmentSerializer` and `TeamSerializer`: `get_member_count` uses `len(obj.memberships.all())` — reads from the prefetch cache set by `prefetch_related("memberships")` in list views.
 - `OrgProfileSerializer`: uses `MiniJobTitleSerializer` (fields: `id`, `name`, `level`) — omits `created_at` which is irrelevant in this context.
-- `OrgChartView`: prefetches `reports_to` only (not `reports_to__manager__user`) — `manager_id` is a stored FK column, no join needed.
+- `_chart_member_base_qs(workspace)` / `_serialize_chart_node(m)`: shared by `OrgChartView`, `OrgChartReportsView`, `DepartmentChartMembersView`, and `UnassignedChartMembersView` so all four chart endpoints stay in lockstep on node shape and query cost. Prefetches `reports_to` only (not `reports_to__manager__user`) — `manager_id` is a stored FK column, no join needed. Annotates `reports_count = Count("direct_reports", distinct=True)` — `distinct=True` matters because each view also filters on a different join (`reports_to__isnull`, `reports_to__manager_id`, or `department_memberships__department`), and an un-distinct'd `Count` would double-count under the resulting multi-join.
 
 ---
 
@@ -1100,9 +1117,12 @@ All paginated responses follow DRF's standard envelope: `{count, next, previous,
 ["task.created", "task.updated", "task.deleted", "task.assigned",
  "task.commented", "task.completed", "sprint.started", "sprint.completed",
  "member.added", "member.removed",
- "org.profile.submitted", "org.profile.approved",
+ "org.profile.submitted", "org.profile.approved", "org.profile.updated",
  "org.department.created", "org.department.updated", "org.department.deleted",
+ "org.department_member.added", "org.department_member.removed",
  "org.team.created", "org.team.updated", "org.team.deleted",
+ "org.team_member.added", "org.team_member.removed",
+ "org.job_title.created", "org.job_title.updated", "org.job_title.deleted",
  "org.reporting_line.created", "org.reporting_line.deleted"]
 ```
 
@@ -1120,20 +1140,25 @@ All paginated responses follow DRF's standard envelope: `{count, next, previous,
 | `TaskTemplate` / `apply-template` included but template features deprioritized | `projects/views/tasks.py` | To be revisited in v2 |
 | No human-readable task IDs | `projects/models.py` | v2 — see Planned Features below |
 | `OrgProfileSerializer` fires 4 queries/profile (departments, teams, manager, direct_reports `.count()`) — fine for the single-object endpoint, unusable in a list | `organization/serializers.py` | Annotate/prefetch if it's ever used in a list view |
-| `OrgChartView` / `AttendanceSummary` / `HRDashboard` iterate members/records in Python — fine at SMB headcount, would need DB aggregation at scale | `organization/views.py`, `hr/views.py` | Revisit if workspaces exceed a few thousand members |
+| `AttendanceSummary` / `HRDashboard` iterate records in Python — fine at SMB headcount, would need DB aggregation at scale | `hr/views.py` | Revisit if workspaces exceed a few thousand members |
+| Org chart "By Department" view has no bulk "expand all departments" — each card is fetched individually on click | `organization/views.py`, `OrgChartPage.jsx` | Acceptable trade-off for the lazy rewrite; revisit if it's a common workflow |
 
 > **Resolved (this pass):** ReportingLine cycle/self-ref/non-member validation; leave-balance `select_for_update` race; bounded date windows on attendance + leave-request lists (replaces unbounded lists); `EmployeeDocument` upload size/content-type validation; dropped redundant `attendance_employee_date_idx`; extracted `_business_days` + reused `MiniMemberSerializer`; `is_head`/`is_lead` now computed from FK (single source of truth); `date.today()` → `timezone.localdate()`. **Several require migrations — see below.**
+
+> **Resolved (later pass):** dangling `Department.head`/`Team.lead` on membership delete; `Department.parent` cycle/self-ref validation; `head_id`/`lead_id` auto-membership; missing org events in `WEBHOOK_EVENTS`; `AuditEvent`/`log_audit`/`bulk_log_audit` moved from `projects` to `workspaces` (cross-app infra, was living in the wrong app); org mutations now audit-logged; departments/teams/reporting-lines list endpoints paginated; `OrgChartView` rewritten from "return every member" to a lazy root+expand-per-node tree (`OrgChartReportsView`, `DepartmentChartMembersView`, `UnassignedChartMembersView`) — the "iterates all members in Python" entry above no longer applies to the org chart specifically. **Requires migrations — see below.**
 
 ### ⚠️ Pending migrations (run before deploy)
 
 The model edits above changed schema. Generate and apply:
 
 ```
-python manage.py makemigrations hr organization workspaces
+python manage.py makemigrations hr organization workspaces projects
 python manage.py migrate
 ```
 
 Expected: `hr` initial migration (no migrations existed yet) reflecting the dropped `attendance_employee_date_idx`; `organization` migration dropping `DepartmentMember.is_head`, `TeamMember.is_lead`, and the stale `deptmember_dept_head_idx` / `teammember_team_lead_idx` indexes (plus the previously-uncommitted `OrgProfile.employment_type` from vB.2); `workspaces` migration renaming `InboxItem.project_name` → `board_name` (**answer "y" to Django's rename prompt** so it emits `RenameField`, not drop+add) and altering `verb`/`event_type` (choices removed).
+
+**`AuditEvent` app move (`projects` → `workspaces`) — handle by hand, don't blindly accept Django's default:** run `makemigrations`, and when prompted whether `workspaces.AuditEvent` is a move of `projects.AuditEvent` (Django detects same field set), confirm it *if* your Django version offers a state-only move; otherwise it will propose `DeleteModel` in `projects` + `CreateModel` in `workspaces`, which **drops the audit table's data**. If you need to preserve existing `AuditEvent` rows, write the migration by hand: `SeparateDatabaseAndState` with `state_operations=[migrations.DeleteModel("AuditEvent")]` in `projects` and `state_operations=[migrations.CreateModel(...)]` in `workspaces`, both with empty `database_operations` — this repoints Django's model state without touching the actual table (keep the same `db_table`, e.g. via `Meta.db_table = "projects_auditevent"` on the new model, or a `db_table` rename op). If this is a dev database with no audit history worth keeping, the default drop+recreate is fine.
 
 ---
 

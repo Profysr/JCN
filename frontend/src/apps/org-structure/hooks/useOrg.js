@@ -2,6 +2,20 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/shared/lib/api";
 import { useInvalidatingMutation } from "@/shared/hooks/useInvalidatingMutation";
 
+// Departments/teams/reporting-lines are paginated server-side (core.pagination.OrgListPagination).
+// These lists back dropdowns and full-page grids that expect the complete set, so
+// follow `next` until exhausted rather than surfacing only the first page.
+async function fetchAllPages(url) {
+  let results = [];
+  let next = url;
+  while (next) {
+    const { data } = await api.get(next);
+    results = results.concat(data.results);
+    next = data.next;
+  }
+  return results;
+}
+
 // ── Key factories ─────────────────────────────────────────────────────────────
 const deptsKey = (ws) => ["org-departments", ws];
 const deptMemKey = (ws, deptId) => ["org-dept-members", ws, deptId];
@@ -15,9 +29,7 @@ export const useDepartments = (workspaceId) =>
   useQuery({
     queryKey: deptsKey(workspaceId),
     queryFn: () =>
-      api
-        .get(`/api/workspaces/${workspaceId}/org/departments/`)
-        .then((r) => r.data),
+      fetchAllPages(`/api/workspaces/${workspaceId}/org/departments/`),
     enabled: !!workspaceId,
     staleTime: Infinity,
     refetchOnWindowFocus: false,
@@ -91,8 +103,7 @@ export const useRemoveDepartmentMember = (workspaceId, deptId) =>
 export const useTeams = (workspaceId) =>
   useQuery({
     queryKey: teamsKey(workspaceId),
-    queryFn: () =>
-      api.get(`/api/workspaces/${workspaceId}/org/teams/`).then((r) => r.data),
+    queryFn: () => fetchAllPages(`/api/workspaces/${workspaceId}/org/teams/`),
     enabled: !!workspaceId,
     staleTime: Infinity,
     refetchOnWindowFocus: false,
@@ -195,6 +206,9 @@ export const useDeleteJobTitle = (workspaceId) =>
   );
 
 // ── Org Chart ─────────────────────────────────────────────────────────────────
+// Lazy-loaded tree: the root call returns only members with no manager; each
+// node carries has_reports/direct_reports_count so the UI knows whether to show
+// an expand affordance, and fetchChartReports (below) fetches one level at a time on click.
 export const useOrgChart = (workspaceId) =>
   useQuery({
     queryKey: chartKey(workspaceId),
@@ -203,6 +217,28 @@ export const useOrgChart = (workspaceId) =>
     enabled: !!workspaceId,
     staleTime: 5 * 60 * 1000,
   });
+
+// Expand-on-click fetchers — called imperatively (via queryClient.fetchQuery) from
+// OrgChartPage rather than as hooks, since the number of expandable nodes/departments
+// is dynamic and hook calls can't be looped per-node.
+export const chartReportsKey = (ws, memberId) => [...chartKey(ws), "reports", memberId];
+export const deptChartKey = (ws, deptId) => [...chartKey(ws), "department", deptId];
+export const unassignedChartKey = (ws) => [...chartKey(ws), "unassigned"];
+
+export const fetchChartReports = (workspaceId, memberId) =>
+  api
+    .get(`/api/workspaces/${workspaceId}/org/chart/${memberId}/reports/`)
+    .then((r) => r.data);
+
+export const fetchDepartmentChartMembers = (workspaceId, deptId) =>
+  api
+    .get(`/api/workspaces/${workspaceId}/org/departments/${deptId}/chart/`)
+    .then((r) => r.data);
+
+export const fetchUnassignedChartMembers = (workspaceId) =>
+  api
+    .get(`/api/workspaces/${workspaceId}/org/chart/unassigned/`)
+    .then((r) => r.data);
 
 // ── Org Profile ───────────────────────────────────────────────────────────────
 const profileKey = (ws, memberId) => ["org-profile", ws, memberId];

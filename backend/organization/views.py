@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.db.models import Count
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import permissions, status
@@ -470,63 +471,122 @@ class ReportingLineDetailView(APIView):
 
 
 # ── Org Chart ─────────────────────────────────────────────────────────────────
+def _chart_member_base_qs(workspace):
+    """Base queryset for rendering members as org-chart nodes — shared by the
+    root/expand/department-chart views so they stay in lockstep on shape and
+    query cost. Callers still need to `.filter(...)` and annotate `reports_count`.
+    """
+    return (
+        WorkspaceMember.objects.filter(workspace=workspace)
+        .select_related("user")
+        .prefetch_related(
+            "department_memberships__department",
+            "team_memberships__team",
+            "org_profile__job_title",
+            "reports_to",
+        )
+        .annotate(reports_count=Count("direct_reports", distinct=True))
+    )
+
+
+def _serialize_chart_node(m):
+    profile = getattr(m, "org_profile", None)
+    # reports_to is prefetched — read from the cache (don't use .first(),
+    # which issues a fresh LIMIT query per member and bypasses the prefetch).
+    reports_to = m.reports_to.all()
+    manager_line = reports_to[0] if reports_to else None
+    return {
+        "id": str(m.id),
+        "name": m.user.full_name,
+        "email": m.user.email,
+        "avatar": m.user.avatar,
+        "role": m.role,
+        "job_title": (
+            profile.job_title.name if profile and profile.job_title else None
+        ),
+        "manager_id": str(manager_line.manager_id) if manager_line else None,
+        "reporting_line_id": str(manager_line.id) if manager_line else None,
+        "onboarding_status": profile.status if profile else None,
+        "departments": [
+            {"id": str(dm.department_id), "name": dm.department.name}
+            for dm in m.department_memberships.all()
+        ],
+        "teams": [
+            {"id": str(tm.team_id), "name": tm.team.name}
+            for tm in m.team_memberships.all()
+        ],
+        "direct_reports_count": m.reports_count,
+        "has_reports": m.reports_count > 0,
+    }
+
+
 class OrgChartView(APIView):
-    """Tree of all workspace members with dept, team, title, and manager context."""
+    """Root of the org chart tree: members with no manager (the top of each
+    reporting line), lazily expanded via OrgChartReportsView. Workspaces with no
+    reporting lines configured yet have no way to tell "top" from "everyone
+    else", so every member is returned as a root — the tree is flat until
+    reporting lines are added.
+    """
 
     permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
     def get(self, request, workspace_id):
         workspace = _read_ws(request, workspace_id)
         members = (
-            WorkspaceMember.objects.filter(workspace=workspace)
-            .select_related("user")
-            .prefetch_related(
-                "department_memberships__department",
-                "team_memberships__team",
-                "org_profile__job_title",
-                "reports_to",
-            )
+            _chart_member_base_qs(workspace)
+            .filter(reports_to__isnull=True)
             .order_by("id")
         )
-        nodes = []
-        for m in members:
-            profile = getattr(m, "org_profile", None)
-            # reports_to is prefetched — read from the cache (don't use .first(),
-            # which issues a fresh LIMIT query per member and bypasses the prefetch).
-            reports_to = m.reports_to.all()
-            manager_line = reports_to[0] if reports_to else None
-            nodes.append(
-                {
-                    "id": str(m.id),
-                    "name": m.user.full_name,
-                    "email": m.user.email,
-                    "avatar": m.user.avatar,
-                    "role": m.role,
-                    "job_title": (
-                        profile.job_title.name
-                        if profile and profile.job_title
-                        else None
-                    ),
-                    "manager_id": (
-                        str(manager_line.manager_id) if manager_line else None
-                    ),
-                    "reporting_line_id": (
-                        str(manager_line.id) if manager_line else None
-                    ),
-                    "onboarding_status": (
-                        profile.status if profile else None
-                    ),
-                    "departments": [
-                        {"id": str(dm.department_id), "name": dm.department.name}
-                        for dm in m.department_memberships.all()
-                    ],
-                    "teams": [
-                        {"id": str(tm.team_id), "name": tm.team.name}
-                        for tm in m.team_memberships.all()
-                    ],
-                }
-            )
-        return Response({"nodes": nodes})
+        return Response({"nodes": [_serialize_chart_node(m) for m in members]})
+
+
+class OrgChartReportsView(APIView):
+    """Direct reports (one level) of a given member — the expand-on-click step."""
+
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
+
+    def get(self, request, workspace_id, member_id):
+        workspace = _read_ws(request, workspace_id)
+        get_object_or_404(WorkspaceMember, id=member_id, workspace=workspace)
+        members = (
+            _chart_member_base_qs(workspace)
+            .filter(reports_to__manager_id=member_id)
+            .order_by("id")
+        )
+        return Response({"nodes": [_serialize_chart_node(m) for m in members]})
+
+
+class DepartmentChartMembersView(APIView):
+    """Members of one department as chart nodes — backs the "By Department" lazy
+    view (each department card expands into its members on click).
+    """
+
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
+
+    def get(self, request, workspace_id, dept_id):
+        workspace = _read_ws(request, workspace_id)
+        dept = get_object_or_404(Department, id=dept_id, workspace=workspace)
+        members = (
+            _chart_member_base_qs(workspace)
+            .filter(department_memberships__department=dept)
+            .order_by("id")
+        )
+        return Response({"nodes": [_serialize_chart_node(m) for m in members]})
+
+
+class UnassignedChartMembersView(APIView):
+    """Members with no department — the "By Department" view's overflow bucket."""
+
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
+
+    def get(self, request, workspace_id):
+        workspace = _read_ws(request, workspace_id)
+        members = (
+            _chart_member_base_qs(workspace)
+            .filter(department_memberships__isnull=True)
+            .order_by("id")
+        )
+        return Response({"nodes": [_serialize_chart_node(m) for m in members]})
 
 
 # ── My Profile (self-service onboarding) ─────────────────────────────────────

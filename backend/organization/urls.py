@@ -4,6 +4,8 @@ from .views import (
     DepartmentDetailView,
     DepartmentMemberListCreateView,
     DepartmentMemberDetailView,
+    DepartmentChartMembersView,
+    UnassignedChartMembersView,
     TeamListCreateView,
     TeamDetailView,
     TeamMemberListCreateView,
@@ -14,6 +16,7 @@ from .views import (
     ReportingLineListCreateView,
     ReportingLineDetailView,
     OrgChartView,
+    OrgChartReportsView,
     MyOrgProfileView,
     PendingProfilesView,
     ApproveProfileView,
@@ -34,6 +37,10 @@ urlpatterns = [
         f"{_ws}/org/departments/<str:dept_id>/members/<str:membership_id>/",
         DepartmentMemberDetailView.as_view(),
     ),
+    path(
+        f"{_ws}/org/departments/<str:dept_id>/chart/",
+        DepartmentChartMembersView.as_view(),
+    ),
     # Teams
     path(f"{_ws}/org/teams/", TeamListCreateView.as_view()),
     path(f"{_ws}/org/teams/<str:team_id>/", TeamDetailView.as_view()),
@@ -52,8 +59,10 @@ urlpatterns = [
     path(
         f"{_ws}/org/reporting-lines/<str:line_id>/", ReportingLineDetailView.as_view()
     ),
-    # Org Chart (read-only tree)
+    # Org Chart (lazy-loaded tree: root, then expand per-node)
     path(f"{_ws}/org/chart/", OrgChartView.as_view()),
+    path(f"{_ws}/org/chart/<str:member_id>/reports/", OrgChartReportsView.as_view()),
+    path(f"{_ws}/org/chart/unassigned/", UnassignedChartMembersView.as_view()),
 
     # Self-service onboarding profile
     path(f"{_ws}/org/me/profile/", MyOrgProfileView.as_view()),
