@@ -6,6 +6,7 @@ decide who gets notified and with what metadata.
 
 import logging
 from datetime import timedelta
+from decimal import Decimal
 
 from celery import shared_task
 from django.utils import timezone
@@ -13,7 +14,7 @@ from django.utils import timezone
 from core.events import push_inbox_items
 from workspaces import access
 
-from .models import EmployeeDocument
+from .models import EmployeeDocument, LeaveBalance
 
 logger = logging.getLogger(__name__)
 
@@ -66,3 +67,66 @@ def check_expiring_documents(self):
             expiry_notified_at=timezone.now()
         )
     return len(notified_ids)
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=300)
+def apply_leave_carry_over(self):
+    """Carry unused leave into the new year, for policies that opt in
+    (`LeavePolicy.carry_over_enabled`, off by default).
+
+    Runs yearly. Only ever reads prior-year balances that haven't been
+    processed yet (`carry_over_processed_at` dedup, same pattern as
+    `EmployeeDocument.expiry_notified_at`) — safe to re-run.
+    """
+    today = timezone.localdate()
+    prior_year, new_year = today.year - 1, today.year
+
+    balances = LeaveBalance.objects.filter(
+        year=prior_year,
+        carry_over_processed_at__isnull=True,
+        policy__carry_over_enabled=True,
+        policy__carry_over_days__gt=0,
+        employee__is_active=True,
+    ).select_related("policy", "employee__user", "employee__workspace")
+
+    processed = 0
+    for balance in balances:
+        remaining = max(Decimal("0"), balance.total_days - balance.used_days)
+        carry = min(remaining, Decimal(balance.policy.carry_over_days))
+
+        new_balance, created = LeaveBalance.objects.get_or_create(
+            employee=balance.employee, policy=balance.policy, year=new_year,
+            defaults={
+                "total_days": Decimal(balance.policy.days_per_year) + carry,
+                "carried_over_days": carry,
+            },
+        )
+        if not created:
+            # A leave request already lazily created next year's row before this
+            # job ran — add the carry-over on top rather than skip it.
+            new_balance.total_days = new_balance.total_days + carry
+            new_balance.carried_over_days = new_balance.carried_over_days + carry
+            new_balance.save(update_fields=["total_days", "carried_over_days"])
+
+        balance.carry_over_processed_at = timezone.now()
+        balance.save(update_fields=["carry_over_processed_at"])
+        processed += 1
+
+        if carry > 0:
+            employee = balance.employee
+            push_inbox_items([{
+                "user": employee.user,
+                "workspace": employee.workspace,
+                "actor_id": "",
+                "actor_name": employee.workspace.name,
+                "verb": "leave.carried_over",
+                "resource_name": balance.policy.name,
+                "meta": {
+                    "policy_id": str(balance.policy_id),
+                    "policy_name": balance.policy.name,
+                    "carried_over_days": str(carry),
+                    "year": new_year,
+                },
+            }])
+
+    return processed

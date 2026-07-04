@@ -720,9 +720,10 @@ More bug fixes (later pass): removing the `DepartmentMember`/`TeamMember` row th
 
 | Model | Key Fields | Notes |
 |-------|-----------|-------|
-| `LeavePolicy` | `workspace` (FK), `name`, `leave_type` (annual/sick/unpaid/paternity/maternity/compassionate), `days_per_year`, `carry_over_days`, `accrual_type` (upfront/monthly) | Workspace-level policy config; multiple policies per type allowed |
-| `LeaveBalance` | `employee` (FK→WorkspaceMember), `policy` (FK), `year`, `total_days`, `used_days`, `pending_days` | unique: employee+policy+year; indexes: `lb_employee_year_idx` |
-| `LeaveRequest` | `employee` (FK→WorkspaceMember), `policy` (FK), `start_date`, `end_date`, `reason`, `status` (pending/approved/rejected/cancelled), `approver` (FK→User), `reviewer_comment`, `reviewed_at` | indexes: `lr_employee_status_idx`, `leave_request_policy_dates_idx` |
+| `LeavePolicy` | `workspace` (FK), `name`, `leave_type` (annual/sick/unpaid/paternity/maternity/compassionate), `days_per_year`, `carry_over_days`, `carry_over_enabled` (bool, default False), `accrual_type` (upfront/monthly) | Workspace-level policy config; multiple policies per type allowed. `carry_over_enabled` is an explicit opt-in, separate from the `carry_over_days` cap — `hr.tasks.apply_leave_carry_over` (yearly, see Scheduled Tasks below) only touches policies with it on, so a workspace can carry over Annual Leave while leaving Sick Leave carry-over off. |
+| `LeaveBalance` | `employee` (FK→WorkspaceMember), `policy` (FK), `year`, `total_days`, `used_days`, `pending_days`, `carried_over_days` (transparency — already folded into `total_days`), `carry_over_processed_at` (nullable, dedup flag) | unique: employee+policy+year; indexes: `lb_employee_year_idx` |
+| `LeaveRequest` | `employee` (FK→WorkspaceMember), `policy` (FK), `start_date`, `end_date`, `start_day_part`/`end_day_part` (full/first_half/second_half, default full), `days_requested` (Decimal, computed once at creation), `reason`, `status` (pending/approved/rejected/cancelled), `approver` (FK→User), `reviewer_comment`, `reviewed_at` | indexes: `lr_employee_status_idx`, `leave_request_policy_dates_idx`. Day-part naming is deliberately shift-agnostic (not "morning"/"afternoon") so it's correct for any shift pattern, not just 9-to-5. `days_requested` is locked in at creation and reused at review time — see `hr/views.py::_leave_days` — so a holiday added between submission and approval can't silently change the balance math. |
+| `Holiday` | `workspace` (FK), `name`, `date`, `is_recurring` (bool), `location` (reserved, unused), `created_by` (FK→User) | unique: workspace+date+name; ordering: date. Recurring holidays (New Year's Day, etc.) are stored once and matched by month/day in any year via `hr/views.py::_holiday_dates_in_range` — no per-year pre-population needed. Excluded from leave day-counting (`_leave_days`) alongside weekends. Workspace-wide only for now — `location` is a reserved field for future region-scoping, not yet consumed anywhere. |
 | `AttendancePolicy` | `workspace` (O2O), `work_start_time`, `work_end_time`, `grace_period_minutes`, `weekly_hours` | One per workspace; auto-created on first access with sensible defaults (09:00–17:00, 15 min grace, 40 h/week) |
 | `Attendance` | `employee` (FK→WorkspaceMember), `date`, `clock_in` (TimeField, nullable), `clock_out` (TimeField, nullable), `source` (manual/api), `notes` | unique: employee+date (one row per employee per day) — this unique index also serves employee + date-range lookups, so no separate index. `clock_out=null` means still clocked in. |
 | `EmployeeDocument` | `employee` (FK→WorkspaceMember), `doc_type` (contract/id/certificate/other), `file`, `original_name`, `expiry_date` (nullable), `expiry_notified_at` (nullable, dedup flag), `uploaded_by` (FK→User) | files in `employee_docs/`; admin-only access; index: `edoc_employee_idx`; serializer exposes `days_until_expiry` computed field. `hr.tasks.check_expiring_documents` (daily, see Scheduled Tasks below) flags workspace admins once per document within 30 days of `expiry_date` — HR follows up manually, nothing is enforced on the employee. |
@@ -735,6 +736,7 @@ More bug fixes (later pass): removing the `DepartmentMember`/`TeamMember` row th
 | Task | Schedule | Purpose |
 |------|----------|---------|
 | `hr.tasks.check_expiring_documents` | daily, 06:00 UTC | Flags workspace admins (inbox notification) about `EmployeeDocument` rows expiring within 30 days. Dedup via `expiry_notified_at` — each document is flagged once. |
+| `hr.tasks.apply_leave_carry_over` | yearly, Jan 1 00:30 UTC | Carries unused leave from the prior year's `LeaveBalance` into the new year, capped at `LeavePolicy.carry_over_days`, for policies with `carry_over_enabled=True` only (off by default) and active employees only. Notifies each employee of the amount carried over (`leave.carried_over`). Dedup via `carry_over_processed_at` on the source (prior-year) balance row — safe to re-run; adds the carry-over on top if next year's row was already lazily created by an early leave request. |
 
 ### organization — URL Reference
 
@@ -851,8 +853,12 @@ lists and call `core.events.push_inbox_items()`, `.delay()`-ed from views.
 | POST | `/api/workspaces/{ws}/hr/leave-policies/` | Create policy (admin only) |
 | PATCH | `/api/workspaces/{ws}/hr/leave-policies/{id}/` | Update policy (admin only) |
 | DELETE | `/api/workspaces/{ws}/hr/leave-policies/{id}/` | Delete policy (admin only) |
+| GET | `/api/workspaces/{ws}/hr/holidays/` | List workspace holidays (any HR-enabled member) |
+| POST | `/api/workspaces/{ws}/hr/holidays/` | Create holiday (admin only, `hr.manage_leave`) |
+| PATCH | `/api/workspaces/{ws}/hr/holidays/{id}/` | Update holiday (admin only) |
+| DELETE | `/api/workspaces/{ws}/hr/holidays/{id}/` | Delete holiday (admin only) |
 | GET | `/api/workspaces/{ws}/hr/leave-requests/` | List requests; employee sees own, admin sees all; `?status=pending` filter. Defaults to the **last 24 months** (by created_at) as an unbounded-growth backstop — pass `?all=true` to override. |
-| POST | `/api/workspaces/{ws}/hr/leave-requests/` | Submit request; validates balance, updates pending_days, notifies admins |
+| POST | `/api/workspaces/{ws}/hr/leave-requests/` | Submit request (`start_day_part`/`end_day_part` optional, default `full`); validates balance against holiday/half-day-aware day count, updates pending_days, notifies admins |
 | POST | `/api/workspaces/{ws}/hr/leave-requests/{id}/review/` | Approve/reject (admin only); adjusts used_days/pending_days; notifies employee |
 | GET | `/api/workspaces/{ws}/hr/leave-balances/` | Current-year balances; employee sees own, admin sees all |
 | GET | `/api/workspaces/{ws}/hr/whos-off/` | Approved leaves covering today + next 7 days |
@@ -872,7 +878,7 @@ lists and call `core.events.push_inbox_items()`, `.delay()`-ed from views.
 
 Access via `workspaces/access.py` (helpers `_view_ws` / `_self_ws` / `_manage_ws` in `hr/views.py`): reads require `hr.view`; employee self-service (submit leave, clock in/out) requires `people` app access (`app="people"`) + write scope; management gates on `hr.manage_leave` (policies, reviews, dashboard), `hr.manage_attendance` (attendance policy/records/summary), `hr.manage_documents` (employee docs), `hr.manage_notes` (private notes). All enforced with `access.authorize(...)`. See `ACCESS.md`.
 
-**hr helpers (`hr/views.py`):** `_business_days(start, end)` (Mon–Fri count, inclusive; holidays not modelled); `_parse_date_window(request, default_lookback_days=31, max_span_days=366)` (bounded date-range parser used by attendance lists). Leave balance create/review wrap the balance mutation in `transaction.atomic()` + `select_for_update()`. All "today" logic uses `timezone.localdate()`.
+**hr helpers (`hr/views.py`):** `_holiday_dates_in_range(workspace, start, end)` (expands `Holiday` rows, including recurring ones matched by month/day, into concrete dates); `_leave_days(workspace, start, end, start_day_part, end_day_part)` (Mon–Fri count, inclusive, minus workspace holidays, with a 0.5-day adjustment on the start/end date for a half-day request — replaces the old `_business_days`, which is gone); `_parse_date_window(request, default_lookback_days=31, max_span_days=366)` (bounded date-range parser used by attendance lists). Leave balance create/review wrap the balance mutation in `transaction.atomic()` + `select_for_update()`. `LeaveRequest.days_requested` is computed once at creation and reused (not recomputed) at review time. All "today" logic uses `timezone.localdate()`.
 
 ### integrations
 

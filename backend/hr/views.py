@@ -1,4 +1,5 @@
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -13,12 +14,13 @@ from django.db.models import Count
 from workspaces.models import WorkspaceMember
 from workspaces import access
 from core.events import broadcast, notify
-from .models import Attendance, AttendancePolicy, EmployeeDocument, EmployeeNote, LeaveBalance, LeavePolicy, LeaveRequest
+from .models import Attendance, AttendancePolicy, EmployeeDocument, EmployeeNote, Holiday, LeaveBalance, LeavePolicy, LeaveRequest
 from .serializers import (
     AttendancePolicySerializer,
     AttendanceSerializer,
     EmployeeDocumentSerializer,
     EmployeeNoteSerializer,
+    HolidaySerializer,
     LeaveBalanceSerializer,
     LeavePolicySerializer,
     LeaveRequestReviewSerializer,
@@ -63,12 +65,43 @@ def _manage_ws(request, workspace_id, perm, scope="write"):
     return access.authorize(request, workspace_id, perm=perm, scope=scope)
 
 
-def _business_days(start, end):
-    """Count Mon–Fri days in an inclusive date range. Holidays are not modelled (v1)."""
-    return sum(
-        1 for i in range((end - start).days + 1)
-        if (start + timedelta(days=i)).weekday() < 5
-    )
+def _holiday_dates_in_range(workspace, start, end):
+    """Expand Holiday rows (including recurring ones) into concrete dates within
+    [start, end]. Recurring holidays are stored once and matched by month/day in
+    any year they fall within the range.
+    """
+    dates = set()
+    for h in Holiday.objects.filter(workspace=workspace):
+        if h.is_recurring:
+            for year in range(start.year, end.year + 1):
+                try:
+                    occ = h.date.replace(year=year)
+                except ValueError:
+                    continue  # e.g. a Feb 29 holiday in a non-leap year
+                if start <= occ <= end:
+                    dates.add(occ)
+        elif start <= h.date <= end:
+            dates.add(h.date)
+    return dates
+
+
+def _leave_days(workspace, start, end, start_day_part=LeaveRequest.DayPart.FULL, end_day_part=LeaveRequest.DayPart.FULL):
+    """Business days in an inclusive date range, excluding weekends and workspace
+    holidays, with a half-day (0.5) adjustment on the start/end date when
+    requested. Returns a Decimal.
+    """
+    holidays = _holiday_dates_in_range(workspace, start, end)
+    total = Decimal("0")
+    for i in range((end - start).days + 1):
+        d = start + timedelta(days=i)
+        if d.weekday() >= 5 or d in holidays:
+            continue
+        is_half = (
+            (d == start and start_day_part != LeaveRequest.DayPart.FULL)
+            or (d == end and end_day_part != LeaveRequest.DayPart.FULL)
+        )
+        total += Decimal("0.5") if is_half else Decimal("1")
+    return total
 
 
 def _parse_date_window(request, default_lookback_days=31, max_span_days=366):
@@ -136,6 +169,45 @@ class LeavePolicyDetailView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+# ── Holidays ─────────────────────────────────────────────────────────────────────
+
+class HolidayListCreateView(APIView):
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
+
+    def get(self, request, workspace_id):
+        workspace = _view_ws(request, workspace_id)
+        holidays = Holiday.objects.filter(workspace=workspace)
+        return Response(HolidaySerializer(holidays, many=True).data)
+
+    def post(self, request, workspace_id):
+        workspace = _manage_ws(request, workspace_id, "hr.manage_leave")
+        serializer = HolidaySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(workspace=workspace, created_by=request.user)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class HolidayDetailView(APIView):
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
+
+    def _get_holiday(self, request, workspace_id, holiday_id):
+        workspace = _manage_ws(request, workspace_id, "hr.manage_leave")
+        holiday = get_object_or_404(Holiday, id=holiday_id, workspace=workspace)
+        return workspace, holiday
+
+    def patch(self, request, workspace_id, holiday_id):
+        workspace, holiday = self._get_holiday(request, workspace_id, holiday_id)
+        serializer = HolidaySerializer(holiday, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+    def delete(self, request, workspace_id, holiday_id):
+        workspace, holiday = self._get_holiday(request, workspace_id, holiday_id)
+        holiday.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
 # ── Leave Requests ─────────────────────────────────────────────────────────────
 
 class LeaveRequestListCreateView(APIView):
@@ -183,7 +255,13 @@ class LeaveRequestListCreateView(APIView):
         if end < start:
             raise ValidationError({"end_date": "End date must be on or after start date."})
 
-        days_requested = _business_days(start, end)
+        start_day_part = serializer.validated_data.get("start_day_part", LeaveRequest.DayPart.FULL)
+        end_day_part = serializer.validated_data.get("end_day_part", LeaveRequest.DayPart.FULL)
+        days_requested = _leave_days(workspace, start, end, start_day_part, end_day_part)
+        if days_requested <= 0:
+            raise ValidationError(
+                {"non_field_errors": "This date range has no working days to request (weekends/holidays only)."}
+            )
 
         # Balance is tracked per the year the leave is taken (start_date.year),
         # matching the review path — otherwise pending/used land on different rows.
@@ -201,8 +279,8 @@ class LeaveRequestListCreateView(APIView):
                     {"non_field_errors": f"Insufficient balance. Available: {available} days, requested: {days_requested} days."}
                 )
 
-            leave_request = serializer.save(employee=member, policy=policy)
-            balance.pending_days = float(balance.pending_days) + days_requested
+            leave_request = serializer.save(employee=member, policy=policy, days_requested=days_requested)
+            balance.pending_days = float(balance.pending_days) + float(days_requested)
             balance.save(update_fields=["pending_days"])
 
         # Notify workspace admins (owner + settings.manage holders)
@@ -255,7 +333,10 @@ class LeaveRequestReviewView(APIView):
         serializer.is_valid(raise_exception=True)
 
         new_status = serializer.validated_data["status"]
-        days = _business_days(leave_request.start_date, leave_request.end_date)
+        # Reuse the day count locked in at creation — recomputing here would let a
+        # holiday added after submission silently change the balance math between
+        # submit and approve.
+        days = leave_request.days_requested
         current_year = leave_request.start_date.year
 
         # Lock the balance row and the status transition together so a concurrent
@@ -271,9 +352,9 @@ class LeaveRequestReviewView(APIView):
                 balance = LeaveBalance.objects.select_for_update().get(
                     employee=leave_request.employee, policy=leave_request.policy, year=current_year
                 )
-                balance.pending_days = max(0, float(balance.pending_days) - days)
+                balance.pending_days = max(0, float(balance.pending_days) - float(days))
                 if new_status == "approved":
-                    balance.used_days = float(balance.used_days) + days
+                    balance.used_days = float(balance.used_days) + float(days)
                 balance.save(update_fields=["pending_days", "used_days"])
             except LeaveBalance.DoesNotExist:
                 pass

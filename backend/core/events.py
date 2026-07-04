@@ -118,6 +118,7 @@ NOTIFICATION_VERBS = {
     "leave.requested": {"event_type": "assigned", "label": "🌴 Leave Requested"},
     "leave.approved":  {"event_type": "assigned", "label": "✅ Leave Approved"},
     "leave.rejected":  {"event_type": "assigned", "label": "❌ Leave Rejected"},
+    "leave.carried_over": {"event_type": "hr", "label": "🔁 Leave Carried Over"},
     "document_expiring": {"event_type": "hr", "label": "📄 Document Expiring"},
 }
 

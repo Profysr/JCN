@@ -2,6 +2,8 @@ from django.urls import path
 from .views import (
     LeavePolicyListCreateView,
     LeavePolicyDetailView,
+    HolidayListCreateView,
+    HolidayDetailView,
     LeaveRequestListCreateView,
     LeaveRequestReviewView,
     LeaveBalanceListView,
@@ -25,6 +27,8 @@ urlpatterns = [
     # Leave
     path(f"{_ws}/hr/leave-policies/", LeavePolicyListCreateView.as_view()),
     path(f"{_ws}/hr/leave-policies/<str:policy_id>/", LeavePolicyDetailView.as_view()),
+    path(f"{_ws}/hr/holidays/", HolidayListCreateView.as_view()),
+    path(f"{_ws}/hr/holidays/<str:holiday_id>/", HolidayDetailView.as_view()),
     path(f"{_ws}/hr/leave-requests/", LeaveRequestListCreateView.as_view()),
     path(f"{_ws}/hr/leave-requests/<str:request_id>/review/", LeaveRequestReviewView.as_view()),
     path(f"{_ws}/hr/leave-balances/", LeaveBalanceListView.as_view()),

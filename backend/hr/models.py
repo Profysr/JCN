@@ -28,6 +28,8 @@ class LeavePolicy(models.Model):
     leave_type = models.CharField(max_length=20, choices=LeaveType.choices)
     days_per_year = models.PositiveSmallIntegerField(default=0)
     carry_over_days = models.PositiveSmallIntegerField(default=0)
+    # Off by default — carry-over only runs for policies that explicitly opt in, since a workspace-wide job silently changing balances shouldn't be implicit.
+    carry_over_enabled = models.BooleanField(default=False)
     accrual_type = models.CharField(max_length=10, choices=AccrualType.choices, default=AccrualType.UPFRONT)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -47,6 +49,13 @@ class LeaveBalance(models.Model):
     total_days = models.DecimalField(max_digits=5, decimal_places=1, default=0)
     used_days = models.DecimalField(max_digits=5, decimal_places=1, default=0)
     pending_days = models.DecimalField(max_digits=5, decimal_places=1, default=0)
+    # How much of total_days came from last year's unused balance (transparency only —
+    # already folded into total_days). Set by hr.tasks.apply_leave_carry_over.
+    carried_over_days = models.DecimalField(max_digits=5, decimal_places=1, default=0)
+    # Dedup marker on the SOURCE (prior-year) balance row — same pattern as
+    # EmployeeDocument.expiry_notified_at. Prevents the yearly job from double-applying
+    # carry-over if it's re-run.
+    carry_over_processed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         unique_together = ["employee", "policy", "year"]
@@ -65,12 +74,25 @@ class LeaveRequest(models.Model):
         REJECTED = "rejected", "Rejected"
         CANCELLED = "cancelled", "Cancelled"
 
+    class DayPart(models.TextChoices):
+        FULL = "full", "Full Day"
+        # Deliberately shift-agnostic — never assumes literal AM/PM, so it's
+        # correct for any shift pattern (day, night, split), not just 9-to-5.
+        FIRST_HALF = "first_half", "First Half"
+        SECOND_HALF = "second_half", "Second Half"
+
     PREFIX = "lreq"
     id = UUIDv7Field()
     employee = models.ForeignKey(WorkspaceMember, on_delete=models.CASCADE, related_name="leave_requests")
     policy = models.ForeignKey(LeavePolicy, on_delete=models.CASCADE, related_name="requests")
     start_date = models.DateField()
     end_date = models.DateField()
+    start_day_part = models.CharField(max_length=12, choices=DayPart.choices, default=DayPart.FULL)
+    end_day_part = models.CharField(max_length=12, choices=DayPart.choices, default=DayPart.FULL)
+    # Computed once at creation (weekends/holidays/half-days applied) and reused at
+    # review time — see hr/views.py — so a holiday added mid-flight can't silently
+    # change the balance math between submit and approve.
+    days_requested = models.DecimalField(max_digits=5, decimal_places=1, default=0)
     reason = models.TextField(blank=True)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
     approver = models.ForeignKey(
@@ -94,6 +116,40 @@ class LeaveRequest(models.Model):
 
     def __str__(self):
         return f"{self.employee} — {self.policy.leave_type} {self.start_date}→{self.end_date}"
+
+
+class Holiday(models.Model):
+    """A workspace-wide non-working day, excluded from leave day-counting.
+
+    Recurring holidays (New Year's Day, etc.) are stored once and matched by
+    month/day in any year — no need to pre-populate every year. One-off holidays
+    (an office closure, a religious holiday whose date shifts year to year) are
+    entered per-occurrence with is_recurring=False.
+    """
+
+    PREFIX = "hol"
+    id = UUIDv7Field()
+    workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE, related_name="holidays")
+    name = models.CharField(max_length=100)
+    date = models.DateField()
+    is_recurring = models.BooleanField(default=False)
+    # Reserved for future region-scoping (companies with offices in multiple
+    # countries) — unused for now; every holiday applies workspace-wide.
+    location = models.CharField(max_length=100, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="created_holidays",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ["workspace", "date", "name"]
+        ordering = ["date"]
+
+    def __str__(self):
+        return f"{self.name} ({self.date}) — {self.workspace.name}"
 
 
 class EmployeeDocument(models.Model):

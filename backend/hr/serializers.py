@@ -4,7 +4,7 @@ from rest_framework import serializers
 
 from accounts.serializers import MiniUserSerializer
 from workspaces.models import WorkspaceMember
-from .models import Attendance, AttendancePolicy, EmployeeDocument, EmployeeNote, LeaveBalance, LeavePolicy, LeaveRequest
+from .models import Attendance, AttendancePolicy, EmployeeDocument, EmployeeNote, Holiday, LeaveBalance, LeavePolicy, LeaveRequest
 
 
 class MiniMemberSerializer(serializers.ModelSerializer):
@@ -23,7 +23,7 @@ class LeavePolicySerializer(serializers.ModelSerializer):
         model = LeavePolicy
         fields = [
             "id", "name", "leave_type", "days_per_year",
-            "carry_over_days", "accrual_type", "created_at",
+            "carry_over_days", "carry_over_enabled", "accrual_type", "created_at",
         ]
         read_only_fields = ["id", "created_at"]
 
@@ -38,7 +38,7 @@ class LeaveBalanceSerializer(serializers.ModelSerializer):
         model = LeaveBalance
         fields = [
             "id", "employee", "policy", "year",
-            "total_days", "used_days", "pending_days", "remaining_days",
+            "total_days", "used_days", "pending_days", "carried_over_days", "remaining_days",
         ]
         read_only_fields = ["id"]
 
@@ -57,16 +57,29 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
         model = LeaveRequest
         fields = [
             "id", "employee", "policy", "policy_id",
-            "start_date", "end_date", "reason",
-            "status", "approver", "reviewer_comment", "reviewed_at",
+            "start_date", "end_date", "start_day_part", "end_day_part", "days_requested",
+            "reason", "status", "approver", "reviewer_comment", "reviewed_at",
             "created_at", "updated_at",
         ]
-        read_only_fields = ["id", "employee", "status", "approver", "reviewer_comment", "reviewed_at", "created_at", "updated_at"]
+        read_only_fields = [
+            "id", "employee", "days_requested", "status", "approver",
+            "reviewer_comment", "reviewed_at", "created_at", "updated_at",
+        ]
 
 
 class LeaveRequestReviewSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=["approved", "rejected"])
     comment = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class HolidaySerializer(serializers.ModelSerializer):
+    id = serializers.UUIDField(read_only=True)
+    created_by = MiniUserSerializer(read_only=True)
+
+    class Meta:
+        model = Holiday
+        fields = ["id", "name", "date", "is_recurring", "location", "created_by", "created_at"]
+        read_only_fields = ["id", "created_by", "created_at"]
 
 
 class AttendancePolicySerializer(serializers.ModelSerializer):
