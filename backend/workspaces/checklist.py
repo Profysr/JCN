@@ -3,9 +3,13 @@ Per-module getting-started checklist registry.
 
 To add a new module's checklist:
   1. Define a _compute_<module>(workspace) function that returns {key: bool}.
-  2. Add it to CHECKLIST_REGISTRY under the module's APP_REGISTRY key.
+  2. Add it to CHECKLIST_REGISTRY under a module key.
 
-The OnboardingStateView iterates this dict automatically — no other file changes needed.
+The OnboardingStateView iterates this dict automatically — no other file
+changes needed. Module keys here are independent content groupings, not
+APP_REGISTRY app keys — "org" and "hr" stay two separate checklist sections
+(matching their own onboarding tasks) even though they're one "people" app
+in APP_REGISTRY/access control.
 """
 
 

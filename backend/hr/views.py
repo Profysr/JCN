@@ -54,8 +54,8 @@ def _view_ws(request, workspace_id):
 
 
 def _self_ws(request, workspace_id):
-    """Employee self-service (submit leave, clock in/out) — any HR-enabled member."""
-    return access.authorize(request, workspace_id, app="hr", scope="write")
+    """Employee self-service (submit leave, clock in/out) — any People & HR-enabled member."""
+    return access.authorize(request, workspace_id, app="people", scope="write")
 
 
 def _manage_ws(request, workspace_id, perm, scope="write"):

@@ -380,7 +380,7 @@ class CustomRole(models.Model):
     name = models.CharField(max_length=100)
     description = models.CharField(max_length=500, blank=True)
     is_system = models.BooleanField(default=False)
-    # {"projects": true, "hr": false, ...}
+    # {"projects": true, "people": false, ...}
     app_access = models.JSONField(default=dict)
     # {"projects": {"task.create": true, ...}, "workspace": {"member.invite": true, ...}}
     permissions = models.JSONField(default=dict)

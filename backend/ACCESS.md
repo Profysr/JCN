@@ -66,9 +66,9 @@ For an API-key request, one more ceiling applies **before** the action runs:
 "Workspace admin" (primitive #3) is just a convenience name for *owner OR holds
 `settings.manage`*. It is the correct gate for workspace-wide management
 (settings, members, API keys, webhooks). Product-area management uses that
-area's fine-grained permission instead (`org.manage`, `hr.manage_*`,
-`project.admin`), so a custom role can grant it without making someone a
-workspace admin.
+area's fine-grained permission instead (`org.manage`, `hr.manage_*` — both
+under the `people` app —, `project.admin`), so a custom role can grant it
+without making someone a workspace admin.
 
 ---
 
@@ -196,42 +196,48 @@ by visibility (`Board.objects.for_user` hides private boards).
 | GET/POST `/forms/{token}/`, `/submit/` | Public intake form | **public** | Anonymous submitters by design; task created with `created_by=NULL`. |
 | `/objectives/…` (OKRs) | Objectives & key results | app:`projects` + board/workspace perms | Part of the projects product area. |
 
-### Organization (`organization`)
+### Organization + HR (`organization`, `hr`) — one app: `people`
 
-All org endpoints require **app:`org`**. Reads additionally require the member to
-be **onboarded** (`_require_onboarded` — non-admins with a draft/missing
-`OrgProfile` are walled off). Mutations require **perm:`org.manage`** (owner/Admin
-hold it automatically; a custom role can grant it without full admin).
+Org Structure and HR Management are two Django apps but **one** backend
+permission app, `people` (`APP_REGISTRY`) — HR's data model is built entirely
+on org data (employment profile, departments, job titles). All endpoints
+below require **app:`people`**; the fine-grained permission strings keep
+their original `org.*`/`hr.*` prefixes for clarity, they just live under one
+app umbrella now.
+
+**Organization endpoints.** Reads additionally require the member to be
+**onboarded** (`_require_onboarded` — non-admins with a draft/missing
+`OrgProfile` are walled off). Mutations require **perm:`org.manage`**
+(owner/Admin hold it automatically; a custom role can grant it without full
+admin).
 
 | Method + Path | Purpose | Access check | Why |
 |---|---|---|---|
-| GET `/org/departments/`, `/teams/`, `/chart/`, `/reporting-lines/` | Read org structure & chart | app:`org` + onboarded | Viewing the org requires being past the onboarding wall. |
-| POST/PATCH/DELETE `/org/departments/…`, `/teams/…` | Manage departments & teams | app:`org` + perm:`org.manage` + scope:write | Structural edits are privileged. |
-| GET/POST/DELETE `/org/departments/{id}/members/…`, `/teams/{id}/members/…` | Manage unit membership | read: app:`org`+onboarded / write: perm:`org.manage` + scope:write | Assigning people to units. |
-| GET/POST/PATCH/DELETE `/org/job-titles/…` | Manage job-title lookup | list: app:`org` (no onboarding wall) / write: perm:`org.manage` + scope:write | Titles must be visible pre-onboarding to read the chart; edits are privileged. |
-| GET/PATCH `/org/members/{id}/profile/` | View / edit a member's profile | GET: **self** or perm:`member.view_profile`; PATCH: **self** or perm:`org.manage` (approved ⇒ admin/manager only) | Consumed workspace-wide (directory, HR), so gated on the workspace-level view permission, not app:`org`. |
+| GET `/org/departments/`, `/teams/`, `/chart/`, `/reporting-lines/` | Read org structure & chart | app:`people` + onboarded | Viewing the org requires being past the onboarding wall. |
+| POST/PATCH/DELETE `/org/departments/…`, `/teams/…` | Manage departments & teams | app:`people` + perm:`org.manage` + scope:write | Structural edits are privileged. |
+| GET/POST/DELETE `/org/departments/{id}/members/…`, `/teams/{id}/members/…` | Manage unit membership | read: app:`people`+onboarded / write: perm:`org.manage` + scope:write | Assigning people to units. |
+| GET/POST/PATCH/DELETE `/org/job-titles/…` | Manage job-title lookup | list: app:`people` (no onboarding wall) / write: perm:`org.manage` + scope:write | Titles must be visible pre-onboarding to read the chart; edits are privileged. |
+| GET/PATCH `/org/members/{id}/profile/` | View / edit a member's profile | GET: **self** or perm:`member.view_profile`; PATCH: **self** or perm:`org.manage` (approved ⇒ admin/manager only) | Consumed workspace-wide (directory, HR), so gated on the workspace-level view permission, not app:`people`. |
 | GET/PATCH/POST `/org/me/profile/` | Own profile: view / edit / submit | authenticated member (GET always allowed) | Needed to render the onboarding wall itself; submit lifts the gate. |
 | GET `/org/profiles/pending/` | Review queue | perm:`org.manage` | HR/admin review of submissions. |
 | POST `/org/profiles/{id}/approve/`, `/bulk-approve/` | Approve profile(s) | perm:`org.manage` + scope:write | Approval lifts a member's onboarding gate. |
 
-### HR (`hr`)
-
-`hr` depends on `org` (`APP_REGISTRY`). All endpoints require **app:`hr`**.
-Employee-facing actions (clock in/out, own leave/attendance) need only app access;
-management actions gate on **perm:`hr.manage_leave`** or **perm:`hr.manage_attendance`**.
+**HR endpoints.** Employee-facing actions (clock in/out, own leave/attendance)
+need only app access; management actions gate on **perm:`hr.manage_leave`**
+or **perm:`hr.manage_attendance`**.
 
 | Method + Path | Purpose | Access check | Why |
 |---|---|---|---|
-| GET `/hr/leave-policies/` | List leave policies | app:`hr` | Employees need to see policies to request leave. |
+| GET `/hr/leave-policies/` | List leave policies | app:`people` | Employees need to see policies to request leave. |
 | POST/PATCH/DELETE `/hr/leave-policies/…` | Manage policies | perm:`hr.manage_leave` + scope:write | Policy config is a management action. |
-| GET `/hr/leave-requests/` | List requests | app:`hr` (employee sees own, admin sees all — in-view) | Everyone sees their own leave. |
-| POST `/hr/leave-requests/` | Submit leave request | app:`hr` + scope:write | Any employee may request. |
+| GET `/hr/leave-requests/` | List requests | app:`people` (employee sees own, admin sees all — in-view) | Everyone sees their own leave. |
+| POST `/hr/leave-requests/` | Submit leave request | app:`people` + scope:write | Any employee may request. |
 | POST `/hr/leave-requests/{id}/review/` | Approve / reject | perm:`hr.manage_leave` + scope:write | Approval is a management action. |
-| GET `/hr/leave-balances/`, `/whos-off/` | Balances / who's away | app:`hr` | Team-visible info. |
-| GET/PATCH `/hr/attendance-policy/` | Attendance policy | GET: app:`hr` / PATCH: perm:`hr.manage_attendance` + scope:write | Config edit is management. |
-| POST `/hr/attendance/clock-in/`, `/clock-out/` | Clock self in/out | app:`hr` + scope:write | Self-service attendance. |
+| GET `/hr/leave-balances/`, `/whos-off/` | Balances / who's away | app:`people` | Team-visible info. |
+| GET/PATCH `/hr/attendance-policy/` | Attendance policy | GET: app:`people` / PATCH: perm:`hr.manage_attendance` + scope:write | Config edit is management. |
+| POST `/hr/attendance/clock-in/`, `/clock-out/` | Clock self in/out | app:`people` + scope:write | Self-service attendance. |
 | GET `/hr/attendance/`, `/summary/` | All-employee records / summary | perm:`hr.manage_attendance` | Viewing everyone's attendance is management. |
-| GET `/hr/attendance/my/` | Own records | app:`hr` | Self-scoped. |
+| GET `/hr/attendance/my/` | Own records | app:`people` | Self-scoped. |
 | GET `/hr/dashboard/` | HR dashboard stats | perm:`hr.manage_leave` (or admin) | Aggregate workforce data — management view. |
 | GET/POST/DELETE `/hr/members/{id}/documents/…` | Employee documents | perm:`hr.manage_attendance` (HR admin) + scope:write | Sensitive HR files; never employee-self. |
 | GET/POST/PATCH/DELETE `/hr/members/{id}/notes/…` | Private manager notes | perm:`hr.manage_leave` (HR admin) | Private notes — never served to the employee. |
@@ -269,7 +275,7 @@ from workspaces.access import authorize
 
 class MyView(APIView):
     def post(self, request, workspace_id):
-        ws = authorize(request, workspace_id, app="hr",
+        ws = authorize(request, workspace_id, app="people",
                        perm="hr.manage_leave", scope="write")
         ...  # ws is the resolved Workspace
 ```

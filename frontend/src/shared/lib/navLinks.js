@@ -1,6 +1,5 @@
 import {
   FolderKanban,
-  Network,
   Users2,
   Settings,
   Users,
@@ -21,6 +20,10 @@ import { HR_NAV_ITEMS, HR_NAV_GROUPS } from "@/apps/hr-management/nav";
 //   icon       → AppSwitcher, AppLauncher, RolesSection
 //   landing    → route suffix after /w/:id/ when switching to this app
 //   colors     → icon bubble bg / icon text / active dot / accent bar
+//
+// Org Structure and HR Management are one backend app ("people" — see
+// workspaces/constants.py APP_REGISTRY) since HR's data model is built
+// entirely on org data (employment profile, departments, job titles).
 
 export const APP_DEFS = [
   {
@@ -36,15 +39,11 @@ export const APP_DEFS = [
     },
   },
   {
-    // Merged app-switcher entry for Org Structure + HR Management — the
-    // backend keeps these as two separate permission apps (see
-    // `backendApps`); this is a frontend-only presentation grouping.
     key: "people",
     label: "People & HR",
     shortLabel: "People",
     icon: Users2,
     landing: "departments",
-    backendApps: ["org", "hr"],
     colors: {
       bg: "bg-blue-500/15",
       text: "text-blue-500",
@@ -130,8 +129,8 @@ export const NAV_ITEMS = [
 
 export const NAV_GROUPS = [
   ...PM_NAV_GROUPS.map((g) => ({ ...g, app: "projects" })),
-  ...ORG_NAV_GROUPS.map((g) => ({ ...g, app: "org" })),
-  ...HR_NAV_GROUPS.map((g) => ({ ...g, app: "hr" })),
+  ...ORG_NAV_GROUPS.map((g) => ({ ...g, app: "people" })),
+  ...HR_NAV_GROUPS.map((g) => ({ ...g, app: "people" })),
   ...WORKSPACE_NAV_GROUPS.map((g) => ({ ...g, app: "workspace" })),
 ];
 

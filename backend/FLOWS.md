@@ -95,7 +95,7 @@ access.authorize(request, workspace_id, app=?, perm=?, admin=?, scope=?)
   1. Find the workspace and check you're a MEMBER   (else 404)
   2. If the request used an API key: check its SCOPE (read/write/admin)
   3. If admin=True:  are you owner or do you have settings.manage?
-  4. If app="hr":    does your role have HR access turned on?
+  4. If app="people": does your role have People & HR access turned on?
   5. If perm="...":  does your role grant that exact permission?
   → returns the workspace if all checks pass, else raises 403
 ```

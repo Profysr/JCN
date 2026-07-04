@@ -69,8 +69,7 @@ Single source of truth for all product apps and their permissions. The old per-w
 | Key | Name | depends_on |
 |-----|------|------------|
 | `projects` | Project Management | — |
-| `org` | Org Structure | — |
-| `hr` | HR Management | `org` |
+| `people` | People & HR (Org Structure + HR Management) | — |
 | `analytics` | Advanced Analytics | — |
 
 ### PERMISSIONS (nested by app key)
@@ -81,10 +80,16 @@ workspace:  member.invite, member.remove, member.view_profile, report.view,
 projects:   project.create, project.delete, project.admin, task.view,
             task.create, task.edit, task.delete, task.move, task.comment,
             sprint.manage, automation.manage
-org:        org.view, org.manage, org.approve_profiles
-hr:         hr.view, hr.manage_leave, hr.manage_attendance,
+people:     org.view, org.manage, org.approve_profiles,
+            hr.view, hr.manage_leave, hr.manage_attendance,
             hr.manage_documents, hr.manage_notes
 ```
+
+Org Structure and HR Management are two Django apps (`organization`, `hr`)
+but one backend permission app, `people` — HR's data model (leave,
+attendance, employee records) is built entirely on org data. Permission
+strings keep their original `org.*`/`hr.*` prefixes; only the outer app-key
+grouping merged.
 
 **How to add a new app:** Add to `APP_REGISTRY` + `PERMISSIONS` + `SYSTEM_ROLE_PERMISSIONS`. Frontend picks it up automatically from `GET /api/workspaces/{ws}/permissions/`.
 
@@ -857,7 +862,7 @@ lists and call `core.events.push_inbox_items()`, `.delay()`-ed from views.
 
 `AttendanceSerializer` computed fields: `status` (on_time/late/absent — compared against `AttendancePolicy.work_start_time + grace_period_minutes`), `total_hours` (float, null if no clock_out).
 
-Access via `workspaces/access.py` (helpers `_view_ws` / `_self_ws` / `_manage_ws` in `hr/views.py`): reads require `hr.view`; employee self-service (submit leave, clock in/out) requires HR app access + write scope; management gates on `hr.manage_leave` (policies, reviews, dashboard), `hr.manage_attendance` (attendance policy/records/summary), `hr.manage_documents` (employee docs), `hr.manage_notes` (private notes). All enforced with `access.authorize(...)`. See `ACCESS.md`.
+Access via `workspaces/access.py` (helpers `_view_ws` / `_self_ws` / `_manage_ws` in `hr/views.py`): reads require `hr.view`; employee self-service (submit leave, clock in/out) requires `people` app access (`app="people"`) + write scope; management gates on `hr.manage_leave` (policies, reviews, dashboard), `hr.manage_attendance` (attendance policy/records/summary), `hr.manage_documents` (employee docs), `hr.manage_notes` (private notes). All enforced with `access.authorize(...)`. See `ACCESS.md`.
 
 **hr helpers (`hr/views.py`):** `_business_days(start, end)` (Mon–Fri count, inclusive; holidays not modelled); `_parse_date_window(request, default_lookback_days=31, max_span_days=366)` (bounded date-range parser used by attendance lists). Leave balance create/review wrap the balance mutation in `transaction.atomic()` + `select_for_update()`. All "today" logic uses `timezone.localdate()`.
 
@@ -961,7 +966,7 @@ Permission resolution:
 - Project-admin actions gate on `project.admin` / board `board.admin`.
 - App access for hr/org/projects/analytics is enforced via `authorize(request, ws, app="…")`.
 - Org mutations require `org.manage` (structure) or `org.approve_profiles`; org reads require `org.view` + onboarding.
-- HR management gates on `hr.manage_leave` / `hr.manage_attendance` / `hr.manage_documents` / `hr.manage_notes`; HR reads on `hr.view`; employee self-service on HR app access.
+- HR management gates on `hr.manage_leave` / `hr.manage_attendance` / `hr.manage_documents` / `hr.manage_notes`; HR reads on `hr.view`; employee self-service on `people` app access.
 
 ### Board-level (unchanged from v2.1)
 

@@ -62,9 +62,6 @@ const PendingProfilesPage = lazy(
 const JobTitlesPage = lazy(
   () => import("@/apps/org-structure/pages/JobTitlesPage"),
 );
-const MemberProfilePage = lazy(
-  () => import("@/apps/org-structure/pages/MemberProfilePage"),
-);
 
 // ── HR Management pages ───────────────────────────────────────────────────────
 const HRDashboardPage = lazy(
@@ -187,25 +184,20 @@ export default function App() {
                 <Route path="import" element={<ImportPage />} />
               </Route>
 
-              {/* ── Org Structure ───────────────────────────────────────── */}
-              <Route element={<AppGuard app="org" />}>
+              {/* ── People & HR (Org Structure + HR Management) ─────────── */}
+              <Route element={<AppGuard app="people" />}>
                 <Route element={<OrgOnboardingGate />}>
                   <Route path="departments" element={<DepartmentsPage />} />
                   <Route path="teams" element={<TeamsPage />} />
                   <Route path="org-chart" element={<OrgChartPage />} />
                   <Route path="people" element={<PeopleDirectoryPage />} />
-                  <Route path="people/:memberId" element={<MemberProfilePage />} />
                   <Route path="org/pending" element={<PendingProfilesPage />} />
                   <Route path="org/job-titles" element={<JobTitlesPage />} />
+                  <Route path="hr" element={<HRDashboardPage />} />
+                  <Route path="hr/leave" element={<LeavePage />} />
+                  <Route path="hr/attendance" element={<AttendancePage />} />
+                  <Route path="members/:memberId" element={<MemberDetailPage />} />
                 </Route>
-              </Route>
-
-              {/* ── HR Management ───────────────────────────────────────── */}
-              <Route element={<AppGuard app="hr" />}>
-                <Route path="hr" element={<HRDashboardPage />} />
-                <Route path="hr/leave" element={<LeavePage />} />
-                <Route path="hr/attendance" element={<AttendancePage />} />
-                <Route path="members/:memberId" element={<MemberDetailPage />} />
               </Route>
 
               {/* ── Workspace & Settings ────────────────────────────────── */}

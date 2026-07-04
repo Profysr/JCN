@@ -251,7 +251,7 @@ def authorize(request, workspace_id, *, app=None, perm=None, admin=False, scope=
     Order: scope ceiling (API keys) → workspace admin → app access → permission.
     Owner short-circuits every gate. Returns the Workspace.
 
-        ws = authorize(request, workspace_id, app="hr", perm="hr.manage_leave", scope="write")
+        ws = authorize(request, workspace_id, app="people", perm="hr.manage_leave", scope="write")
     """
     user = request.user
     workspace = get_workspace_or_404(workspace_id, user)

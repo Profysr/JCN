@@ -1,15 +1,15 @@
 # ── App Registry ─────────────────────────────────────────────────────────────
 # Single source of truth for all product apps/modules.
-# Replaces MODULE_REGISTRY in core/modules.py — core now imports this.
 #
-# Keys are short canonical identifiers: "projects", "org", "hr", "analytics".
+# Keys are short canonical identifiers: "projects", "people".
+# "people" covers Org Structure + HR Management — one app, since HR's data
+# model (leave, attendance, employee records) is built entirely on org data
+# (employment profile, departments, job titles).
 #
 # HOW TO ADD A NEW APP
 #   1. Add an entry here in APP_REGISTRY.
 #   2. Add its permissions block in PERMISSIONS below.
 #   3. Add its default perm values to SYSTEM_ROLE_PERMISSIONS.
-#   4. Add the module key mapping in core/modules.py (_OLD_TO_NEW is only
-#      needed during the one-time data migration — see migration 0016).
 #   Frontend picks up new apps automatically from GET /api/workspaces/{ws}/permissions/.
 
 APP_REGISTRY = {
@@ -19,16 +19,10 @@ APP_REGISTRY = {
         "depends_on": [],
         "icon": "layout-grid",
     },
-    "org": {
-        "name": "Org Structure",
-        "description": "Departments, teams, org chart, job titles, and reporting lines.",
+    "people": {
+        "name": "People & HR",
+        "description": "Departments, teams, org chart, job titles, leave, and attendance.",
         "depends_on": [],
-        "icon": "building-2",
-    },
-    "hr": {
-        "name": "HR Management",
-        "description": "Leave management, attendance, and employee records.",
-        "depends_on": ["org"],
         "icon": "users-round",
     },
 }
@@ -66,12 +60,10 @@ PERMISSIONS = {
         "sprint.manage": {"label": "Create, start, and complete sprints"},
         "automation.manage": {"label": "Create and edit automation rules"},
     },
-    "org": {
+    "people": {
         "org.view": {"label": "View departments, teams, org chart, and the people directory"},
         "org.manage": {"label": "Create and edit departments, teams, job titles, and reporting lines"},
         "org.approve_profiles": {"label": "Review and approve member onboarding profiles"},
-    },
-    "hr": {
         "hr.view": {"label": "View the HR dashboard and team leave / attendance overviews"},
         "hr.manage_leave": {"label": "Manage leave policies and approve or reject leave requests"},
         "hr.manage_attendance": {"label": "Manage attendance policies and records"},
@@ -116,12 +108,10 @@ SYSTEM_ROLE_PERMISSIONS = {
                 "sprint.manage": True,
                 "automation.manage": False,
             },
-            "org": {
+            "people": {
                 "org.view": True,
                 "org.manage": False,
                 "org.approve_profiles": False,
-            },
-            "hr": {
                 "hr.view": True,
                 "hr.manage_leave": False,
                 "hr.manage_attendance": False,
@@ -155,12 +145,10 @@ SYSTEM_ROLE_PERMISSIONS = {
                 "sprint.manage": False,
                 "automation.manage": False,
             },
-            "org": {
+            "people": {
                 "org.view": True,
                 "org.manage": False,
                 "org.approve_profiles": False,
-            },
-            "hr": {
                 "hr.view": True,
                 "hr.manage_leave": False,
                 "hr.manage_attendance": False,
