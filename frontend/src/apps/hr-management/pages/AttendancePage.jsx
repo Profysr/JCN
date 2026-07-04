@@ -3,7 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import {
   LogIn, LogOut, Clock, CheckCircle2, XCircle, AlertCircle,
   ChevronLeft, ChevronRight, Users, Download,
-  Timer, Calendar, BarChart3, Settings2,
+  Timer, Calendar, BarChart3, Settings2, MapPin, MapPinOff,
 } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { Loader } from "@/shared/components/ui/Loader";
@@ -19,6 +19,7 @@ import {
   useClockOut,
   useMyAttendance,
   useAttendanceList,
+  getGeolocation,
 } from "@/apps/hr-management/hooks/useAttendance";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -456,7 +457,12 @@ function AdminGrid({ workspaceId }) {
                             <span className="text-xs text-zinc-300">—</span>
                           ) : rec ? (
                             <div className="flex flex-col items-center gap-0.5">
-                              <StatusChip s={rec.status} small />
+                              <div className="flex items-center gap-1">
+                                <StatusChip s={rec.status} small />
+                                {(rec.clock_in_outside_geofence || rec.clock_out_outside_geofence) && (
+                                  <MapPinOff className="h-3 w-3 text-amber-500" />
+                                )}
+                              </div>
                               {rec.total_hours != null && (
                                 <span className="text-[10px] text-muted-foreground">
                                   {rec.total_hours}h
@@ -493,6 +499,8 @@ function PolicyModal({ policy, workspaceId, onClose }) {
     work_end_time:   policy?.work_end_time   ?? "17:00",
     grace_period_minutes: policy?.grace_period_minutes ?? 15,
     weekly_hours:    policy?.weekly_hours    ?? 40,
+    geofence_enabled: policy?.geofence_enabled ?? false,
+    geofence_radius_meters: policy?.geofence_radius_meters ?? 500,
   });
 
   const update = useUpdateAttendancePolicy(workspaceId);
@@ -546,6 +554,35 @@ function PolicyModal({ policy, workspaceId, onClose }) {
             />
           </label>
         </div>
+
+        <div className="border-t pt-4 flex flex-col gap-3">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={!!form.geofence_enabled}
+              onChange={(e) => setForm(f => ({ ...f, geofence_enabled: e.target.checked }))}
+              className="h-4 w-4 rounded border-input"
+            />
+            <span className="text-sm text-foreground">Flag clock-ins outside expected work location</span>
+          </label>
+          <p className="text-xs text-muted-foreground -mt-2">
+            Compares clock-in/out coordinates against each employee&apos;s profile location. Never blocks — HR is notified, that&apos;s all.
+          </p>
+          {form.geofence_enabled && (
+            <label className="flex flex-col gap-1 max-w-[220px]">
+              <span className="text-xs font-medium text-muted-foreground">Radius (meters)</span>
+              <input
+                type="number"
+                min="10"
+                max="50000"
+                className="input border rounded px-3 py-1.5 text-sm bg-background"
+                value={form.geofence_radius_meters}
+                onChange={(e) => setForm(f => ({ ...f, geofence_radius_meters: Number(e.target.value) }))}
+              />
+            </label>
+          )}
+        </div>
+
         <div className="flex justify-end gap-2 pt-1">
           <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
           <Button size="sm" onClick={handleSave} disabled={update.isPending}>
@@ -619,6 +656,16 @@ export default function AttendancePage() {
   const isClockedIn  = !!todayRecord?.clock_in;
   const isClockedOut = !!todayRecord?.clock_out;
 
+  async function handleClockIn() {
+    const coords = await getGeolocation();
+    clockIn.mutate(coords);
+  }
+
+  async function handleClockOut() {
+    const coords = await getGeolocation();
+    clockOut.mutate(coords);
+  }
+
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* ── Header ── */}
@@ -677,7 +724,7 @@ export default function AttendancePage() {
                     <Button
                       size="lg"
                       className="h-16 w-40 text-base gap-2 rounded-xl"
-                      onClick={() => clockIn.mutate()}
+                      onClick={handleClockIn}
                       disabled={clockIn.isPending}
                     >
                       <LogIn className="h-5 w-5" />
@@ -688,7 +735,7 @@ export default function AttendancePage() {
                       size="lg"
                       variant="destructive"
                       className="h-16 w-40 text-base gap-2 rounded-xl"
-                      onClick={() => clockOut.mutate()}
+                      onClick={handleClockOut}
                       disabled={clockOut.isPending}
                     >
                       <LogOut className="h-5 w-5" />
@@ -722,6 +769,17 @@ export default function AttendancePage() {
                   ))}
                 </div>
               </div>
+
+              {(todayRecord?.clock_in_outside_geofence || todayRecord?.clock_out_outside_geofence) && (
+                <p className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 mt-3">
+                  <MapPinOff className="h-3.5 w-3.5" />
+                  {todayRecord?.clock_in_outside_geofence && todayRecord?.clock_out_outside_geofence
+                    ? "Clock in and out were both outside the expected work location."
+                    : todayRecord?.clock_in_outside_geofence
+                    ? "Clock in was outside the expected work location."
+                    : "Clock out was outside the expected work location."}
+                </p>
+              )}
 
               {clockIn.error && (
                 <p className="text-xs text-rose-500 mt-3">

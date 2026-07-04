@@ -30,8 +30,8 @@ export const useUpdateAttendancePolicy = (workspaceId) => {
 export const useClockIn = (workspaceId) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () =>
-      api.post(`/api/workspaces/${workspaceId}/hr/attendance/clock-in/`).then((r) => r.data),
+    mutationFn: (coords) =>
+      api.post(`/api/workspaces/${workspaceId}/hr/attendance/clock-in/`, coords ?? {}).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["hr-attendance-my", workspaceId] });
       qc.invalidateQueries({ queryKey: ["hr-attendance-list", workspaceId] });
@@ -43,8 +43,8 @@ export const useClockIn = (workspaceId) => {
 export const useClockOut = (workspaceId) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () =>
-      api.post(`/api/workspaces/${workspaceId}/hr/attendance/clock-out/`).then((r) => r.data),
+    mutationFn: (coords) =>
+      api.post(`/api/workspaces/${workspaceId}/hr/attendance/clock-out/`, coords ?? {}).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["hr-attendance-my", workspaceId] });
       qc.invalidateQueries({ queryKey: ["hr-attendance-list", workspaceId] });
@@ -52,6 +52,20 @@ export const useClockOut = (workspaceId) => {
     },
   });
 };
+
+// ── Geolocation helper ────────────────────────────────────────────────────────
+// Resolves to { latitude, longitude } or {} if permission denied/unavailable —
+// clock-in/out must never be blocked by a missing/refused location.
+export function getGeolocation({ timeout = 5000 } = {}) {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) return resolve({});
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+      () => resolve({}),
+      { timeout },
+    );
+  });
+}
 
 // ── My Attendance ──────────────────────────────────────────────────────────────
 export const useMyAttendance = (workspaceId, dateFrom, dateTo) =>

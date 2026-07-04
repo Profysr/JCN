@@ -154,6 +154,19 @@ function ProfileEditForm({ form, setForm, jobTitles, onSave, onCancel, isPending
         </label>
       </div>
       <label className="block text-sm">
+        <span className="text-muted-foreground">Work location (Google Maps link)</span>
+        <input
+          type="url"
+          placeholder="https://maps.google.com/…"
+          className="mt-1 w-full border rounded px-3 py-2 text-sm bg-background"
+          value={form.work_location_url}
+          onChange={(e) => set("work_location_url", e.target.value)}
+        />
+        <span className="text-xs text-muted-foreground">
+          Paste a Maps share link — coordinates are derived automatically and used for attendance geofencing.
+        </span>
+      </label>
+      <label className="block text-sm">
         <span className="text-muted-foreground">Bio</span>
         <textarea
           className="mt-1 w-full border rounded px-3 py-2 text-sm bg-background resize-none"
@@ -191,6 +204,7 @@ function ProfileTab({ workspaceId, memberId, isAdmin }) {
       employee_id: profile?.employee_id ?? "",
       start_date: profile?.start_date ?? "",
       location: profile?.location ?? "",
+      work_location_url: profile?.work_location_url ?? "",
       bio: profile?.bio ?? "",
     });
     setEditing(true);
@@ -334,6 +348,24 @@ function ProfileTab({ workspaceId, memberId, isAdmin }) {
               <DetailRow label="Employee ID" value={profile.employee_id || null} />
               <DetailRow label="Start date" value={formatDate(profile.start_date)} />
               <DetailRow label="Location" value={profile.location || null} />
+              {profile.work_location_url && (
+                <DetailRow
+                  label="Work location"
+                  value={
+                    <a
+                      href={profile.work_location_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-primary hover:underline inline-flex items-center gap-1"
+                    >
+                      <MapPin className="w-3 h-3" />
+                      {profile.work_latitude != null && profile.work_longitude != null
+                        ? `${Number(profile.work_latitude).toFixed(4)}, ${Number(profile.work_longitude).toFixed(4)}`
+                        : "View on map"}
+                    </a>
+                  }
+                />
+              )}
             </SectionCard>
           </div>
 

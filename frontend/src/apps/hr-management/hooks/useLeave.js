@@ -7,6 +7,7 @@ const policiesKey  = (ws)        => ["hr-leave-policies",  ws];
 const requestsKey  = (ws, s)     => ["hr-leave-requests",  ws, s ?? "all"];
 const balancesKey  = (ws)        => ["hr-leave-balances",  ws];
 const whosOffKey   = (ws)        => ["hr-whos-off",        ws];
+const holidaysKey  = (ws)        => ["hr-holidays",        ws];
 
 // ── Leave Policies ────────────────────────────────────────────────────────────
 export const useLeavePolicies = (workspaceId) =>
@@ -89,3 +90,34 @@ const _useWhosOff = (workspaceId) =>
     enabled: !!workspaceId,
     staleTime: 60_000,
   });
+
+// ── Holidays ──────────────────────────────────────────────────────────────────
+export const useHolidays = (workspaceId) =>
+  useQuery({
+    queryKey: holidaysKey(workspaceId),
+    queryFn: () =>
+      api.get(`/api/workspaces/${workspaceId}/hr/holidays/`).then((r) => r.data),
+    enabled: !!workspaceId,
+    staleTime: 60_000,
+  });
+
+export const useCreateHoliday = (workspaceId) =>
+  useInvalidatingMutation(
+    (data) =>
+      api.post(`/api/workspaces/${workspaceId}/hr/holidays/`, data).then((r) => r.data),
+    holidaysKey(workspaceId),
+  );
+
+export const useUpdateHoliday = (workspaceId) =>
+  useInvalidatingMutation(
+    ({ holidayId, ...data }) =>
+      api.patch(`/api/workspaces/${workspaceId}/hr/holidays/${holidayId}/`, data).then((r) => r.data),
+    holidaysKey(workspaceId),
+  );
+
+export const useDeleteHoliday = (workspaceId) =>
+  useInvalidatingMutation(
+    (holidayId) =>
+      api.delete(`/api/workspaces/${workspaceId}/hr/holidays/${holidayId}/`),
+    holidaysKey(workspaceId),
+  );
