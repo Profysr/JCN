@@ -16,7 +16,7 @@ import { Button } from "@/shared/components/ui/button";
 import Select from "@/shared/components/ui/Select";
 import { cn } from "@/shared/lib/utils";
 import { useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import {
   useMembers,
   useRemoveMember,
@@ -43,7 +43,6 @@ import { useToast } from "@/shared/components/ui/toast";
 import AppAccessTab from "@/pages/workspace/AppAccessTab";
 import RolesSection from "@/shared/components/workspace/RolesSection";
 import PermissionsModal from "@/shared/components/workspace/PermissionsModal";
-import { MemberProfilePanel } from "@/shared/components/workspace/MemberProfilePanel";
 import { Loader } from "@/shared/components/ui/Loader";
 
 /* ==========================================
@@ -152,8 +151,7 @@ function ActiveMemberItem({
   isSelf,
   isWorkspaceOwner,
   isAdmin,
-  isSelected,
-  onSelect,
+  onOpenProfile,
   isChecked,
   onCheck,
   onRoleChange,
@@ -166,13 +164,8 @@ function ActiveMemberItem({
 
   return (
     <div
-      onClick={onSelect}
-      className={cn(
-        "flex items-center justify-between px-4 py-3 transition-colors cursor-pointer",
-        isSelected
-          ? "bg-primary/5 border-l-2 border-l-primary"
-          : "hover:bg-accent/40 border-l-2 border-l-transparent",
-      )}
+      onClick={onOpenProfile}
+      className="flex items-center justify-between px-4 py-3 transition-colors cursor-pointer hover:bg-accent/40 border-l-2 border-l-transparent"
     >
       <div className="flex items-center gap-3">
         {checkable && (
@@ -254,12 +247,7 @@ function ActiveMemberItem({
           </button>
         )}
 
-        <ChevronRight
-          className={cn(
-            "w-4 h-4 text-muted-foreground/40 transition-transform",
-            isSelected && "text-primary rotate-90",
-          )}
-        />
+        <ChevronRight className="w-4 h-4 text-muted-foreground/40" />
       </div>
     </div>
   );
@@ -270,6 +258,7 @@ function ActiveMemberItem({
    ========================================== */
 export default function MembersPage() {
   const { workspaceId } = useParams();
+  const navigate = useNavigate();
   const { user } = useAuthStore();
 
   const { data: members = [], isLoading } = useMembers(workspaceId);
@@ -287,7 +276,6 @@ export default function MembersPage() {
   const [permsRefOpen, setPermsRefOpen] = useState(false);
   const [confirmState, setConfirmState] = useState(null);
   const [copiedToken, setCopiedToken] = useState(null);
-  const [selectedMemberId, setSelectedMemberId] = useState(null);
   const [checkedIds, setCheckedIds] = useState(new Set());
   const [bulkRoleId, setBulkRoleId] = useState("");
 
@@ -320,8 +308,6 @@ export default function MembersPage() {
 
   const { isOwner, can } = usePermission();
   const isAdmin = isOwner || can("settings.manage");
-
-  const selectedMember = members.find((m) => m.id === selectedMemberId);
 
   useEffect(() => {
     const handler = () => setPermsRefOpen(true);
@@ -357,13 +343,7 @@ export default function MembersPage() {
         </div>
 
         {/* Tabs */}
-        <Tabs
-          value={activeTab}
-          onChange={(key) => {
-            setActiveTab(key);
-            setSelectedMemberId(null);
-          }}
-        >
+        <Tabs value={activeTab} onChange={setActiveTab}>
           <TabsList>
             <TabsTrigger value="members">Members</TabsTrigger>
             <TabsTrigger value="app-access">App Access</TabsTrigger>
@@ -423,11 +403,8 @@ export default function MembersPage() {
                           workspace?.owner?.email === member.user?.email
                         }
                         isAdmin={isAdmin}
-                        isSelected={member.id === selectedMemberId}
-                        onSelect={() =>
-                          setSelectedMemberId((prev) =>
-                            prev === member.id ? null : member.id,
-                          )
+                        onOpenProfile={() =>
+                          navigate(`/w/${workspaceId}/members/${member.id}`)
                         }
                         isChecked={checkedIds.has(member.id)}
                         onCheck={toggleCheck}
@@ -482,16 +459,6 @@ export default function MembersPage() {
           </div>
         )}
       </div>
-
-      {/* Profile side panel — only in Members tab */}
-      {activeTab === "members" && selectedMember && (
-        <MemberProfilePanel
-          member={selectedMember}
-          workspaceId={workspaceId}
-          isAdmin={isAdmin}
-          onClose={() => setSelectedMemberId(null)}
-        />
-      )}
 
       {/* Modals */}
       <InviteModal
