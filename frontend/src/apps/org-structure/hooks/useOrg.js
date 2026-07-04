@@ -385,14 +385,14 @@ export const useUpdateOrgProfile = (workspaceId, memberId) => {
 };
 
 // ── My Profile (self-service onboarding) ─────────────────────────────────────
-export const useMyOrgProfile = (workspaceId) =>
+export const useMyOrgProfile = (workspaceId, { enabled = true } = {}) =>
   useQuery({
     queryKey: myProfileKey(workspaceId),
     queryFn: () =>
       api
         .get(`/api/workspaces/${workspaceId}/org/me/profile/`)
         .then((r) => r.data),
-    enabled: !!workspaceId,
+    enabled: !!workspaceId && enabled,
     ...SOCKET_BACKED,
   });
 

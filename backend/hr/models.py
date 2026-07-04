@@ -110,6 +110,7 @@ class EmployeeDocument(models.Model):
     file = models.FileField(upload_to="employee_docs/")
     original_name = models.CharField(max_length=255)
     expiry_date = models.DateField(null=True, blank=True)
+    expiry_notified_at = models.DateTimeField(null=True, blank=True)
     uploaded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

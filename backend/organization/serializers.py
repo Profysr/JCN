@@ -64,13 +64,15 @@ class DepartmentSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "updated_at"]
 
     def get_member_count(self, obj):
-        return len(obj.memberships.all())
+        return len([m for m in obj.memberships.all() if m.member.is_active])
 
     def validate_head_id(self, value):
         if value is None:
             return value
         workspace = self.context.get("workspace")
-        if workspace and not WorkspaceMember.objects.filter(id=value, workspace=workspace).exists():
+        if workspace and not WorkspaceMember.objects.filter(
+            id=value, workspace=workspace, is_active=True
+        ).exists():
             raise serializers.ValidationError("Not a member of this workspace.")
         return value
 
@@ -141,7 +143,9 @@ class DepartmentMemberSerializer(serializers.ModelSerializer):
 
     def validate_member_id(self, value):
         dept = self.context["department"]
-        if not WorkspaceMember.objects.filter(id=value, workspace=dept.workspace).exists():
+        if not WorkspaceMember.objects.filter(
+            id=value, workspace=dept.workspace, is_active=True
+        ).exists():
             raise serializers.ValidationError("Not a member of this workspace.")
         return value
 
@@ -176,13 +180,15 @@ class TeamSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "updated_at"]
 
     def get_member_count(self, obj):
-        return len(obj.memberships.all())
+        return len([m for m in obj.memberships.all() if m.member.is_active])
 
     def validate_lead_id(self, value):
         if value is None:
             return value
         workspace = self.context.get("workspace")
-        if workspace and not WorkspaceMember.objects.filter(id=value, workspace=workspace).exists():
+        if workspace and not WorkspaceMember.objects.filter(
+            id=value, workspace=workspace, is_active=True
+        ).exists():
             raise serializers.ValidationError("Not a member of this workspace.")
         return value
 
@@ -230,7 +236,9 @@ class TeamMemberSerializer(serializers.ModelSerializer):
 
     def validate_member_id(self, value):
         team = self.context["team"]
-        if not WorkspaceMember.objects.filter(id=value, workspace=team.workspace).exists():
+        if not WorkspaceMember.objects.filter(
+            id=value, workspace=team.workspace, is_active=True
+        ).exists():
             raise serializers.ValidationError("Not a member of this workspace.")
         return value
 
@@ -378,18 +386,14 @@ class ReportingLineSerializer(serializers.ModelSerializer):
         if manager_id == report_id:
             raise serializers.ValidationError("A member cannot report to themselves.")
 
-        # One manager per report (unique_together on workspace+report). Check
-        # explicitly so a second assignment returns a clean 400 instead of the
-        # IntegrityError (500) the DB constraint would otherwise raise.
-        if ReportingLine.objects.filter(workspace=workspace, report_id=report_id).exists():
-            raise serializers.ValidationError(
-                {"report_id": "This member already has a manager. Delete the existing reporting line first."}
-            )
+        # A report already having a manager is not an error here — the view
+        # replaces the existing ReportingLine's manager instead of inserting a
+        # second row (unique_together on workspace+report only allows one).
 
         # Both endpoints must be members of this workspace.
         valid_ids = set(
             WorkspaceMember.objects.filter(
-                workspace=workspace, id__in=[manager_id, report_id]
+                workspace=workspace, id__in=[manager_id, report_id], is_active=True
             ).values_list("id", flat=True)
         )
         if manager_id not in valid_ids:

@@ -51,9 +51,7 @@ from .models import Workspace, WorkspaceMember
 
 # Reverse map: "settings.manage" -> "workspace", "task.create" -> "projects", …
 _PERM_TO_APP = {
-    perm_key: app_key
-    for app_key, perms in PERMISSIONS.items()
-    for perm_key in perms
+    perm_key: app_key for app_key, perms in PERMISSIONS.items() for perm_key in perms
 }
 
 # API-key scope hierarchy — a broader scope implies the narrower ones.
@@ -76,10 +74,8 @@ def _role_of_member(member):
 def _get_role(user, workspace):
     """The user's CustomRole for this workspace, or None."""
     try:
-        member = (
-            WorkspaceMember.objects
-            .select_related("role_assignment__role")
-            .get(workspace=workspace, user=user)
+        member = WorkspaceMember.objects.select_related("role_assignment__role").get(
+            workspace=workspace, user=user, is_active=True
         )
     except WorkspaceMember.DoesNotExist:
         return None
@@ -89,7 +85,9 @@ def _get_role(user, workspace):
 # ── Resolution ────────────────────────────────────────────────────────────────
 def get_workspace_or_404(workspace_id, user):
     """Fetch a workspace the user is a member of, else 404. Use in HTTP views."""
-    return get_object_or_404(Workspace, id=workspace_id, members__user=user)
+    return get_object_or_404(
+        Workspace, id=workspace_id, members__user=user, members__is_active=True
+    )
 
 
 def member_workspace(user, workspace_id):
@@ -98,26 +96,30 @@ def member_workspace(user, workspace_id):
     For callers that can't let DRF turn an exception into a response (e.g. the
     WebSocket consumer, which must close the socket cleanly).
     """
-    return Workspace.objects.filter(id=workspace_id, members__user=user).first()
+    return Workspace.objects.filter(
+        id=workspace_id, members__user=user, members__is_active=True
+    ).first()
 
 
 def get_membership(user, workspace):
-    return WorkspaceMember.objects.filter(workspace=workspace, user=user).first()
+    return WorkspaceMember.objects.filter(
+        workspace=workspace, user=user, is_active=True
+    ).first()
 
 
 def is_member(user, workspace) -> bool:
-    return WorkspaceMember.objects.filter(workspace=workspace, user=user).exists()
+    return WorkspaceMember.objects.filter(
+        workspace=workspace, user=user, is_active=True
+    ).exists()
 
 
 def workspace_admins(workspace):
     """Members who can manage the workspace: the owner + anyone whose role grants
     `settings.manage`. Used by notification tasks (e.g. "email all admins").
     """
-    members = (
-        WorkspaceMember.objects
-        .filter(workspace=workspace)
-        .select_related("user", "role_assignment__role")
-    )
+    members = WorkspaceMember.objects.filter(
+        workspace=workspace, is_active=True
+    ).select_related("user", "role_assignment__role")
     admins = []
     for m in members:
         if m.user_id == workspace.owner_id:
@@ -161,16 +163,16 @@ def has_app_access(user, workspace, app_key: str) -> bool:
 def require_app_access(user, workspace, app_key: str):
     if not has_app_access(user, workspace, app_key):
         name = APP_REGISTRY.get(app_key, {}).get("name", app_key)
-        raise PermissionDenied({"detail": f"You do not have access to {name}.", "app": app_key})
+        raise PermissionDenied(
+            {"detail": f"You do not have access to {name}.", "app": app_key}
+        )
 
 
 # ── Fine-grained permission (primitive #5) ────────────────────────────────────
 def has_perm(user, workspace, perm_key: str) -> bool:
     """Check a permission by key alone; the app is inferred from the registry.
 
-    A permission implicitly requires app access to its owning app first. The
-    special "workspace" pseudo-group (invite/settings/api_keys) is never
-    app-gated.
+    A permission implicitly requires app access to its owning app first. The special "workspace" pseudo-group (invite/settings/api_keys) is never app-gated.
     """
     if is_owner(user, workspace):
         return True
@@ -187,15 +189,19 @@ def has_perm(user, workspace, perm_key: str) -> bool:
 
 def require_perm(user, workspace, perm_key: str):
     if not has_perm(user, workspace, perm_key):
-        raise PermissionDenied({"detail": "You do not have the required permission.", "permission": perm_key})
+        raise PermissionDenied(
+            {
+                "detail": "You do not have the required permission.",
+                "permission": perm_key,
+            }
+        )
 
 
 # ── API-key scopes ────────────────────────────────────────────────────────────
 def request_scopes(request):
     """The scope ceiling for this request.
 
-    None  => the request is NOT an API key (a real user via JWT) — no ceiling.
-    set() => an API key; the set is its granted scopes (empty = no access).
+    None  => the request is NOT an API key (a real user via JWT) — no ceiling.set() => an API key; the set is its granted scopes (empty = no access).
     """
     key = getattr(request, "api_key", None)
     if key is None:
@@ -215,26 +221,30 @@ def has_scope(request, scope: str) -> bool:
 
 def require_scope(request, scope: str):
     if not has_scope(request, scope):
-        raise PermissionDenied({"detail": f"API key is missing the required scope: {scope}.", "scope": scope})
+        raise PermissionDenied(
+            {
+                "detail": f"API key is missing the required scope: {scope}.",
+                "scope": scope,
+            }
+        )
 
 
 # ── Global API-key scope floor (DRF permission) ────────────────────────────────
 _METHOD_SCOPE = {
-    "GET": "read", "HEAD": "read", "OPTIONS": "read",
-    "POST": "write", "PUT": "write", "PATCH": "write", "DELETE": "write",
+    "GET": "read",
+    "HEAD": "read",
+    "OPTIONS": "read",
+    "POST": "write",
+    "PUT": "write",
+    "PATCH": "write",
+    "DELETE": "write",
 }
 
 
 class APIKeyScopePermission(BasePermission):
-    """Wired into REST_FRAMEWORK.DEFAULT_PERMISSION_CLASSES — applies to every
-    view in every app, so no app can forget to gate API-key scope.
+    """Wired into REST_FRAMEWORK.DEFAULT_PERMISSION_CLASSES — applies to every view in every app, so no app can forget to gate API-key scope.
 
-    Enforces the baseline every endpoint must meet: GET/HEAD/OPTIONS need
-    "read", everything else needs "write" (read ⊆ write ⊆ admin). A no-op for
-    JWT users — request_scopes() returns None for them, so has_scope() always
-    passes. Views that need a stricter ceiling for one specific action (e.g.
-    deleting a webhook) still call authorize(..., admin=True, scope="admin")
-    themselves; this permission only guarantees the floor is never skipped.
+    Enforces the baseline every endpoint must meet: GET/HEAD/OPTIONS need "read", everything else needs "write" (read ⊆ write ⊆ admin). A no-op for JWT users — request_scopes() returns None for them, so has_scope() always passes. Views that need a stricter ceiling for one specific action (e.g. deleting a webhook) still call authorize(..., admin=True, scope="admin") themselves; this permission only guarantees the floor is never skipped.
     """
 
     message = "API key is missing the required scope for this request."
@@ -279,8 +289,7 @@ def get_enabled_apps(workspace, user):
 
 
 def get_enabled_permissions(workspace, user):
-    """PERMISSIONS filtered to apps the user can access. The 'workspace' group is
-    always included (never app-gated). Admins/owners get everything.
+    """PERMISSIONS filtered to apps the user can access. The 'workspace' group is always included (never app-gated). Admins/owners get everything.
     """
     if is_workspace_admin(user, workspace):
         return PERMISSIONS
@@ -293,9 +302,7 @@ def get_enabled_permissions(workspace, user):
 
 # ── Role provisioning ─────────────────────────────────────────────────────────
 def create_system_roles(workspace):
-    """Ensure the three built-in system roles (Admin/Member/Viewer) exist for a
-    workspace. Returns {role_name: CustomRole}. Idempotent via get_or_create.
-    Called once when a workspace is created (see workspaces/serializers.py).
+    """Ensure the three built-in system roles (Admin/Member/Viewer) exist for a workspace. Returns {role_name: CustomRole}. Idempotent via get_or_create. Called once when a workspace is created (see workspaces/serializers.py).
     """
     from .models import CustomRole
 

@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ZoomIn, ZoomOut, Maximize2, GitBranch, Building2 } from "lucide-react";
 import { Loader } from "@/shared/components/ui/Loader";
 import { EmptyState } from "@/shared/components/ui/empty-state";
+import { useToast } from "@/shared/components/ui/toast";
 import { cn } from "@/shared/lib/utils";
 import {
   useOrgChart,
@@ -40,6 +41,7 @@ export default function OrgChartPage() {
   const { data: departments = [] } = useDepartments(workspaceId);
   const { data: members = [] } = useMembers(workspaceId);
   const { isOwner, can } = usePermission();
+  const { toast } = useToast();
   const qc = useQueryClient();
   const deleteReportingLine = useDeleteReportingLine(workspaceId);
   const roots = data?.nodes ?? [];
@@ -289,7 +291,13 @@ export default function OrgChartPage() {
             resetHierarchyState();
           }
         } catch (err) {
-          console.error("Reparent failed", err);
+          const data = err?.response?.data;
+          const firstError = data && Object.values(data)[0];
+          toast.error(
+            "Couldn't reassign manager",
+            (Array.isArray(firstError) ? firstError[0] : firstError) ??
+              err.message,
+          );
         }
       }
       setDrag(null);

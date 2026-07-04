@@ -29,14 +29,14 @@ class WorkspaceSerializer(serializers.ModelSerializer):
         read_only_fields = ["owner", "created_at"]
 
     def get_member_count(self, obj):
-        return len(obj.members.all())
+        return len([m for m in obj.members.all() if m.is_active])
 
     def get_my_role(self, obj):
         request = self.context.get("request")
         if request and request.user.is_authenticated:
             uid = request.user.id
             for m in obj.members.all():
-                if m.user_id == uid:
+                if m.user_id == uid and m.is_active:
                     # Resolve role name from RoleAssignment → CustomRole.
                     try:
                         return m.role_assignment.role.name
@@ -98,7 +98,7 @@ class WorkspaceInviteSerializer(serializers.ModelSerializer):
     def validate_email(self, value):
         workspace = self.context["workspace"]
         if WorkspaceMember.objects.filter(
-            workspace=workspace, user__email=value
+            workspace=workspace, user__email=value, is_active=True
         ).exists():
             raise serializers.ValidationError("This user is already a member.")
         return value

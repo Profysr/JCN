@@ -44,18 +44,22 @@ def _get_workspace(workspace_id, user):
     Prevents side-channel leaks by raising a 404 if the workspace doesn't exist
     OR if the user has no access to it.
     """
-    return get_object_or_404(Workspace, id=workspace_id, members__user=user)
+    return get_object_or_404(
+        Workspace, id=workspace_id, members__user=user, members__is_active=True
+    )
 
 
 def _is_workspace_admin(workspace, user) -> bool:
     """Owner or holder of settings.manage. Thin alias over the central definition."""
     from .access import is_workspace_admin
+
     return is_workspace_admin(user, workspace)
 
 
 def _require_admin(workspace, user):
     """Raises PermissionDenied unless the user is a workspace admin."""
     from .access import require_workspace_admin
+
     require_workspace_admin(user, workspace)
 
 
@@ -128,7 +132,7 @@ class WorkspaceMemberListView(ListAPIView):
 
     def get_queryset(self):
         workspace = _get_workspace(self.kwargs["workspace_id"], self.request.user)
-        return workspace.members.select_related("user").all()
+        return workspace.members.filter(is_active=True).select_related("user")
 
 
 class WorkspaceMemberDetailView(APIView):
@@ -137,7 +141,7 @@ class WorkspaceMemberDetailView(APIView):
     def _get_member_and_workspace(self, workspace_id, member_id, user):
         workspace = _get_workspace(workspace_id, user)
         member = get_object_or_404(
-            WorkspaceMember, workspace=workspace, id=member_id
+            WorkspaceMember, workspace=workspace, id=member_id, is_active=True
         )
         return member, workspace
 
@@ -158,6 +162,9 @@ class WorkspaceMemberDetailView(APIView):
     #     return Response(serializer.data)
 
     def delete(self, request, workspace_id, member_id):
+        from organization.models import Department, Team
+        from .models import RoleAssignment
+
         member, workspace = self._get_member_and_workspace(
             workspace_id, member_id, request.user
         )
@@ -169,7 +176,18 @@ class WorkspaceMemberDetailView(APIView):
             )
         _require_admin(workspace, request.user)
 
-        member.delete()
+        # Deactivate rather than delete — HR/org records (leave, attendance, documents, org profile, reporting lines) must survive a member leaving.
+        member.is_active = False
+        member.deactivated_at = timezone.now()
+        member.save(update_fields=["is_active", "deactivated_at"])
+
+        # A future reactivation (re-invite) must not silently inherit the old role — the invite's role is (re)assigned fresh on acceptance.
+        RoleAssignment.objects.filter(workspace_member=member).delete()
+
+        # A departed head/lead shouldn't keep appearing as one.
+        Department.objects.filter(head=member).update(head=None)
+        Team.objects.filter(lead=member).update(lead=None)
+
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -255,10 +273,17 @@ class AcceptInviteView(APIView):
             user=request.user,
             defaults={"invited_by": invite.invited_by},
         )
-        if created:
-            # Assign the matching system role to put the new member in the RBAC system.
-            from .models import CustomRole, RoleAssignment
+        if not created and not member.is_active:
+            # A former member, re-invited — reactivate the existing row so their leave/attendance/document history stays attached to them.
+            member.is_active = True
+            member.deactivated_at = None
+            member.invited_by = invite.invited_by
+            member.save(update_fields=["is_active", "deactivated_at", "invited_by"])
 
+        from .models import CustomRole, RoleAssignment
+
+        if created or not hasattr(member, "role_assignment"):
+            # New member, or a reactivated one whose old role assignment was cleared on removal — assign the invite's role fresh.
             system_role_name = invite.role
             role = CustomRole.objects.filter(
                 workspace=invite.workspace,
@@ -359,9 +384,7 @@ class InboxBulkUpdateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        qs = InboxItem.objects.filter(
-            user=request.user, id__in=ids
-        )
+        qs = InboxItem.objects.filter(user=request.user, id__in=ids)
 
         if action == "read":
             updated = qs.update(status=InboxItem.Status.READ)
@@ -895,7 +918,7 @@ class MemberAssignRoleView(APIView):
         _require_admin(workspace, request.user)
 
         member = get_object_or_404(
-            WorkspaceMember, workspace=workspace, id=member_id
+            WorkspaceMember, workspace=workspace, id=member_id, is_active=True
         )
 
         serializer = RoleAssignmentSerializer(
@@ -983,7 +1006,7 @@ class MemberBulkAssignRoleView(APIView):
 
         members = list(
             WorkspaceMember.objects.filter(
-                workspace=workspace, id__in=parsed_ids
+                workspace=workspace, id__in=parsed_ids, is_active=True
             ).select_related("user")
         )
         if len(members) != len(parsed_ids):

@@ -93,7 +93,7 @@ def has_project_permission(user, board, action):
     from .models import BoardMember
 
     workspace = board.workspace
-    if not WorkspaceMember.objects.filter(workspace=workspace, user=user).exists():
+    if not WorkspaceMember.objects.filter(workspace=workspace, user=user, is_active=True).exists():
         return False
 
     if workspace.owner_id == user.pk:

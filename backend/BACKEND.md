@@ -140,7 +140,7 @@ grouping merged.
 |--------|------|-------------|
 | GET | `/api/workspaces/{ws}/members/` | List all workspace members with roles |
 | PATCH | `/api/workspaces/{ws}/members/{id}/` | Change member role (admin only) |
-| DELETE | `/api/workspaces/{ws}/members/{id}/` | Remove member from workspace |
+| DELETE | `/api/workspaces/{ws}/members/{id}/` | Deactivate member (`is_active=False`) — not a hard delete; see `WorkspaceMember` model notes above |
 | POST | `/api/workspaces/{ws}/invites/` | Create invite row and fire `send_invite_email.delay()` async (Resend) |
 | GET | `/api/workspaces/{ws}/invites/pending/` | List pending invites |
 | DELETE | `/api/workspaces/{ws}/invites/{token}/` | Cancel a pending invite |
@@ -615,7 +615,7 @@ Four dedicated views replace the old `AnalyticsMetricView` dynamic router. All f
 | Model | Key Fields | Notes |
 |-------|-----------|-------|
 | `Workspace` | `id` (UUIDv7), `name`, `logo`, `owner` (FK→User) | No slug — routes use UUID `id`. ordering: -id |
-| `WorkspaceMember` | `workspace` (FK), `user` (FK), `role` (ADMIN/MEMBER/VIEWER), `invited_by`, `joined_at` | unique: workspace+user; index: workspace+role |
+| `WorkspaceMember` | `workspace` (FK), `user` (FK), `invited_by`, `joined_at`, `is_active` (bool, default True, indexed), `deactivated_at` | unique: workspace+user. Role comes from `RoleAssignment`, not a column here. **Removing a member deactivates, never deletes** — `WorkspaceMemberDetailView.delete` sets `is_active=False` + `deactivated_at`, clears their `RoleAssignment` and any `Department.head`/`Team.lead` they held, but leaves `OrgProfile`/`LeaveBalance`/`LeaveRequest`/`Attendance`/`EmployeeDocument`/`EmployeeNote`/`ReportingLine` rows untouched so HR history survives. Every membership-resolution helper in `workspaces/access.py` (`get_membership`, `is_member`, `workspace_admins`, `_get_role`, `get_workspace_or_404`, `member_workspace`) filters `is_active=True`, so this propagates to permission checks workspace-wide. Re-inviting a removed member's email reactivates the same row (`AcceptInviteView`) instead of erroring "already a member" or silently skipping role assignment. |
 | `WorkspaceInvite` | `workspace` (FK), `email`, `role`, `token` (UUID4), `status` (PENDING/ACCEPTED/DECLINED) | unique: workspace+email; index: workspace+status |
 | `InboxItem` | `user` (FK), `workspace` (FK), `actor_id` (str, denorm), `actor_name` (str, denorm), `verb`, `event_type`, `resource_name`, `board_id`, `board_name` (renamed from `project_name`), `meta` (JSON), `status` (UNREAD/READ/ARCHIVED/SNOOZED), `snoozed_until` | indexes: user+status, user+workspace+status; ordering: -id. `verb`/`event_type` have **no model choices** — the contract is `core.events.NOTIFICATION_VERBS` (verb → event_type + label); `event_type` is always derived, never passed by callers. |
 | `WorkspaceAPIKey` | `workspace` (FK), `name`, `key_prefix`, `key_hash`, `scopes` (JSON), `is_active`, `expires_at`, `last_used_at`, `created_by` (FK) | Raw key shown once; soft-delete via is_active. `generate()` classmethod returns (instance, raw_key) |
@@ -677,7 +677,7 @@ Four dedicated views replace the old `AnalyticsMetricView` dynamic router. All f
 | `TeamListCreateView.post` | `org.team.created` |
 | `TeamDetailView.patch` | `org.team.updated` |
 | `TeamDetailView.delete` | `org.team.deleted` |
-| `ReportingLineListCreateView.post` | `org.reporting_line.created` |
+| `ReportingLineListCreateView.post` | `org.reporting_line.created` (new report) or `org.reporting_line.updated` (report already had a manager — replaced in place) |
 | `ReportingLineDetailView.delete` | `org.reporting_line.deleted` |
 | `DepartmentMemberListCreateView.post` / `DepartmentMemberDetailView.delete` | `org.department_member.added` / `.removed` |
 | `TeamMemberListCreateView.post` / `TeamMemberDetailView.delete` | `org.team_member.added` / `.removed` |
@@ -725,8 +725,16 @@ More bug fixes (later pass): removing the `DepartmentMember`/`TeamMember` row th
 | `LeaveRequest` | `employee` (FK→WorkspaceMember), `policy` (FK), `start_date`, `end_date`, `reason`, `status` (pending/approved/rejected/cancelled), `approver` (FK→User), `reviewer_comment`, `reviewed_at` | indexes: `lr_employee_status_idx`, `leave_request_policy_dates_idx` |
 | `AttendancePolicy` | `workspace` (O2O), `work_start_time`, `work_end_time`, `grace_period_minutes`, `weekly_hours` | One per workspace; auto-created on first access with sensible defaults (09:00–17:00, 15 min grace, 40 h/week) |
 | `Attendance` | `employee` (FK→WorkspaceMember), `date`, `clock_in` (TimeField, nullable), `clock_out` (TimeField, nullable), `source` (manual/api), `notes` | unique: employee+date (one row per employee per day) — this unique index also serves employee + date-range lookups, so no separate index. `clock_out=null` means still clocked in. |
-| `EmployeeDocument` | `employee` (FK→WorkspaceMember), `doc_type` (contract/id/certificate/other), `file`, `original_name`, `expiry_date` (nullable), `uploaded_by` (FK→User) | files in `employee_docs/`; admin-only access; index: `edoc_employee_idx`; serializer exposes `days_until_expiry` computed field |
+| `EmployeeDocument` | `employee` (FK→WorkspaceMember), `doc_type` (contract/id/certificate/other), `file`, `original_name`, `expiry_date` (nullable), `expiry_notified_at` (nullable, dedup flag), `uploaded_by` (FK→User) | files in `employee_docs/`; admin-only access; index: `edoc_employee_idx`; serializer exposes `days_until_expiry` computed field. `hr.tasks.check_expiring_documents` (daily, see Scheduled Tasks below) flags workspace admins once per document within 30 days of `expiry_date` — HR follows up manually, nothing is enforced on the employee. |
 | `EmployeeNote` | `employee` (FK→WorkspaceMember), `author` (FK→User), `content`, `is_private` (default True) | private manager notes; never served to the employee; index: `enot_employee_idx` |
+
+### Scheduled Tasks (Celery Beat)
+
+`core/celery.py` defines `app.conf.beat_schedule` — requires a `celery -A core beat` process running alongside the worker (`celery-beat` service in `docker-compose.yml`; nothing runs on a schedule without it).
+
+| Task | Schedule | Purpose |
+|------|----------|---------|
+| `hr.tasks.check_expiring_documents` | daily, 06:00 UTC | Flags workspace admins (inbox notification) about `EmployeeDocument` rows expiring within 30 days. Dedup via `expiry_notified_at` — each document is flagged once. |
 
 ### organization — URL Reference
 
@@ -758,7 +766,7 @@ Departments, teams, and reporting lines are paginated (`core.pagination.OrgListP
 | GET | `/api/workspaces/{ws}/org/members/{member_id}/profile/` | Get member's org profile (auto-creates). Exposes `departments`, `teams`, `manager`, `direct_reports_count` (computed). |
 | PATCH | `/api/workspaces/{ws}/org/members/{member_id}/profile/` | Update org profile — **admin or self** (`_require_admin_or_self`) |
 | GET | `/api/workspaces/{ws}/org/reporting-lines/` | List reporting lines (manager → report), paginated. Not called by the frontend. |
-| POST | `/api/workspaces/{ws}/org/reporting-lines/` | Create reporting line (admin); body `{ manager_id, report_id }` |
+| POST | `/api/workspaces/{ws}/org/reporting-lines/` | Create or **replace** a reporting line (admin); body `{ manager_id, report_id }`. If `report_id` already has a manager, updates that row's `manager` in place (200 + `reporting_line.updated`) instead of rejecting — this is how manager reassignment (e.g. the org chart drag-and-drop) works. |
 | DELETE | `/api/workspaces/{ws}/org/reporting-lines/{line_id}/` | Delete reporting line (admin) |
 | GET | `/api/workspaces/{ws}/org/chart/` | **Lazy org chart, root level**: members with no manager only (each node carries `has_reports`/`direct_reports_count`). Was previously every member in one response — rewritten so a 1,000+ person workspace doesn't pay for the whole tree on first paint. |
 | GET | `/api/workspaces/{ws}/org/chart/{member_id}/reports/` | Direct reports (one level) of a member — the expand-on-click step for the hierarchy chart. |

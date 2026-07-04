@@ -1,5 +1,5 @@
 from django.conf import settings
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import permissions, status
@@ -111,7 +111,7 @@ class DepartmentListCreateView(APIView):
         depts = (
             Department.objects.filter(workspace=workspace)
             .select_related("head", "head__user", "parent")
-            .prefetch_related("memberships")
+            .prefetch_related("memberships__member")
             .order_by("id")
         )
         paginator = self.pagination_class()
@@ -236,7 +236,7 @@ class TeamListCreateView(APIView):
         teams = (
             Team.objects.filter(workspace=workspace)
             .select_related("lead", "lead__user", "department")
-            .prefetch_related("memberships")
+            .prefetch_related("memberships__member")
             .order_by("id")
         )
         paginator = self.pagination_class()
@@ -258,9 +258,7 @@ class TeamListCreateView(APIView):
 class TeamDetailView(APIView):
     permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
-    # Not called by the frontend — TeamsPage reads a single team out of the
-    # useTeams() list cache instead of fetching it individually. Kept for API
-    # completeness (e.g. a future deep-link into one team).
+    #! Not called by the frontend — TeamsPage reads a single team out of the useTeams() list cache instead of fetching it individually. Kept for API completeness (e.g. a future deep-link into one team).
     def get(self, request, workspace_id, team_id):
         workspace = _read_ws(request, workspace_id)
         team = get_object_or_404(Team, id=team_id, workspace=workspace)
@@ -409,9 +407,7 @@ class OrgProfileView(APIView):
             raise PermissionDenied("You do not have permission to edit this profile.")
 
         profile, _ = OrgProfile.objects.get_or_create(member=member)
-        # Approved profiles are locked to org managers/admins — a member can no
-        # longer edit their own profile once it has been approved (mirrors
-        # MyOrgProfileView.patch).
+        # Approved profiles are locked to org managers/admins — a member can no longer edit their own profile once it has been approved (mirrors MyOrgProfileView.patch).
         if profile.status == OrgProfile.OnboardingStatus.APPROVED and not is_manager:
             raise PermissionDenied("Approved profiles can only be edited by an org manager.")
 
@@ -430,9 +426,7 @@ class ReportingLineListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
     pagination_class = OrgListPagination
 
-    # Not called by the frontend — OrgChartView already returns manager_id and
-    # reporting_line_id per node, which is the only place the UI needs this data.
-    # Kept for API completeness / future consumers.
+    #! Not called by the frontend — OrgChartView already returns manager_id and reporting_line_id per node, which is the only place the UI needs this data. Kept for API completeness / future consumers.
     def get(self, request, workspace_id):
         workspace = _read_ws(request, workspace_id)
         lines = (
@@ -450,6 +444,19 @@ class ReportingLineListCreateView(APIView):
             data=request.data, context={"request": request, "workspace": workspace}
         )
         ser.is_valid(raise_exception=True)
+
+        # A report can only have one manager (unique_together on workspace+report). Reassigning someone's manager is a replace, not a rejected duplicate — update the existing row in place instead of inserting a second one.
+        existing = ReportingLine.objects.filter(
+            workspace=workspace, report_id=ser.validated_data["report_id"]
+        ).first()
+        if existing:
+            existing.manager_id = ser.validated_data["manager_id"]
+            existing.save(update_fields=["manager_id"])
+            out = ReportingLineSerializer(existing).data
+            log_audit(request.user, workspace, "reporting_line.updated", "ReportingLine", existing.id, after=out)
+            broadcast(str(workspace.id), "org.reporting_line.updated", out)
+            return Response(out, status=status.HTTP_200_OK)
+
         line = ser.save()
         log_audit(request.user, workspace, "reporting_line.created", "ReportingLine", line.id, after=ser.data)
         broadcast(str(workspace.id), "org.reporting_line.created", ser.data)
@@ -472,35 +479,38 @@ class ReportingLineDetailView(APIView):
 
 # ── Org Chart ─────────────────────────────────────────────────────────────────
 def _chart_member_base_qs(workspace):
-    """Base queryset for rendering members as org-chart nodes — shared by the
-    root/expand/department-chart views so they stay in lockstep on shape and
-    query cost. Callers still need to `.filter(...)` and annotate `reports_count`.
+    """Base queryset for rendering members as org-chart nodes — shared by the root/expand/department-chart views so they stay in lockstep on shape and query cost. Callers still need to `.filter(...)` and annotate `reports_count`.
     """
     return (
-        WorkspaceMember.objects.filter(workspace=workspace)
-        .select_related("user")
+        WorkspaceMember.objects.filter(workspace=workspace, is_active=True)
+        .select_related("user", "role_assignment__role")
         .prefetch_related(
             "department_memberships__department",
             "team_memberships__team",
             "org_profile__job_title",
             "reports_to",
         )
-        .annotate(reports_count=Count("direct_reports", distinct=True))
+        .annotate(
+            reports_count=Count(
+                "direct_reports",
+                filter=Q(direct_reports__report__is_active=True),
+                distinct=True,
+            )
+        )
     )
 
 
 def _serialize_chart_node(m):
     profile = getattr(m, "org_profile", None)
-    # reports_to is prefetched — read from the cache (don't use .first(),
-    # which issues a fresh LIMIT query per member and bypasses the prefetch).
     reports_to = m.reports_to.all()
     manager_line = reports_to[0] if reports_to else None
+    role_assignment = getattr(m, "role_assignment", None)
     return {
         "id": str(m.id),
         "name": m.user.full_name,
         "email": m.user.email,
         "avatar": m.user.avatar,
-        "role": m.role,
+        "role": role_assignment.role.name if role_assignment else None,
         "job_title": (
             profile.job_title.name if profile and profile.job_title else None
         ),
@@ -521,11 +531,8 @@ def _serialize_chart_node(m):
 
 
 class OrgChartView(APIView):
-    """Root of the org chart tree: members with no manager (the top of each
-    reporting line), lazily expanded via OrgChartReportsView. Workspaces with no
-    reporting lines configured yet have no way to tell "top" from "everyone
-    else", so every member is returned as a root — the tree is flat until
-    reporting lines are added.
+    """Root of the org chart tree: members with no manager (the top of each reporting line), lazily expanded via OrgChartReportsView. Workspaces with no reporting lines configured yet have no way to tell "top" from "everyone
+    else", so every member is returned as a root — the tree is flat until reporting lines are added.
     """
 
     permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
@@ -677,8 +684,7 @@ class PendingProfilesView(APIView):
             )
             .order_by("submitted_at")
         )
-        # bulk_relations_context() replaces what would otherwise be 4 queries per
-        # profile (departments/teams/manager/direct_reports_count) with 4 total.
+
         context = bulk_relations_context([p.member for p in profiles])
         return Response(OrgProfileSerializer(profiles, many=True, context=context).data)
 

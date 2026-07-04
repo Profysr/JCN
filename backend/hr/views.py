@@ -42,7 +42,7 @@ MAX_DOC_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
 # ── Shared utilities ──────────────────────────────────────────────────────────
 
 def _get_member(workspace, user):
-    return get_object_or_404(WorkspaceMember, workspace=workspace, user=user)
+    return get_object_or_404(WorkspaceMember, workspace=workspace, user=user, is_active=True)
 
 
 # All access resolution lives in workspaces/access.py (see backend/ACCESS.md).
@@ -553,7 +553,7 @@ class HRDashboardView(APIView):
         week_start = today - timedelta(days=today.weekday())
         week_end = week_start + timedelta(days=6)
 
-        total_employees = WorkspaceMember.objects.filter(workspace=workspace).count()
+        total_employees = WorkspaceMember.objects.filter(workspace=workspace, is_active=True).count()
 
         joiners_this_month = OrgProfile.objects.filter(
             member__workspace=workspace,

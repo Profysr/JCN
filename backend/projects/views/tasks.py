@@ -1112,9 +1112,9 @@ class MyWorkView(APIView):
     def get(self, request):
         from datetime import timedelta
 
-        workspace_ids = WorkspaceMember.objects.filter(user=request.user).values_list(
-            "workspace_id", flat=True
-        )
+        workspace_ids = WorkspaceMember.objects.filter(
+            user=request.user, is_active=True
+        ).values_list("workspace_id", flat=True)
 
         today = timezone.now().date()
         week_end = today + timedelta(days=7)

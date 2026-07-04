@@ -7,6 +7,7 @@ import { Label } from "@/shared/components/ui/label";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { Loader } from "@/shared/components/ui/Loader";
 import Select from "@/shared/components/ui/Select";
+import { usePermission } from "@/contexts/PermissionsContext";
 import {
   useMyOrgProfile,
   useUpdateMyOrgProfile,
@@ -194,10 +195,19 @@ function SubmittedBanner() {
 export default function OrgOnboardingGate() {
   const { workspaceId } = useParams();
   usePeopleSocket();
-  const { data: profile, isLoading } = useMyOrgProfile(workspaceId);
+  const { isOwner, can, isLoading: permsLoading } = usePermission();
+  const isAdmin = isOwner || can("settings.manage");
+  const { data: profile, isLoading: profileLoading } = useMyOrgProfile(workspaceId, {
+    enabled: !isAdmin,
+  });
 
-  if (isLoading) {
+  if (permsLoading || (!isAdmin && profileLoading)) {
     return <Loader className="min-h-screen" size="lg" />;
+  }
+
+  // Admins created their workspace before there was anyone in HR to approve them — the onboarding wall (which exists to gate non-admins, matching backend `_require_onboarded`) never applies to them.
+  if (isAdmin) {
+    return <Outlet />;
   }
 
   if (!profile || profile.status === ONBOARDING_STATUS.DRAFT) {

@@ -117,6 +117,22 @@ services:
       rabbitmq:
         condition: service_healthy
 
+  celery-beat:
+    build: ./backend
+    restart: always
+    command: celery -A core beat --loglevel=info
+    volumes:
+      - ./backend:/app
+    env_file:
+      - ./backend/.env
+    depends_on:
+      db:
+        condition: service_started
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+
 volumes:
   postgres_data:
   media_data:

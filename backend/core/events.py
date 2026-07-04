@@ -92,6 +92,7 @@ EVENTS = {
     "org.job_title.updated": {"webhook": "org.job_title.updated"},
     "org.job_title.deleted": {"webhook": "org.job_title.deleted"},
     "org.reporting_line.created": {"webhook": "org.reporting_line.created"},
+    "org.reporting_line.updated": {"webhook": "org.reporting_line.updated"},
     "org.reporting_line.deleted": {"webhook": "org.reporting_line.deleted"},
     # hr (chat-only — not exposed as public webhooks)
     "leave.requested": {"chat": "leave.requested"},
@@ -117,6 +118,7 @@ NOTIFICATION_VERBS = {
     "leave.requested": {"event_type": "assigned", "label": "🌴 Leave Requested"},
     "leave.approved":  {"event_type": "assigned", "label": "✅ Leave Approved"},
     "leave.rejected":  {"event_type": "assigned", "label": "❌ Leave Rejected"},
+    "document_expiring": {"event_type": "hr", "label": "📄 Document Expiring"},
 }
 
 

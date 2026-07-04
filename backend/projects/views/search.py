@@ -18,7 +18,7 @@ _BOARD_LIMIT = 5
 # ── Search helpers ─────────────────────────────────────────────────────────────
 
 def _get_user_workspace_ids(user):
-    return WorkspaceMember.objects.filter(user=user).values_list(
+    return WorkspaceMember.objects.filter(user=user, is_active=True).values_list(
         "workspace_id", flat=True
     )
 

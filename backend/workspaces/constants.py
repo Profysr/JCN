@@ -246,5 +246,6 @@ WEBHOOK_EVENTS = [
     "org.job_title.updated",
     "org.job_title.deleted",
     "org.reporting_line.created",
+    "org.reporting_line.updated",
     "org.reporting_line.deleted",
 ]
