@@ -5,16 +5,14 @@ import { cn } from "@/shared/lib/utils";
 import { getPriority } from "@/shared/lib/constants";
 
 function MiniTaskCard({ task, onClick }) {
-  const { dotCls } = getPriority(task.priority);
+  const { textCls, icon: PriorityIcon } = getPriority(task.priority);
   return (
     <div
       onClick={() => onClick(task.id)}
-      className="bg-card border rounded-lg px-2.5 py-2 cursor-pointer hover:shadow-sm hover:border-primary/30 transition-all"
+      className="bg-card border rounded px-2.5 py-2 cursor-pointer hover:shadow-sm hover:border-primary/30 transition-all"
     >
       <div className="flex items-start gap-2">
-        <div
-          className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0 mt-[5px]", dotCls)}
-        />
+        <PriorityIcon className={cn("w-3.5 h-3.5 flex-shrink-0 mt-[1px]", textCls)} />
         <span className="text-xs leading-relaxed line-clamp-2 flex-1 min-w-0">
           {task.title}
         </span>

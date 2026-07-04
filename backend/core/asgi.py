@@ -8,12 +8,21 @@
 #   - WebSocket → handed off to our WorkspaceConsumer (see workspaces/consumers.py)
 
 import os
+import django
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "core.settings")
+# Must run before any import below touches Django models/apps (e.g.
+# workspaces.middleware imports django.contrib.auth.models). Under
+# `manage.py runserver` this was already done by Django's own bootstrap
+# before this module was imported, masking the ordering requirement — running
+# `daphne core.asgi:application` directly has no such bootstrap, so it's
+# required here explicitly.
+django.setup()
+
 from django.core.asgi import get_asgi_application
 from channels.routing import ProtocolTypeRouter, URLRouter
 from workspaces.middleware import JWTAuthMiddlewareStack
 from workspaces.routing import websocket_urlpatterns
-
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "core.settings")
 
 application = ProtocolTypeRouter({
     # Normal REST API requests go through the standard Django stack

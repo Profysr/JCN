@@ -33,10 +33,17 @@ class MiniDepartmentSerializer(serializers.ModelSerializer):
 class MiniMemberSerializer(serializers.ModelSerializer):
     id = serializers.UUIDField(read_only=True)
     user = MiniUserSerializer(read_only=True)
+    role = serializers.SerializerMethodField()
 
     class Meta:
         model = WorkspaceMember
         fields = ["id", "user", "role"]
+
+    def get_role(self, obj):
+        try:
+            return obj.role_assignment.role.name
+        except Exception:
+            return None
 
 
 class DepartmentSerializer(serializers.ModelSerializer):

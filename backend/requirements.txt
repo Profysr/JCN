@@ -8,6 +8,7 @@ djangorestframework-simplejwt==5.5.1
 channels==4.3.2
 channels-rabbitmq==4.0.1
 daphne==4.2.2
+gunicorn==23.0.0
 psycopg2-binary==2.9.12
 redis==7.4.1
 celery==5.6.3
