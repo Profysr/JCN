@@ -13,6 +13,7 @@ import {
   useSubmitMyOrgProfile,
   useJobTitles,
 } from "../hooks/useOrg";
+import { usePeopleSocket } from "../hooks/usePeopleSocket";
 import { EMPLOYMENT_TYPES, ONBOARDING_STATUS } from "../constants";
 
 function OnboardingWall({ workspaceId, profile }) {
@@ -192,6 +193,7 @@ function SubmittedBanner() {
 
 export default function OrgOnboardingGate() {
   const { workspaceId } = useParams();
+  usePeopleSocket();
   const { data: profile, isLoading } = useMyOrgProfile(workspaceId);
 
   if (isLoading) {

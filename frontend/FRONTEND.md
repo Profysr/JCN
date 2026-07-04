@@ -255,14 +255,19 @@ The master index of every React Query key used in the codebase. Prefix-match inv
 ["presence", workspaceId, resourceType, resourceId]
 ["presence", workspaceId, "all"]
 
-# Org Structure
+# Org Structure — socket-backed (usePeopleSocket), see WebSocket section below
 ["org-departments",  workspaceId]
 ["org-dept-members", workspaceId, deptId]
 ["org-teams",        workspaceId]
 ["org-team-members", workspaceId, teamId]
 ["org-job-titles",   workspaceId]
-["org-chart",        workspaceId]
+["org-chart",        workspaceId]                          ← root only; lazy sub-keys below
+["org-chart", workspaceId, "reports", memberId]             ← one manager's direct reports
+["org-chart", workspaceId, "department", deptId]            ← one department's members (chart-node shape)
+["org-chart", workspaceId, "unassigned"]                    ← members with no department
 ["org-profile",      workspaceId, memberId]
+["org-my-profile",   workspaceId]
+["org-pending-profiles", workspaceId]
 
 # HR — Leave (src/apps/hr-management/hooks/useLeave.js)
 ["hr-leave-policies",  workspaceId]
@@ -294,14 +299,15 @@ How long data is considered fresh before React Query will refetch on next mount/
 
 | staleTime                     | Keys                                                                                                                                                                                                                                                                                                                                          |
 | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Infinity` (never auto-stale) | `workspace`, `workspaces`, `boards`, `board`, `workspace-members`, `labels`, `statuses`, `saved-views`, `onboarding`, `import sources`, `presence`, `org-departments`, `org-dept-members`, `org-teams`, `org-team-members`, `org-job-titles`, `hr-leave-policies`, `hr-attendance-policy`, `inbox-unread-count` (event-driven — see useInbox) |
+| `Infinity` (never auto-stale) | `workspace`, `workspaces`, `boards`, `board`, `workspace-members`, `labels`, `statuses`, `saved-views`, `onboarding`, `import sources`, `presence`, `hr-leave-policies`, `hr-attendance-policy`, `inbox-unread-count` (event-driven — see useInbox) |
 | `60_000` (1 min)              | `portfolio`, `burndown`, `hr-leave-balances`, `hr-whos-off`, `hr-attendance-qr`, `hr-employee-docs`, `hr-employee-notes`                                                                                                                                                                                                                       |
 | `Infinity` (analytics V2)     | **All `analytics` keys** (`summary`, `aggregate`, `team`, `tasks`) — never auto-stale; refreshed only by the AnalyticsPage **Refresh** button (`invalidateQueries(["analytics"])`). `STALE = Infinity` in `useAnalyticsV2.js`.                                                                                                                  |
-| `5 * 60_000` (5 min)          | `org-chart`, `workspace-modules`                                                                                                                                                                                                                                                                                                              |
+| `5 * 60_000` (5 min)          | `workspace-modules`                                                                                                                                                                                                                                                                                                                            |
 | `2 * 60_000` (2 min)          | `org-profile`, `hr-dashboard`                                                                                                                                                                                                                                                                                                                 |
+| `30_000` (30 s), `SOCKET_BACKED` | `org-departments`, `org-dept-members`, `org-teams`, `org-team-members`, `org-job-titles`, `org-chart`, `org-my-profile` — kept live by `usePeopleSocket`'s `org.*` handlers; the finite staleTime is a resync safety net for missed socket events, not the primary freshness mechanism (was `Infinity` / `5 * 60_000` before the socket was added) |
 | `30_000` (30 s)               | `inbox`, `integrations`, `api-keys`, `sprint detail`, `hr-leave-requests`, `hr-attendance-my`, `hr-attendance-list`, `hr-attendance-summary`                                                                                                                                                                                                  |
 | `15_000` (15 s)               | `import jobs`, `webhook deliveries`                                                                                                                                                                                                                                                                                                           |
-| global default `30_000`       | `tasks`, `task-detail`, `sprints list`, `approvals`, `attachments`, `automations`, `forms`, `wiki`, `children`, `dependencies`                                                                                                                                                                                                                |
+| global default `30_000`       | `tasks`, `task-detail`, `sprints list`, `approvals`, `attachments`, `automations`, `forms`, `wiki`, `children`, `dependencies`, `org-pending-profiles`                                                                                                                                                                                        |
 
 > **The global default is `30_000`, not `0`** — set in `src/shared/lib/queryClient.js`. Any query with no explicit `staleTime` inherits 30s. (Earlier revisions of this doc said `0`; that was wrong.)
 
@@ -335,6 +341,9 @@ WebSocket URL (both): `ws(s)://BACKEND/ws/workspaces/{workspaceId}/?token={acces
 | ------------------------ | ---------------------- | -------------------------- | -------------------------------------------------------------------------------------- |
 | `useWorkspaceSocket(ws)` | **`AppLayout`** (once) | whole session, every page  | workspace-wide events: `notification.created`, `objective.*`, `presence.updated`       |
 | `useBoardSocket(ws)`     | **`KanbanPage`**       | only while a board is open | board events: `task.*`, `comment.*`, `approval.*`, `typing.update`, `reaction.updated` |
+| `usePeopleSocket()`      | **`OrgOnboardingGate`** (wraps every people/HR route) | while any people/HR page is open | `org.*` events — departments, teams, job titles, memberships, reporting lines, onboarding profiles |
+
+`usePeopleSocket` lives in its own file, `src/apps/org-structure/hooks/usePeopleSocket.js` (not `useWorkspaceSocket.js`), but registers on the same shared connection via the exported `registerSocketHandler()` — the same mechanism `useBoardSocket` uses internally, just callable from another file. It does not open a second socket.
 
 > **Why two connections (vB.x):** workspace-wide events (the inbox badge especially) must stay live on _every_ page, but task/board events only matter while a board is open. Previously the single socket lived only in `KanbanPage`, so the inbox badge fell back to 30s-stale + focus refetch everywhere else. Splitting lets the badge be event-driven app-wide while board traffic stays scoped to the board. The second connection is cheap (same endpoint, scoped handler).
 
@@ -359,6 +368,24 @@ WebSocket URL (both): `ws(s)://BACKEND/ws/workspaces/{workspaceId}/?token={acces
 | `reaction.updated`         | `setQueryData`                             | `["task-detail", ws, board_id, task_id]`                                                                 |
 | `approval.created/updated` | `setQueryData` (patch in place)            | `["approvals", ws, board_id, task_id]` patched directly; `["tasks", ws, board_id]` approval counts recomputed from the patched list — **zero network requests** |
 | `typing.update`            | DOM custom event                           | `window → "jcn:typing"`                                                                                  |
+
+#### People & HR scope — `handlePeopleEvent` _(`src/apps/org-structure/hooks/usePeopleSocket.js`)_
+
+| Event                                         | Cache action                                                       | Keys affected                                                                 |
+| ---------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `org.department.created`                       | `setQueryData` append (dedup by id)                                  | `deptsKey(ws)`                                                                |
+| `org.department.updated`                       | `setQueryData` replace by id; invalidates member list if head changed | `deptsKey(ws)`, conditionally `deptMemKey(ws, deptId)`                        |
+| `org.department.deleted`                       | `setQueryData` filter + `removeQueries`                              | `deptsKey(ws)`, `deptMemKey(ws, deptId)`                                      |
+| `org.department_member.added` / `.removed`     | `setQueryData` splice + `member_count` +1/-1                        | `deptMemKey(ws, deptId)`, `deptsKey(ws)`                                      |
+| `org.team.created/updated/deleted`             | mirrors department events                                           | `teamsKey(ws)`, conditionally `teamMemKey(ws, teamId)`                        |
+| `org.team_member.added` / `.removed`           | mirrors department-member events                                    | `teamMemKey(ws, teamId)`, `teamsKey(ws)`                                      |
+| `org.job_title.created/updated/deleted`        | `setQueryData` append/replace/filter                                 | `jobsKey(ws)`                                                                 |
+| `org.reporting_line.created` / `.deleted`      | `invalidateQueries` (payload has no full object to splice)          | `chartKey(ws)` (prefix — root + any fetched reports/department/unassigned)    |
+| `org.profile.updated/submitted/approved`       | `invalidateQueries` (payload is ids only, not a full profile)       | `profileKey(ws, memberId)`, `myProfileKey(ws)`, `chartKey(ws)`, and `pendingProfilesKey(ws)` for submitted/approved |
+
+Department/team/job-title payloads carry the full serialized object (see `organization/views.py` `broadcast()` calls), so they're spliced into the list cache directly — this is what keeps *other* tabs/users live; on the acting client it's a harmless no-op since `useOrg.js`'s own mutation `onSuccess` already wrote the identical object first (no round-trip wait). Reporting-line and profile events only carry ids, so there's nothing to splice — those invalidate narrow, targeted keys instead of the whole app.
+
+**Known gap:** invalidating `chartKey(ws)` refreshes the org-chart root query (and any already-fetched lazy sub-query sharing that key prefix), but does **not** reset `OrgChartPage`'s local `expanded`/`childrenByNode` component state. An already-expanded branch in another open tab/session can go stale until that node is collapsed and re-expanded, or the page remounts. Not worth a state-management rewrite given how rarely org structure changes concurrently across users.
 
 **Inbox badge is poll-free:** `useInboxUnreadCount` uses `staleTime: Infinity` + `refetchOnWindowFocus/Reconnect: false`. It fetches once per session, then the count only moves via three events — **created** (workspace socket increments in place), and **read / bulk-read** (`useUpdateInboxItem` / `useBulkUpdateInbox` invalidate the key). No window-focus refetching.
 
@@ -810,42 +837,51 @@ Create/revoke both invalidate this key.
 
 ### `useOrg.js` _(src/apps/org-structure/hooks/useOrg.js)_
 
-All data hooks for the Org Structure module. Follows the same key-factory pattern as `useTasks.js`. All list/detail keys use `staleTime: Infinity` (near-static config data); `org-chart` uses `5 * 60_000`; `org-profile` uses `2 * 60_000`.
+All data hooks for the Org Structure module. Follows the same key-factory pattern as `useTasks.js`, with all key factories **exported** (`deptsKey`, `deptMemKey`, `teamsKey`, `teamMemKey`, `jobsKey`, `chartKey`, `profileKey`, `myProfileKey`, `pendingProfilesKey`) so `usePeopleSocket.js` can target the same cache entries from its own file. `org-profile` (`2 * 60_000`) and `org-pending-profiles` (default `30_000`) are the only two NOT socket-backed — see the WebSocket section above for why.
 
 ```
-["org-departments",  workspaceId]                  staleTime: Infinity
-["org-dept-members", workspaceId, deptId]          staleTime: Infinity
-["org-teams",        workspaceId]                  staleTime: Infinity
-["org-team-members", workspaceId, teamId]          staleTime: Infinity
-["org-job-titles",   workspaceId]                  staleTime: Infinity
-["org-chart",        workspaceId]                  staleTime: 5 * 60_000
+["org-departments",  workspaceId]                  staleTime: 30_000, SOCKET_BACKED
+["org-dept-members", workspaceId, deptId]          staleTime: 30_000, SOCKET_BACKED
+["org-teams",        workspaceId]                  staleTime: 30_000, SOCKET_BACKED
+["org-team-members", workspaceId, teamId]          staleTime: 30_000, SOCKET_BACKED
+["org-job-titles",   workspaceId]                  staleTime: 30_000, SOCKET_BACKED
+["org-chart",        workspaceId]                  staleTime: 30_000, SOCKET_BACKED   (root nodes only)
+["org-chart", workspaceId, "reports", memberId]    fetched imperatively, not a hook — see OrgChartPage below
+["org-chart", workspaceId, "department", deptId]   fetched imperatively
+["org-chart", workspaceId, "unassigned"]           fetched imperatively
 ["org-profile",      workspaceId, memberId]        staleTime: 2 * 60_000
+["org-my-profile",   workspaceId]                  staleTime: 30_000, SOCKET_BACKED
+["org-pending-profiles", workspaceId]              staleTime: 60_000
 ```
 
 #### Query hooks
 
 | Hook                               | Key                | URL                                  |
 | ---------------------------------- | ------------------ | ------------------------------------ |
-| `useDepartments(ws)`               | `org-departments`  | `GET /org/departments/`              |
+| `useDepartments(ws)`               | `org-departments`  | `GET /org/departments/` (paginated; follows `next` until exhausted — `fetchAllPages`) |
 | `useDepartmentMembers(ws, deptId)` | `org-dept-members` | `GET /org/departments/{id}/members/` |
-| `useTeams(ws)`                     | `org-teams`        | `GET /org/teams/`                    |
+| `useTeams(ws)`                     | `org-teams`        | `GET /org/teams/` (paginated, same `fetchAllPages`)                    |
 | `useTeamMembers(ws, teamId)`       | `org-team-members` | `GET /org/teams/{id}/members/`       |
 | `useJobTitles(ws)`                 | `org-job-titles`   | `GET /org/job-titles/`               |
-| `useOrgChart(ws)`                  | `org-chart`        | `GET /org/chart/`                    |
+| `useOrgChart(ws)`                  | `org-chart`        | `GET /org/chart/` — **root only** (members with no manager); see OrgChartPage below for the lazy-expand endpoints |
 | `useOrgProfile(ws, memberId)`      | `org-profile`      | `GET /org/members/{id}/profile/`     |
+| `usePendingProfiles(ws)`           | `org-pending-profiles` | `GET /org/profiles/pending/`     |
 
-#### Mutation hooks
+#### Mutation hooks — direct cache patch, not invalidate
 
-All mutations invalidate their respective list key. `useRemoveDepartmentMember` / `useRemoveTeamMember` also invalidate the member sub-key.
+Every department/team/job-title mutation writes its own `setQueryData` from the response (or from the mutation `variables` for deletes, since DELETE responses are empty) instead of calling `invalidateQueries`. This eliminates the extra GET a naive invalidate would trigger — the response **is** the object, so there's no reason to re-fetch it. Cross-tab/cross-user sync for the same data is handled separately by `usePeopleSocket` (see the WebSocket section above), which patches the same cache keys from the `org.*` broadcast.
 
-| Hook                                                                  | Invalidates                                               |
-| --------------------------------------------------------------------- | --------------------------------------------------------- |
-| `useCreateDepartment` / `useUpdateDepartment` / `useDeleteDepartment` | `org-departments`                                         |
-| `useAddDepartmentMember` / `useRemoveDepartmentMember`                | `org-departments`, `org-dept-members`                     |
-| `useCreateTeam` / `useUpdateTeam` / `useDeleteTeam`                   | `org-teams`                                               |
-| `useAddTeamMember` / `useRemoveTeamMember`                            | `org-teams`, `org-team-members`                           |
-| `useCreateJobTitle`                                                   | `org-job-titles`                                          |
-| `useUpdateOrgProfile(ws, memberId)`                                   | `setQueryData` on `org-profile` + invalidates `org-chart` |
+| Hook                                                                  | Cache action                                                             |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `useCreateDepartment` / `useUpdateDepartment` / `useDeleteDepartment` | `setQueryData(deptsKey)` append / replace-by-id / filter                  |
+| `useAddDepartmentMember` / `useRemoveDepartmentMember`                | `setQueryData(deptMemKey)` splice + `deptsKey` `member_count` ±1           |
+| `useCreateTeam` / `useUpdateTeam` / `useDeleteTeam`                   | `setQueryData(teamsKey)` append / replace-by-id / filter                  |
+| `useAddTeamMember` / `useRemoveTeamMember`                            | `setQueryData(teamMemKey)` splice + `teamsKey` `member_count` ±1           |
+| `useCreateJobTitle` / `useUpdateJobTitle` / `useDeleteJobTitle`       | `setQueryData(jobsKey)` append / replace-by-id / filter                   |
+| `useUpdateOrgProfile(ws, memberId)`                                   | `setQueryData` on `org-profile` + invalidates `org-chart` (no full node payload to patch with) |
+| `useApproveProfile`                                                   | `setQueryData(pendingProfilesKey)` filter out + invalidates `org-chart`   |
+| `useBulkApproveProfiles`                                              | invalidates `pendingProfilesKey` + `chartKey` — response is `{approved: N}`, no per-profile payload to patch with (rare admin action, the extra refetch is cheap) |
+| `useDeleteReportingLine`                                              | invalidates `chartKey` (no list of reporting lines is cached client-side) |
 
 **`useUpdateOrgProfile`** — PATCH `/org/members/{id}/profile/`
 
@@ -887,17 +923,19 @@ Backend serializers split read and write fields. Always use these write-only fie
 | `job_title_id`    | OrgProfile job title (JobTitle PK; send `null` to clear)       |
 | `employment_type` | `"full_time"` \| `"part_time"` \| `"contractor"` \| `"intern"` |
 
-#### `OrgChartPage` — Interactive SVG canvas
+#### `OrgChartPage` — Interactive SVG canvas, lazily loaded
 
-`OrgChartPage.jsx` is a fully client-side interactive canvas — **no external graph library**. Key design decisions:
+Split across three files: `pages/OrgChartPage.jsx` (state + event handlers + JSX shell), `components/orgChartLayout.js` (pure layout math, no React), `components/OrgChartNodes.jsx` (presentational pieces: `OrgNode`, `Edge`, `DeptHeader`, `NodePopover`, `DragOverlay`). Fully client-side canvas — **no external graph library**.
 
+The chart is **lazy-loaded**, not "fetch everyone and render a tree" — `GET /org/chart/` returns only root nodes (members with no manager); expanding a node fetches its direct reports one level at a time via `GET /org/chart/{memberId}/reports/`. This avoids paying for the whole org tree on every page load, which matters once a workspace has hundreds/thousands of members. Two view modes, both lazy:
+
+- **Hierarchy view**: `expanded: Set<id>` + `childrenByNode: {id: node[]}` in `OrgChartPage` state (plain `useState`, not React Query — see the caveat in the WebSocket section above). `toggleNode(id)` fetches via `qc.fetchQuery({queryKey: chartReportsKey(ws, id), queryFn: fetchChartReports})` on first expand, caching the result in both React Query and local state; subsequent toggles just show/hide via `expanded`. `buildTree` (in `orgChartLayout.js`) walks `roots` + `expanded` + `childrenByNode` to build the tree actually rendered — a node with `has_reports: true` but not yet in `childrenByNode` renders as a leaf with an expand affordance, not with its (unfetched) children. "Collapse all" just clears `expanded` (free — no refetch, still cached); there is no "Expand all" since that would mean fetching every level.
+- **Department view**: cards for each department (from `useDepartments`, already-loaded, cheap) plus one "Unassigned" bucket; clicking a card lazy-fetches `GET /org/departments/{id}/chart/` (or `GET /org/chart/unassigned/`) via the same `qc.fetchQuery` pattern and renders that department's members in a 4-column grid inside a colored SVG `<rect>` (`buildLazyDeptLayout`).
+- **Bounds/offset** (`computeChartBounds`): normalizes both node-card centers and department-rect corners into one coordinate space, so pan/zoom/fit-to-screen work identically across both view modes without per-mode special-casing.
 - **Pan**: `onMouseDown` on the SVG background stores `{ startX, startY }` in a `useRef` (not state — no re-render per mouse-move tick). `onMouseMove` updates `pan` state only on release / frame.
 - **Zoom**: `wheel` event listener added with `{ passive: false }` (must `preventDefault()` to stop page scroll). Zoom range: `0.3 – 2`.
-- **Fit-to-screen**: computed once on data load via `useEffect([nodes.length])`, exposes a toolbar button for re-centering.
-- **Hierarchy layout** (`buildTree` + `layoutTree`): builds a tree from `manager_id` links; `computeSubtreeWidth` recurses bottom-up so parent x-positions center over their children. Multiple roots get wrapped in a virtual `"__root__"` node.
-- **Department layout** (`buildDeptLayout`): members bucketed by `departments[]`; each bucket rendered as a coloured SVG `<rect>` with a 4-column grid of node cards inside.
-- **Collapse/expand**: `collapsed: Set<id>` in state; `layoutTree` prunes collapsed subtrees from position computation; the toggle badge renders as a `<g>` element at the bottom-center of the node card (not a `foreignObject` — avoids cross-browser foreignObject click issues with SVG transforms).
-- **Drag-to-reparent** (admin only): `onMouseDown` on a node card stores `drag: { node, screenX, screenY }` in state; `onMouseMove` updates `drag.screenX/Y`; `onMouseUp` fires `POST /org/reporting-lines/` if `dragOver !== drag.node.id`. The drag overlay is a fixed-position `<div>` that follows `drag.screenX/Y` — it lives outside the SVG to avoid transform inheritance.
+- **Fit-to-screen**: computed once on data load via `useEffect`, exposes a toolbar button for re-centering.
+- **Drag-to-reparent** (admin only): `onMouseDown` on a node card stores `drag: { node, screenX, screenY }` in state; `onMouseMove` updates `drag.screenX/Y`; `onMouseUp` fires `POST /org/reporting-lines/` if `dragOver !== drag.node.id`, then invalidates the chart and resets local expand state (a reparent can move a node in/out of any expanded branch, so the safe move is to collapse back to root rather than try to patch the affected branches). The drag overlay is a fixed-position `<div>` that follows `drag.screenX/Y` — it lives outside the SVG to avoid transform inheritance.
 - **Dot-grid background**: a `<pattern>` element with `patternUnits="userSpaceOnUse"` and its `x/y` attributes set to `pan.x % (20 * zoom)` so the grid tiles infinitely as the canvas is dragged.
 
 ---

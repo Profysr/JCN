@@ -7,10 +7,11 @@ import { BACKEND_WS_URL } from "@/shared/lib/env";
 // Handler registry
 //
 // A single WebSocket connection is opened by useWorkspaceSocket (AppLayout).
-// Other hooks (useBoardSocket, etc.) register handlers here while they are
-// mounted. Every incoming message is dispatched to ALL registered handlers so
-// there is never more than one open socket per workspace, regardless of how
-// many pages or panels are open.
+// Other hooks (useBoardSocket, usePeopleSocket, etc.) register handlers here
+// while they are mounted — including ones defined in other files, via the
+// exported `registerSocketHandler`. Every incoming message is dispatched to
+// ALL registered handlers so there is never more than one open socket per
+// workspace, regardless of how many pages or panels are open.
 // ─────────────────────────────────────────────────────────────────────────────
 const _handlers = new Set();
 
@@ -21,6 +22,15 @@ function _register(fn) {
 
 function _dispatch(type, payload, qc, workspaceId) {
   _handlers.forEach((fn) => fn(type, payload, qc, workspaceId));
+}
+
+/**
+ * Registers a handler on the shared workspace socket from outside this file
+ * (e.g. usePeopleSocket.js). Returns the unregister function — call it from a
+ * useEffect cleanup. Does not open a new connection.
+ */
+export function registerSocketHandler(fn) {
+  return _register(fn);
 }
 
 // ════════════════════════════════════════════════════════════════════════════
