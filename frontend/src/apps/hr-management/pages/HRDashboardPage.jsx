@@ -1,9 +1,10 @@
 import { useParams, Link } from "react-router-dom";
 import {
   Users, UserPlus, CalendarDays, Timer, AlertTriangle, Gift, Star,
-  Clock, UserCheck,
+  Clock, UserCheck, PieChart,
 } from "lucide-react";
 import { Loader } from "@/shared/components/ui/Loader";
+import { SectionCard } from "@/shared/components/ui/SectionCard";
 import { cn } from "@/shared/lib/utils";
 import { useHRDashboard } from "@/apps/hr-management/hooks/useHRDashboard";
 import GettingStartedChecklist from "@/apps/hr-management/components/GettingStartedChecklist";
@@ -41,10 +42,6 @@ function StatCard({ icon: Icon, label, value, sub, iconCls }) {
   );
 }
 
-function SectionTitle({ children }) {
-  return <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">{children}</h2>;
-}
-
 function EventIcon({ type }) {
   if (type === "anniversary") return <Star className="w-4 h-4 text-amber-500" />;
   if (type === "contract_expiry") return <AlertTriangle className="w-4 h-4 text-rose-500" />;
@@ -76,7 +73,7 @@ export default function HRDashboardPage() {
   const totalEmpTypes = Object.values(headcount.employment_split || {}).reduce((a, b) => a + b, 0);
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-8">
+    <div className="p-6 max-w-6xl mx-auto space-y-6">
       <GettingStartedChecklist />
 
       <div>
@@ -85,124 +82,102 @@ export default function HRDashboardPage() {
       </div>
 
       {/* ── Headcount ── */}
-      <section>
-        <SectionTitle>Headcount</SectionTitle>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          <StatCard
-            icon={Users}
-            label="Total Employees"
-            value={headcount.total}
-            iconCls="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400"
-          />
-          <StatCard
-            icon={UserPlus}
-            label="Joiners This Month"
-            value={headcount.joiners_this_month}
-            iconCls="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
-          />
-          <div className="bg-card border rounded-xl p-5 col-span-2 md:col-span-1">
-            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-3">
-              Employment Split
-            </p>
-            {totalEmpTypes === 0 ? (
-              <p className="text-sm text-muted-foreground">No profiles configured</p>
-            ) : (
-              <div className="space-y-2">
-                {Object.entries(headcount.employment_split).map(([type, count]) => (
-                  <div key={type} className="flex items-center gap-2 text-sm">
-                    <span className="w-28 text-muted-foreground capitalize">
-                      {EMP_TYPE_LABELS[type] ?? type}
-                    </span>
-                    <div className="flex-1 bg-muted rounded-full h-1.5">
-                      <div
-                        className="bg-indigo-500 h-1.5 rounded-full"
-                        style={{ width: `${(count / totalEmpTypes) * 100}%` }}
-                      />
-                    </div>
-                    <span className="w-6 text-right font-medium">{count}</span>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <StatCard
+          icon={Users}
+          label="Total Employees"
+          value={headcount.total}
+          iconCls="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400"
+        />
+        <StatCard
+          icon={UserPlus}
+          label="Joiners This Month"
+          value={headcount.joiners_this_month}
+          iconCls="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
+        />
+        <SectionCard title="Employment Split" icon={PieChart} className="col-span-2 md:col-span-1">
+          {totalEmpTypes === 0 ? (
+            <p className="text-sm text-muted-foreground">No profiles configured</p>
+          ) : (
+            <div className="space-y-2">
+              {Object.entries(headcount.employment_split).map(([type, count]) => (
+                <div key={type} className="flex items-center gap-2 text-sm">
+                  <span className="w-28 text-muted-foreground capitalize">
+                    {EMP_TYPE_LABELS[type] ?? type}
+                  </span>
+                  <div className="flex-1 bg-muted rounded-full h-1.5">
+                    <div
+                      className="bg-indigo-500 h-1.5 rounded-full"
+                      style={{ width: `${(count / totalEmpTypes) * 100}%` }}
+                    />
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </section>
+                  <span className="w-6 text-right font-medium">{count}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </SectionCard>
+      </div>
 
       {/* ── Leave & Attendance ── */}
-      <section>
-        <SectionTitle>This Month</SectionTitle>
-        <div className="grid md:grid-cols-2 gap-4">
-          {/* Leave overview */}
-          <div className="bg-card border rounded-xl p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <CalendarDays className="w-4 h-4 text-indigo-500" />
-              <span className="text-sm font-semibold">Leave Overview</span>
+      <div className="grid md:grid-cols-2 gap-4">
+        <SectionCard title="Leave Overview — This Month" icon={CalendarDays}>
+          <p className="text-3xl font-bold">{leave_overview.total_days_taken}</p>
+          <p className="text-xs text-muted-foreground mb-4">total days taken</p>
+          {Object.keys(leave_overview.by_type).length === 0 ? (
+            <p className="text-xs text-muted-foreground">No approved leave this month</p>
+          ) : (
+            <div className="space-y-1.5">
+              {Object.entries(leave_overview.by_type).map(([type, days]) => (
+                <div key={type} className="flex items-center gap-2 text-sm">
+                  <div className={cn("w-2 h-2 rounded-full", LEAVE_TYPE_COLORS[type] ?? "bg-muted-foreground")} />
+                  <span className="text-muted-foreground capitalize flex-1">{type.replace("_", " ")}</span>
+                  <span className="font-medium">{days}d</span>
+                </div>
+              ))}
             </div>
-            <p className="text-3xl font-bold">{leave_overview.total_days_taken}</p>
-            <p className="text-xs text-muted-foreground mb-4">total days taken</p>
-            {Object.keys(leave_overview.by_type).length === 0 ? (
-              <p className="text-xs text-muted-foreground">No approved leave this month</p>
-            ) : (
-              <div className="space-y-1.5">
-                {Object.entries(leave_overview.by_type).map(([type, days]) => (
-                  <div key={type} className="flex items-center gap-2 text-sm">
-                    <div className={cn("w-2 h-2 rounded-full", LEAVE_TYPE_COLORS[type] ?? "bg-muted-foreground")} />
-                    <span className="text-muted-foreground capitalize flex-1">{type.replace("_", " ")}</span>
-                    <span className="font-medium">{days}d</span>
-                  </div>
-                ))}
-              </div>
-            )}
-            <Link
-              to={`/w/${workspaceId}/hr/leave`}
-              className="mt-4 block text-xs text-indigo-500 hover:underline"
-            >
-              View leave calendar →
-            </Link>
-          </div>
+          )}
+          <Link
+            to={`/w/${workspaceId}/hr/leave`}
+            className="mt-4 block text-xs text-primary hover:underline"
+          >
+            View leave calendar →
+          </Link>
+        </SectionCard>
 
-          {/* Attendance overview */}
-          <div className="bg-card border rounded-xl p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <Timer className="w-4 h-4 text-emerald-500" />
-              <span className="text-sm font-semibold">Attendance — Rolling Week</span>
+        <SectionCard title="Attendance — Rolling Week" icon={Timer}>
+          <p className="text-3xl font-bold">{attendance_overview.on_time_pct}%</p>
+          <p className="text-xs text-muted-foreground mb-4">on-time rate</p>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-sm">
+              <Clock className="w-4 h-4 text-amber-500" />
+              <span className="text-muted-foreground flex-1">Late arrivals</span>
+              <span className="font-medium">{attendance_overview.late_count}</span>
             </div>
-            <p className="text-3xl font-bold">{attendance_overview.on_time_pct}%</p>
-            <p className="text-xs text-muted-foreground mb-4">on-time rate</p>
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm">
-                <Clock className="w-4 h-4 text-amber-500" />
-                <span className="text-muted-foreground flex-1">Late arrivals</span>
-                <span className="font-medium">{attendance_overview.late_count}</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm">
-                <UserCheck className="w-4 h-4 text-rose-500" />
-                <span className="text-muted-foreground flex-1">Absences</span>
-                <span className="font-medium">{attendance_overview.absent_count}</span>
-              </div>
+            <div className="flex items-center gap-2 text-sm">
+              <UserCheck className="w-4 h-4 text-rose-500" />
+              <span className="text-muted-foreground flex-1">Absences</span>
+              <span className="font-medium">{attendance_overview.absent_count}</span>
             </div>
-            <p className="mt-4 text-xs text-muted-foreground">
-              {attendance_overview.period.from} → {attendance_overview.period.to}
-            </p>
-            <Link
-              to={`/w/${workspaceId}/hr/attendance`}
-              className="mt-2 block text-xs text-indigo-500 hover:underline"
-            >
-              View full attendance →
-            </Link>
           </div>
-        </div>
-      </section>
+          <p className="mt-4 text-xs text-muted-foreground">
+            {attendance_overview.period.from} → {attendance_overview.period.to}
+          </p>
+          <Link
+            to={`/w/${workspaceId}/hr/attendance`}
+            className="mt-2 block text-xs text-primary hover:underline"
+          >
+            View full attendance →
+          </Link>
+        </SectionCard>
+      </div>
 
       {/* ── Upcoming Events ── */}
-      <section>
-        <SectionTitle>Upcoming Events (next 30 days)</SectionTitle>
+      <SectionCard title="Upcoming Events (next 30 days)" icon={Gift}>
         {upcoming_events.length === 0 ? (
-          <div className="bg-card border rounded-xl p-6 text-center text-sm text-muted-foreground">
-            No upcoming events
-          </div>
+          <p className="text-center text-sm text-muted-foreground py-6">No upcoming events</p>
         ) : (
-          <div className="bg-card border rounded-xl divide-y">
+          <div className="divide-y -m-5">
             {upcoming_events.map((ev, i) => (
               <div key={i} className="flex items-center gap-3 px-5 py-3">
                 <EventIcon type={ev.type} />
@@ -223,7 +198,7 @@ export default function HRDashboardPage() {
             ))}
           </div>
         )}
-      </section>
+      </SectionCard>
     </div>
   );
 }

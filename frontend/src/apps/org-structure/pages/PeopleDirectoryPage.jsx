@@ -147,7 +147,7 @@ export default function PeopleDirectoryPage() {
               <div key={node.id} className="relative grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-4 px-4 py-3 items-center hover:bg-accent/30 transition-colors group/row">
                 {/* Cover link — fills the entire row */}
                 <Link
-                  to={`/w/${workspaceId}/people/${node.id}`}
+                  to={`/w/${workspaceId}/members/${node.id}`}
                   className="absolute inset-0"
                   aria-label={`View profile of ${node.name || node.email}`}
                 />

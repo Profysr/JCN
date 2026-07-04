@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import {
   CalendarDays, CheckCircle2, Clock, XCircle, Plus,
   ChevronLeft, ChevronRight, Users, AlertCircle,
-  Pencil, Trash2, ShieldCheck,
+  Pencil, Trash2, ShieldCheck, Wallet, History, UserCheck,
 } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { Loader } from "@/shared/components/ui/Loader";
@@ -11,6 +11,7 @@ import { Avatar } from "@/shared/components/ui/avatar";
 import Select from "@/shared/components/ui/Select";
 import { useToast } from "@/shared/components/ui/toast";
 import Modal from "@/shared/components/ui/Modal";
+import { SectionCard } from "@/shared/components/ui/SectionCard";
 import { cn } from "@/shared/lib/utils";
 import { usePermission } from "@/contexts/PermissionsContext";
 import {
@@ -115,17 +116,24 @@ function BalanceCard({ balance }) {
 }
 
 // ── Request Row ───────────────────────────────────────────────────────────────
-function RequestRow({ req, isAdmin, onApprove, onReject }) {
+function RequestRow({ req, isAdmin, workspaceId, onApprove, onReject }) {
   const colors = leaveTypeColor(req.policy.leave_type);
   const days = daysInRange(req.start_date, req.end_date);
   return (
     <div className="flex items-center gap-3 rounded-lg border bg-card px-4 py-3">
       {isAdmin && (
-        <Avatar user={req.employee.user} size="sm" />
+        <Link to={`/w/${workspaceId}/members/${req.employee.id}`} className="shrink-0">
+          <Avatar user={req.employee.user} size="sm" />
+        </Link>
       )}
       <div className="flex-1 min-w-0">
         {isAdmin && (
-          <p className="text-sm font-medium text-foreground truncate">{req.employee.user.full_name}</p>
+          <Link
+            to={`/w/${workspaceId}/members/${req.employee.id}`}
+            className="text-sm font-medium text-foreground truncate hover:text-primary hover:underline block"
+          >
+            {req.employee.user.full_name}
+          </Link>
         )}
         <div className="flex items-center gap-2 flex-wrap">
           <span className={cn("text-xs px-1.5 py-0.5 rounded font-medium", colors.bg, colors.text)}>
@@ -384,6 +392,7 @@ function ManagerQueue({ workspaceId }) {
           key={req.id}
           req={req}
           isAdmin
+          workspaceId={workspaceId}
           onApprove={(id) => handleReview(id, "approved")}
           onReject={(id) => handleReview(id, "rejected")}
         />
@@ -685,10 +694,8 @@ export default function LeavePage() {
 
         {/* ── My Leave ── */}
         {tab === "my-leave" && (
-          <div className="flex flex-col gap-6 max-w-3xl">
-            {/* Balances */}
-            <section>
-              <h2 className="text-sm font-semibold text-foreground mb-3">Your balances</h2>
+          <div className="flex flex-col gap-5 max-w-3xl">
+            <SectionCard title="Your balances" icon={Wallet}>
               {balancesLoading ? (
                 <Loader className="h-24" />
               ) : balances.length === 0 ? (
@@ -698,11 +705,9 @@ export default function LeavePage() {
                   {balances.map((b) => <BalanceCard key={b.id} balance={b} />)}
                 </div>
               )}
-            </section>
+            </SectionCard>
 
-            {/* History */}
-            <section>
-              <h2 className="text-sm font-semibold text-foreground mb-3">Request history</h2>
+            <SectionCard title="Request history" icon={History}>
               {requestsLoading ? (
                 <Loader className="h-24" />
               ) : myRequests.length === 0 ? (
@@ -720,27 +725,33 @@ export default function LeavePage() {
                   ))}
                 </div>
               )}
-            </section>
+            </SectionCard>
           </div>
         )}
 
         {/* ── Team Calendar ── */}
         {tab === "team" && (
           <div className="max-w-2xl">
-            <TeamCalendar workspaceId={workspaceId} />
+            <SectionCard title="Team Calendar" icon={CalendarDays}>
+              <TeamCalendar workspaceId={workspaceId} />
+            </SectionCard>
           </div>
         )}
 
         {/* ── Manager Queue ── */}
         {tab === "queue" && (
           <div className="max-w-3xl">
-            <ManagerQueue workspaceId={workspaceId} />
+            <SectionCard title="Manager Queue" icon={UserCheck}>
+              <ManagerQueue workspaceId={workspaceId} />
+            </SectionCard>
           </div>
         )}
 
         {/* ── Policies ── */}
         {tab === "policies" && (
-          <PoliciesTab workspaceId={workspaceId} />
+          <SectionCard title="Leave Policies" icon={ShieldCheck}>
+            <PoliciesTab workspaceId={workspaceId} />
+          </SectionCard>
         )}
       </div>
 

@@ -6,13 +6,7 @@ import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { Loader } from "@/shared/components/ui/Loader";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/shared/components/ui/select";
+import Select from "@/shared/components/ui/Select";
 import {
   useMyOrgProfile,
   useUpdateMyOrgProfile,
@@ -102,20 +96,12 @@ function OnboardingWall({ workspaceId, profile }) {
             </Label>
             <Select
               value={form.job_title_id}
-              onValueChange={(v) => set("job_title_id", v)}
+              onChange={(v) => set("job_title_id", v)}
               disabled={jobTitles.isLoading}
-            >
-              <SelectTrigger className={errors.job_title_id ? "border-destructive" : ""}>
-                <SelectValue placeholder="Select your title…" />
-              </SelectTrigger>
-              <SelectContent>
-                {(jobTitles.data ?? []).map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    {t.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              placeholder="Select your title…"
+              triggerClassName={errors.job_title_id ? "border-destructive" : ""}
+              options={(jobTitles.data ?? []).map((t) => ({ value: t.id, label: t.name }))}
+            />
             {errors.job_title_id && (
               <p className="text-xs text-destructive">{errors.job_title_id}</p>
             )}
@@ -128,19 +114,9 @@ function OnboardingWall({ workspaceId, profile }) {
             </Label>
             <Select
               value={form.employment_type}
-              onValueChange={(v) => set("employment_type", v)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {EMPLOYMENT_TYPES.map((t) => (
-                  <SelectItem key={t.value} value={t.value}>
-                    {t.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              onChange={(v) => set("employment_type", v)}
+              options={EMPLOYMENT_TYPES}
+            />
           </div>
 
           {/* Start Date + Employee ID side by side */}

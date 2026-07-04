@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import {
   LogIn, LogOut, Clock, CheckCircle2, XCircle, AlertCircle,
   ChevronLeft, ChevronRight, Users, Download,
@@ -9,6 +9,7 @@ import { Button } from "@/shared/components/ui/button";
 import { Loader } from "@/shared/components/ui/Loader";
 import { Avatar } from "@/shared/components/ui/avatar";
 import Modal from "@/shared/components/ui/Modal";
+import { SectionCard } from "@/shared/components/ui/SectionCard";
 import { cn } from "@/shared/lib/utils";
 import { usePermission } from "@/contexts/PermissionsContext";
 import {
@@ -424,16 +425,19 @@ function AdminGrid({ workspaceId }) {
                 return (
                   <tr key={employee.id} className="border-b last:border-0 hover:bg-muted/30">
                     <td className="py-2.5 px-3">
-                      <div className="flex items-center gap-2">
+                      <Link
+                        to={`/w/${workspaceId}/members/${employee.id}`}
+                        className="flex items-center gap-2 group/link"
+                      >
                         <Avatar
                           user={employee.user}
                           size="sm"
                           className="h-7 w-7 text-xs"
                         />
-                        <span className="font-medium text-sm truncate max-w-[120px]">
+                        <span className="font-medium text-sm truncate max-w-[120px] group-hover/link:text-primary group-hover/link:underline">
                           {employee.user.full_name}
                         </span>
-                      </div>
+                      </Link>
                     </td>
                     {days.map(({ iso, d }) => {
                       const rec = byDate[iso];
@@ -732,44 +736,32 @@ export default function AttendancePage() {
             </div>
 
             {/* Calendar + Chart row */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="rounded-xl border bg-card p-5">
-                <h2 className="text-sm font-semibold mb-4 flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                  Monthly Overview
-                </h2>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              <SectionCard title="Monthly Overview" icon={Calendar}>
                 {myLoading ? (
                   <Loader className="h-48" />
                 ) : (
                   <AttendanceCalendar records={myRecords} />
                 )}
-              </div>
+              </SectionCard>
 
-              <div className="rounded-xl border bg-card p-5">
-                <h2 className="text-sm font-semibold mb-4 flex items-center gap-2">
-                  <BarChart3 className="h-4 w-4 text-muted-foreground" />
-                  Weekly Hours
-                </h2>
+              <SectionCard title="Weekly Hours" icon={BarChart3}>
                 <WeeklyChart
                   records={chartRecords}
                   expectedHours={policy?.weekly_hours ?? 40}
                   weekOffset={chartWeekOffset}
                   setWeekOffset={setChartWeekOffset}
                 />
-              </div>
+              </SectionCard>
             </div>
           </div>
         )}
 
         {tab === "grid" && isAdmin && (
           <div className="max-w-6xl mx-auto">
-            <div className="rounded-xl border bg-card p-5">
-              <h2 className="text-sm font-semibold mb-4 flex items-center gap-2">
-                <Users className="h-4 w-4 text-muted-foreground" />
-                Team Attendance Grid
-              </h2>
+            <SectionCard title="Team Attendance Grid" icon={Users}>
               <AdminGrid workspaceId={workspaceId} isAdmin={isAdmin} />
-            </div>
+            </SectionCard>
           </div>
         )}
       </div>

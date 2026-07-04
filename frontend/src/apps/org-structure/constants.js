@@ -32,7 +32,7 @@ export const ONBOARDING_STATUS = {
 // Display config for each onboarding status.
 // label      → human-readable text shown in badges / profile views.
 // className  → Tailwind classes for the badge chip.
-// Used by PeopleDirectoryPage, MemberProfilePage, and any future status badges.
+// Used by PeopleDirectoryPage, MemberDetailPage, and any future status badges.
 export const PROFILE_STATUS_CONFIG = {
   [ONBOARDING_STATUS.APPROVED]: {
     label: "Active",
