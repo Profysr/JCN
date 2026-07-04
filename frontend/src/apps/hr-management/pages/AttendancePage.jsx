@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import {
   LogIn, LogOut, Clock, CheckCircle2, XCircle, AlertCircle,
-  ChevronLeft, ChevronRight, Users, QrCode, Download,
+  ChevronLeft, ChevronRight, Users, Download,
   Timer, Calendar, BarChart3, Settings2,
 } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
@@ -18,7 +18,6 @@ import {
   useClockOut,
   useMyAttendance,
   useAttendanceList,
-  useAttendanceQR,
 } from "@/apps/hr-management/hooks/useAttendance";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -122,37 +121,6 @@ function StatusChip({ s, small }) {
       {Icon && <Icon className="h-3 w-3" />}
       {cfg.label}
     </span>
-  );
-}
-
-// ── QR Code renderer (pure CSS / SVG-free: renders as a text URL) ─────────────
-
-function QRDisplay({ qrData }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(window.location.origin + qrData.qr_url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <div className="flex flex-col items-center gap-4 py-2">
-      <div className="rounded-xl border-2 border-dashed border-zinc-300 dark:border-zinc-600 p-6 text-center">
-        <QrCode className="mx-auto h-16 w-16 text-zinc-400 mb-3" />
-        <p className="text-sm font-medium text-foreground">QR Code for {qrData.date}</p>
-        <p className="text-xs text-muted-foreground mt-1 font-mono break-all">
-          {window.location.origin + qrData.qr_url}
-        </p>
-      </div>
-      <p className="text-xs text-muted-foreground">
-        Display this link as a QR code on a shared screen or printout.
-        Employees scan it to clock in automatically. Expires at midnight.
-      </p>
-      <Button size="sm" variant="outline" onClick={handleCopy}>
-        {copied ? "Copied!" : "Copy link"}
-      </Button>
-    </div>
   );
 }
 
@@ -598,7 +566,6 @@ export default function AttendancePage() {
 
   const [tab, setTab] = useState("my");
   const [chartWeekOffset, setChartWeekOffset] = useState(0);
-  const [showQR, setShowQR] = useState(false);
   const [showPolicy, setShowPolicy] = useState(false);
 
   const isAdmin = isOwner || can("hr.manage_attendance");
@@ -631,9 +598,6 @@ export default function AttendancePage() {
   const clockIn  = useClockIn(workspaceId);
   const clockOut = useClockOut(workspaceId);
 
-  // QR data
-  const { data: qrData } = useAttendanceQR(workspaceId, showQR && isAdmin);
-
   if (!isOwner && !hasAppAccess("hr")) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4 text-center p-8">
@@ -663,24 +627,14 @@ export default function AttendancePage() {
         </div>
         <div className="flex items-center gap-2">
           {isAdmin && (
-            <>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setShowQR(true)}
-              >
-                <QrCode className="h-4 w-4 mr-1.5" />
-                QR Code
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setShowPolicy(true)}
-              >
-                <Settings2 className="h-4 w-4 mr-1.5" />
-                Policy
-              </Button>
-            </>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setShowPolicy(true)}
+            >
+              <Settings2 className="h-4 w-4 mr-1.5" />
+              Policy
+            </Button>
           )}
         </div>
       </div>
@@ -821,16 +775,6 @@ export default function AttendancePage() {
       </div>
 
       {/* ── Modals ── */}
-      {showQR && (
-        <Modal title="Daily QR Code" onClose={() => setShowQR(false)}>
-          {qrData ? (
-            <QRDisplay qrData={qrData} />
-          ) : (
-            <Loader className="h-32" />
-          )}
-        </Modal>
-      )}
-
       {showPolicy && policy && (
         <PolicyModal
           policy={policy}

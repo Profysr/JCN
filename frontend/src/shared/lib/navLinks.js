@@ -36,27 +36,19 @@ export const APP_DEFS = [
     },
   },
   {
-    key: "org",
-    label: "Org Structure",
-    shortLabel: "Org",
-    icon: Network,
+    // Merged app-switcher entry for Org Structure + HR Management — the
+    // backend keeps these as two separate permission apps (see
+    // `backendApps`); this is a frontend-only presentation grouping.
+    key: "people",
+    label: "People & HR",
+    shortLabel: "People",
+    icon: Users2,
     landing: "departments",
+    backendApps: ["org", "hr"],
     colors: {
       bg: "bg-blue-500/15",
       text: "text-blue-500",
       solid: "bg-blue-500",
-    },
-  },
-  {
-    key: "hr",
-    label: "HR Management",
-    shortLabel: "HR",
-    icon: Users2,
-    landing: "hr",
-    colors: {
-      bg: "bg-purple-500/15",
-      text: "text-purple-500",
-      solid: "bg-purple-500",
     },
   },
   {

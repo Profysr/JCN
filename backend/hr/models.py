@@ -174,7 +174,6 @@ class AttendancePolicy(models.Model):
 class Attendance(models.Model):
     class Source(models.TextChoices):
         MANUAL = "manual", "Manual"
-        QR = "qr", "QR Code"
         API = "api", "API"
 
     PREFIX = "att"

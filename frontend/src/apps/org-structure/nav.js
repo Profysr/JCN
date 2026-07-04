@@ -46,6 +46,5 @@ export const ORG_NAV_ITEMS = [
 ];
 
 export const ORG_NAV_GROUPS = [
-  { label: "Directory", items: ["departments", "teams", "org-chart", "people"] },
-  { label: "HR", items: ["job-titles", "hr-queue"] },
+  { label: "Organization", items: ["departments", "teams", "org-chart", "people", "job-titles", "hr-queue"] },
 ];

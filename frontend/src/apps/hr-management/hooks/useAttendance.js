@@ -6,7 +6,6 @@ const policyKey   = (ws)           => ["hr-attendance-policy", ws];
 const myKey       = (ws, from, to) => ["hr-attendance-my",     ws, from, to];
 const listKey     = (ws, emp, from, to) => ["hr-attendance-list", ws, emp, from, to];
 const summaryKey  = (ws, from, to) => ["hr-attendance-summary", ws, from, to];
-const qrKey       = (ws)           => ["hr-attendance-qr",     ws];
 
 // ── Attendance Policy ──────────────────────────────────────────────────────────
 export const useAttendancePolicy = (workspaceId) =>
@@ -101,15 +100,4 @@ export const useAttendanceSummary = (workspaceId, dateFrom, dateTo) =>
     },
     enabled: !!workspaceId,
     staleTime: 30_000,
-  });
-
-// ── Admin: QR Code ────────────────────────────────────────────────────────────
-export const useAttendanceQR = (workspaceId, enabled) =>
-  useQuery({
-    queryKey: qrKey(workspaceId),
-    queryFn: () =>
-      api.get(`/api/workspaces/${workspaceId}/hr/attendance/qr/`).then((r) => r.data),
-    enabled: !!workspaceId && !!enabled,
-    staleTime: 60_000,
-    refetchOnWindowFocus: false,
   });

@@ -230,9 +230,8 @@ management actions gate on **perm:`hr.manage_leave`** or **perm:`hr.manage_atten
 | GET `/hr/leave-balances/`, `/whos-off/` | Balances / who's away | app:`hr` | Team-visible info. |
 | GET/PATCH `/hr/attendance-policy/` | Attendance policy | GET: app:`hr` / PATCH: perm:`hr.manage_attendance` + scope:write | Config edit is management. |
 | POST `/hr/attendance/clock-in/`, `/clock-out/` | Clock self in/out | app:`hr` + scope:write | Self-service attendance. |
-| GET `/hr/attendance/`, `/summary/`, `/qr/` | All-employee records / summary / QR | perm:`hr.manage_attendance` | Viewing everyone's attendance is management. |
+| GET `/hr/attendance/`, `/summary/` | All-employee records / summary | perm:`hr.manage_attendance` | Viewing everyone's attendance is management. |
 | GET `/hr/attendance/my/` | Own records | app:`hr` | Self-scoped. |
-| POST `/attendance/qr/{ws}/{date}/{code}/` | Clock in via QR | app:`hr` + scope:write | Employee self-clock; code is the proof. |
 | GET `/hr/dashboard/` | HR dashboard stats | perm:`hr.manage_leave` (or admin) | Aggregate workforce data — management view. |
 | GET/POST/DELETE `/hr/members/{id}/documents/…` | Employee documents | perm:`hr.manage_attendance` (HR admin) + scope:write | Sensitive HR files; never employee-self. |
 | GET/POST/PATCH/DELETE `/hr/members/{id}/notes/…` | Private manager notes | perm:`hr.manage_leave` (HR admin) | Private notes — never served to the employee. |

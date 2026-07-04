@@ -719,7 +719,7 @@ More bug fixes (later pass): removing the `DepartmentMember`/`TeamMember` row th
 | `LeaveBalance` | `employee` (FK→WorkspaceMember), `policy` (FK), `year`, `total_days`, `used_days`, `pending_days` | unique: employee+policy+year; indexes: `lb_employee_year_idx` |
 | `LeaveRequest` | `employee` (FK→WorkspaceMember), `policy` (FK), `start_date`, `end_date`, `reason`, `status` (pending/approved/rejected/cancelled), `approver` (FK→User), `reviewer_comment`, `reviewed_at` | indexes: `lr_employee_status_idx`, `leave_request_policy_dates_idx` |
 | `AttendancePolicy` | `workspace` (O2O), `work_start_time`, `work_end_time`, `grace_period_minutes`, `weekly_hours` | One per workspace; auto-created on first access with sensible defaults (09:00–17:00, 15 min grace, 40 h/week) |
-| `Attendance` | `employee` (FK→WorkspaceMember), `date`, `clock_in` (TimeField, nullable), `clock_out` (TimeField, nullable), `source` (manual/qr/api), `notes` | unique: employee+date (one row per employee per day) — this unique index also serves employee + date-range lookups, so no separate index. `clock_out=null` means still clocked in. |
+| `Attendance` | `employee` (FK→WorkspaceMember), `date`, `clock_in` (TimeField, nullable), `clock_out` (TimeField, nullable), `source` (manual/api), `notes` | unique: employee+date (one row per employee per day) — this unique index also serves employee + date-range lookups, so no separate index. `clock_out=null` means still clocked in. |
 | `EmployeeDocument` | `employee` (FK→WorkspaceMember), `doc_type` (contract/id/certificate/other), `file`, `original_name`, `expiry_date` (nullable), `uploaded_by` (FK→User) | files in `employee_docs/`; admin-only access; index: `edoc_employee_idx`; serializer exposes `days_until_expiry` computed field |
 | `EmployeeNote` | `employee` (FK→WorkspaceMember), `author` (FK→User), `content`, `is_private` (default True) | private manager notes; never served to the employee; index: `enot_employee_idx` |
 
@@ -849,8 +849,6 @@ lists and call `core.events.push_inbox_items()`, `.delay()`-ed from views.
 | GET | `/api/workspaces/{ws}/hr/attendance/` | Admin: all employees' records; `?employee=&date_from=&date_to=`. **Bounded window** via `_parse_date_window` — defaults to last 31 days, max span 366 days (`date_to < date_from` or over-span → 400). Returns a plain array (not paginated) so the UI gets a full week/month at once. |
 | GET | `/api/workspaces/{ws}/hr/attendance/my/` | Employee: own records; `?date_from=&date_to=`. Same bounded-window rules as above. |
 | GET | `/api/workspaces/{ws}/hr/attendance/summary/` | Admin: per-employee weekly summary (total_hours, late_count, days_present); `?date_from=&date_to=` defaults to current week |
-| GET | `/api/workspaces/{ws}/hr/attendance/qr/` | Admin: generate daily HMAC-signed QR code; returns `{date, code, qr_url}` |
-| POST | `/attendance/qr/{workspace_id}/{date}/{code}/` | Validate QR code and clock in current user (date must be today) |
 | GET | `/api/workspaces/{ws}/hr/dashboard/` | Admin: headcount stats, leave overview (current month), attendance overview (rolling week), upcoming events (next 30 days) |
 | GET/POST | `/api/workspaces/{ws}/hr/members/{id}/documents/` | Admin: list or upload employee documents. Upload validates size (≤10 MB, `MAX_DOC_SIZE_BYTES`) and `content_type` against `ALLOWED_DOC_CONTENT_TYPES` (PDF, images, Word) → 400 otherwise. |
 | DELETE | `/api/workspaces/{ws}/hr/members/{id}/documents/{doc_id}/` | Admin: delete document (also removes file from storage) |
@@ -859,7 +857,7 @@ lists and call `core.events.push_inbox_items()`, `.delay()`-ed from views.
 
 `AttendanceSerializer` computed fields: `status` (on_time/late/absent — compared against `AttendancePolicy.work_start_time + grace_period_minutes`), `total_hours` (float, null if no clock_out).
 
-Access via `workspaces/access.py` (helpers `_view_ws` / `_self_ws` / `_manage_ws` in `hr/views.py`): reads require `hr.view`; employee self-service (submit leave, clock in/out) requires HR app access + write scope; management gates on `hr.manage_leave` (policies, reviews, dashboard), `hr.manage_attendance` (attendance policy/records/summary/QR), `hr.manage_documents` (employee docs), `hr.manage_notes` (private notes). All enforced with `access.authorize(...)`. See `ACCESS.md`.
+Access via `workspaces/access.py` (helpers `_view_ws` / `_self_ws` / `_manage_ws` in `hr/views.py`): reads require `hr.view`; employee self-service (submit leave, clock in/out) requires HR app access + write scope; management gates on `hr.manage_leave` (policies, reviews, dashboard), `hr.manage_attendance` (attendance policy/records/summary), `hr.manage_documents` (employee docs), `hr.manage_notes` (private notes). All enforced with `access.authorize(...)`. See `ACCESS.md`.
 
 **hr helpers (`hr/views.py`):** `_business_days(start, end)` (Mon–Fri count, inclusive; holidays not modelled); `_parse_date_window(request, default_lookback_days=31, max_span_days=366)` (bounded date-range parser used by attendance lists). Leave balance create/review wrap the balance mutation in `transaction.atomic()` + `select_for_update()`. All "today" logic uses `timezone.localdate()`.
 

@@ -12,8 +12,6 @@ from .views import (
     AttendanceListView,
     MyAttendanceView,
     AttendanceSummaryView,
-    AttendanceQRView,
-    QRClockInView,
     HRDashboardView,
     EmployeeDocumentListCreateView,
     EmployeeDocumentDetailView,
@@ -39,8 +37,6 @@ urlpatterns = [
     path(f"{_ws}/hr/attendance/", AttendanceListView.as_view()),
     path(f"{_ws}/hr/attendance/my/", MyAttendanceView.as_view()),
     path(f"{_ws}/hr/attendance/summary/", AttendanceSummaryView.as_view()),
-    path(f"{_ws}/hr/attendance/qr/", AttendanceQRView.as_view()),
-    path("attendance/qr/<str:workspace_id>/<str:date_str>/<str:code>/", QRClockInView.as_view()),
 
     # Dashboard
     path(f"{_ws}/hr/dashboard/", HRDashboardView.as_view()),

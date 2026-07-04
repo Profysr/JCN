@@ -1,8 +1,5 @@
-import hashlib
-import hmac as hmac_module
 from datetime import date, datetime, timedelta
 
-from django.conf import settings
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import permissions, status
@@ -375,15 +372,6 @@ def _get_attendance_policy(workspace):
     return policy
 
 
-def _make_qr_code(workspace_id, date_str):
-    message = f"{workspace_id}:{date_str}".encode()
-    return hmac_module.new(
-        settings.SECRET_KEY.encode(),
-        message,
-        hashlib.sha256,
-    ).hexdigest()[:32]
-
-
 class AttendancePolicyView(APIView):
     permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
@@ -549,63 +537,6 @@ class AttendanceSummaryView(APIView):
             item["expected_hours"] = policy.weekly_hours
 
         return Response(result)
-
-
-# ── QR Clock-In ───────────────────────────────────────────────────────────────
-
-class AttendanceQRView(APIView):
-    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
-
-    def get(self, request, workspace_id):
-        workspace = _manage_ws(request, workspace_id, "hr.manage_attendance", scope="read")
-
-        today = timezone.localdate()
-        code = _make_qr_code(str(workspace_id), str(today))
-
-        return Response({
-            "date": str(today),
-            "code": code,
-            "qr_url": f"/attendance/qr/{workspace_id}/{today}/{code}/",
-        })
-
-
-class QRClockInView(APIView):
-    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
-
-    def post(self, request, workspace_id, date_str, code):
-        expected_code = _make_qr_code(str(workspace_id), date_str)
-        if not hmac_module.compare_digest(code, expected_code):
-            raise ValidationError({"non_field_errors": "Invalid or expired QR code."})
-
-        try:
-            qr_date = date.fromisoformat(date_str)
-        except ValueError:
-            raise ValidationError({"non_field_errors": "Invalid date in QR code."})
-
-        if qr_date != timezone.localdate():
-            raise ValidationError({"non_field_errors": "This QR code has expired."})
-
-        workspace = _self_ws(request, workspace_id)
-        member = _get_member(workspace, request.user)
-
-        now_time = timezone.localtime().time().replace(second=0, microsecond=0)
-
-        record, created = Attendance.objects.get_or_create(
-            employee=member,
-            date=qr_date,
-            defaults={"clock_in": now_time, "source": Attendance.Source.QR},
-        )
-
-        if not created and record.clock_in:
-            raise ValidationError({"non_field_errors": "Already clocked in today."})
-
-        if not created:
-            record.clock_in = now_time
-            record.source = Attendance.Source.QR
-            record.save(update_fields=["clock_in", "source"])
-
-        policy = _get_attendance_policy(workspace)
-        return Response(AttendanceSerializer(record, context={"policy": policy}).data)
 
 
 # ── HR Dashboard ───────────────────────────────────────────────────────────────
