@@ -17,14 +17,13 @@ from ..serializers import (
 from ..permissions import (
     has_project_permission,
     BOARD_ROLE_PERMISSIONS,
-    log_audit,
-    bulk_log_audit,
     _is_workspace_admin,
     _require_board_admin,
     _require_board_perm,
 )
 
 from workspaces.access import has_app_access, APIKeyScopePermission
+from workspaces.audit import log_audit, bulk_log_audit
 from core.events import broadcast
 
 from .helpers import get_workspace_for_user

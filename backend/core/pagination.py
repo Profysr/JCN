@@ -36,6 +36,13 @@ class AnalyticsPagination(PageNumberPagination):
     max_page_size = 100
 
 
+class OrgListPagination(PageNumberPagination):
+    """Page-based pagination for org structure list endpoints (departments, teams, reporting lines)."""
+    page_size = 50
+    page_size_query_param = "size"
+    max_page_size = 100
+
+
 class TaskDrilldownPagination(CursorPagination):
     """
     Keyset (cursor) pagination for the analytics task drill-down.

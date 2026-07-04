@@ -75,10 +75,44 @@ class DepartmentSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Not a department in this workspace.")
         return value
 
+    def validate(self, attrs):
+        parent_id = attrs.get("parent_id")
+        if parent_id is None:
+            return attrs
+        workspace = self.context.get("workspace") or (self.instance.workspace if self.instance else None)
+        own_id = self.instance.id if self.instance else None
+        if own_id is not None and parent_id == own_id:
+            raise serializers.ValidationError({"parent_id": "A department cannot be its own parent."})
+        # Walk up the candidate parent's ancestor chain — if we hit `own_id`,
+        # setting this parent would close a cycle (mirrors ReportingLineSerializer.validate).
+        current = parent_id
+        seen = set()
+        while current is not None and current not in seen:
+            seen.add(current)
+            if current == own_id:
+                raise serializers.ValidationError({"parent_id": "This would create a circular department hierarchy."})
+            current = (
+                Department.objects.filter(workspace=workspace, id=current)
+                .values_list("parent_id", flat=True)
+                .first()
+            )
+        return attrs
+
     def create(self, validated_data):
         validated_data["workspace"] = self.context["workspace"]
         validated_data["created_by"] = self.context["request"].user
-        return super().create(validated_data)
+        head_id = validated_data.get("head_id")
+        dept = super().create(validated_data)
+        if head_id:
+            DepartmentMember.objects.get_or_create(department=dept, member_id=head_id)
+        return dept
+
+    def update(self, instance, validated_data):
+        head_id = validated_data.get("head_id", "__unset__")
+        dept = super().update(instance, validated_data)
+        if head_id not in (None, "__unset__"):
+            DepartmentMember.objects.get_or_create(department=dept, member_id=head_id)
+        return dept
 
 
 class DepartmentMemberSerializer(serializers.ModelSerializer):
@@ -156,7 +190,18 @@ class TeamSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data["workspace"] = self.context["workspace"]
         validated_data["created_by"] = self.context["request"].user
-        return super().create(validated_data)
+        lead_id = validated_data.get("lead_id")
+        team = super().create(validated_data)
+        if lead_id:
+            TeamMember.objects.get_or_create(team=team, member_id=lead_id)
+        return team
+
+    def update(self, instance, validated_data):
+        lead_id = validated_data.get("lead_id", "__unset__")
+        team = super().update(instance, validated_data)
+        if lead_id not in (None, "__unset__"):
+            TeamMember.objects.get_or_create(team=team, member_id=lead_id)
+        return team
 
 
 class TeamMemberSerializer(serializers.ModelSerializer):

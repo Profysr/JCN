@@ -432,3 +432,35 @@ class RoleAssignment(models.Model):
     def __str__(self):
         return f"{self.workspace_member} → {self.role.name}"
 
+
+class AuditEvent(models.Model):
+    """Immutable log of permission-related and structural changes, workspace-wide."""
+
+    PREFIX = "aud"
+    id = UUIDv7Field()
+    workspace = models.ForeignKey(
+        Workspace, on_delete=models.CASCADE, related_name="audit_events"
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="audit_events",
+    )
+    action = models.CharField(max_length=64)
+    resource_type = models.CharField(max_length=64)
+    resource_id = models.CharField(max_length=100)
+    before = models.JSONField(default=dict)
+    after = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-id"]
+        indexes = [
+            models.Index(fields=["workspace", "created_at"], name="ae_workspace_created_idx"),
+            models.Index(fields=["workspace", "resource_type"], name="ae_workspace_restype_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.actor} — {self.action} at {self.created_at}"
+

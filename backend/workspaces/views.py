@@ -783,7 +783,7 @@ class CustomRoleListCreateView(APIView):
 
     def post(self, request, workspace_id):
         from .serializers import CustomRoleSerializer
-        from projects.permissions import log_audit
+        from .audit import log_audit
 
         workspace = _get_workspace(workspace_id, request.user)
         _require_admin(workspace, request.user)
@@ -826,7 +826,7 @@ class CustomRoleDetailView(APIView):
 
     def patch(self, request, workspace_id, role_id):
         from .serializers import CustomRoleSerializer
-        from projects.permissions import log_audit
+        from .audit import log_audit
 
         role, workspace = self._get_role(workspace_id, role_id, request.user)
         _require_admin(workspace, request.user)
@@ -847,7 +847,7 @@ class CustomRoleDetailView(APIView):
         return Response(serializer.data)
 
     def delete(self, request, workspace_id, role_id):
-        from projects.permissions import log_audit
+        from .audit import log_audit
 
         role, workspace = self._get_role(workspace_id, role_id, request.user)
         _require_admin(workspace, request.user)
@@ -917,7 +917,7 @@ class MemberAssignRoleView(APIView):
             defaults={"role": role, "assigned_by": request.user},
         )
 
-        from projects.permissions import log_audit
+        from .audit import log_audit
 
         log_audit(
             request.user,
@@ -951,7 +951,7 @@ class MemberBulkAssignRoleView(APIView):
 
     def post(self, request, workspace_id):
         from .models import RoleAssignment
-        from projects.permissions import log_audit
+        from .audit import log_audit
         from django.db import transaction
 
         workspace = _get_workspace(workspace_id, request.user)

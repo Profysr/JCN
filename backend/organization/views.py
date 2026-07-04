@@ -7,8 +7,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from workspaces import access
+from workspaces.audit import log_audit
 from workspaces.models import WorkspaceMember
 from core.events import broadcast
+from core.pagination import OrgListPagination
 from .models import (
     Department,
     DepartmentMember,
@@ -101,6 +103,7 @@ def _finalize_profile_approval(profile, approver):
 # ── Departments ───────────────────────────────────────────────────────────────
 class DepartmentListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
+    pagination_class = OrgListPagination
 
     def get(self, request, workspace_id):
         workspace = _read_ws(request, workspace_id)
@@ -110,7 +113,9 @@ class DepartmentListCreateView(APIView):
             .prefetch_related("memberships")
             .order_by("id")
         )
-        return Response(DepartmentSerializer(depts, many=True).data)
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(depts, request, view=self)
+        return paginator.get_paginated_response(DepartmentSerializer(page, many=True).data)
 
     def post(self, request, workspace_id):
         workspace = _manage_ws(request, workspace_id)
@@ -118,7 +123,8 @@ class DepartmentListCreateView(APIView):
             data=request.data, context={"request": request, "workspace": workspace}
         )
         ser.is_valid(raise_exception=True)
-        ser.save()
+        dept = ser.save()
+        log_audit(request.user, workspace, "department.created", "Department", dept.id, after=ser.data)
         broadcast(str(workspace.id), "org.department.created", ser.data)
         return Response(ser.data, status=status.HTTP_201_CREATED)
 
@@ -136,6 +142,7 @@ class DepartmentDetailView(APIView):
     def patch(self, request, workspace_id, dept_id):
         workspace = _manage_ws(request, workspace_id)
         dept = get_object_or_404(Department, id=dept_id, workspace=workspace)
+        before = DepartmentSerializer(dept).data
         ser = DepartmentSerializer(
             dept,
             data=request.data,
@@ -144,6 +151,7 @@ class DepartmentDetailView(APIView):
         )
         ser.is_valid(raise_exception=True)
         ser.save()
+        log_audit(request.user, workspace, "department.updated", "Department", dept.id, before=before, after=ser.data)
         broadcast(str(workspace.id), "org.department.updated", ser.data)
         return Response(ser.data)
 
@@ -151,7 +159,9 @@ class DepartmentDetailView(APIView):
         workspace = _manage_ws(request, workspace_id)
         dept = get_object_or_404(Department, id=dept_id, workspace=workspace)
         dept_id_str = str(dept.id)
+        before = DepartmentSerializer(dept).data
         dept.delete()
+        log_audit(request.user, workspace, "department.deleted", "Department", dept_id_str, before=before)
         broadcast(str(workspace.id), "org.department.deleted", {"id": dept_id_str})
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -178,7 +188,11 @@ class DepartmentMemberListCreateView(APIView):
             data=request.data, context={"request": request, "department": dept}
         )
         ser.is_valid(raise_exception=True)
-        ser.save()
+        membership = ser.save()
+        log_audit(
+            request.user, workspace, "department_member.added", "Department", dept.id,
+            after={"member_id": str(membership.member_id)},
+        )
         broadcast(
             str(workspace.id), "org.department_member.added",
             {"department_id": str(dept.id), **ser.data},
@@ -195,7 +209,15 @@ class DepartmentMemberDetailView(APIView):
         membership = get_object_or_404(
             DepartmentMember, id=membership_id, department=dept
         )
+        member_id = membership.member_id
         membership.delete()
+        if dept.head_id == membership.member_id:
+            dept.head = None
+            dept.save(update_fields=["head"])
+        log_audit(
+            request.user, workspace, "department_member.removed", "Department", dept.id,
+            before={"member_id": str(member_id)},
+        )
         broadcast(
             str(workspace.id), "org.department_member.removed",
             {"department_id": str(dept.id), "id": str(membership_id)},
@@ -206,6 +228,7 @@ class DepartmentMemberDetailView(APIView):
 # ── Teams ─────────────────────────────────────────────────────────────────────
 class TeamListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
+    pagination_class = OrgListPagination
 
     def get(self, request, workspace_id):
         workspace = _read_ws(request, workspace_id)
@@ -215,7 +238,9 @@ class TeamListCreateView(APIView):
             .prefetch_related("memberships")
             .order_by("id")
         )
-        return Response(TeamSerializer(teams, many=True).data)
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(teams, request, view=self)
+        return paginator.get_paginated_response(TeamSerializer(page, many=True).data)
 
     def post(self, request, workspace_id):
         workspace = _manage_ws(request, workspace_id)
@@ -223,7 +248,8 @@ class TeamListCreateView(APIView):
             data=request.data, context={"request": request, "workspace": workspace}
         )
         ser.is_valid(raise_exception=True)
-        ser.save()
+        team = ser.save()
+        log_audit(request.user, workspace, "team.created", "Team", team.id, after=ser.data)
         broadcast(str(workspace.id), "org.team.created", ser.data)
         return Response(ser.data, status=status.HTTP_201_CREATED)
 
@@ -242,6 +268,7 @@ class TeamDetailView(APIView):
     def patch(self, request, workspace_id, team_id):
         workspace = _manage_ws(request, workspace_id)
         team = get_object_or_404(Team, id=team_id, workspace=workspace)
+        before = TeamSerializer(team).data
         ser = TeamSerializer(
             team,
             data=request.data,
@@ -250,6 +277,7 @@ class TeamDetailView(APIView):
         )
         ser.is_valid(raise_exception=True)
         ser.save()
+        log_audit(request.user, workspace, "team.updated", "Team", team.id, before=before, after=ser.data)
         broadcast(str(workspace.id), "org.team.updated", ser.data)
         return Response(ser.data)
 
@@ -257,7 +285,9 @@ class TeamDetailView(APIView):
         workspace = _manage_ws(request, workspace_id)
         team = get_object_or_404(Team, id=team_id, workspace=workspace)
         team_id_str = str(team.id)
+        before = TeamSerializer(team).data
         team.delete()
+        log_audit(request.user, workspace, "team.deleted", "Team", team_id_str, before=before)
         broadcast(str(workspace.id), "org.team.deleted", {"id": team_id_str})
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -282,7 +312,11 @@ class TeamMemberListCreateView(APIView):
             data=request.data, context={"request": request, "team": team}
         )
         ser.is_valid(raise_exception=True)
-        ser.save()
+        membership = ser.save()
+        log_audit(
+            request.user, workspace, "team_member.added", "Team", team.id,
+            after={"member_id": str(membership.member_id)},
+        )
         broadcast(
             str(workspace.id), "org.team_member.added",
             {"team_id": str(team.id), **ser.data},
@@ -296,7 +330,15 @@ class TeamMemberDetailView(APIView):
         workspace = _manage_ws(request, workspace_id)
         team = get_object_or_404(Team, id=team_id, workspace=workspace)
         membership = get_object_or_404(TeamMember, id=membership_id, team=team)
+        member_id = membership.member_id
         membership.delete()
+        if team.lead_id == membership.member_id:
+            team.lead = None
+            team.save(update_fields=["lead"])
+        log_audit(
+            request.user, workspace, "team_member.removed", "Team", team.id,
+            before={"member_id": str(member_id)},
+        )
         broadcast(
             str(workspace.id), "org.team_member.removed",
             {"team_id": str(team.id), "id": str(membership_id)},
@@ -385,6 +427,7 @@ class OrgProfileView(APIView):
 # ── Reporting Lines ───────────────────────────────────────────────────────────
 class ReportingLineListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
+    pagination_class = OrgListPagination
 
     # Not called by the frontend — OrgChartView already returns manager_id and
     # reporting_line_id per node, which is the only place the UI needs this data.
@@ -396,7 +439,9 @@ class ReportingLineListCreateView(APIView):
             .select_related("manager", "manager__user", "report", "report__user")
             .order_by("id")
         )
-        return Response(ReportingLineSerializer(lines, many=True).data)
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(lines, request, view=self)
+        return paginator.get_paginated_response(ReportingLineSerializer(page, many=True).data)
 
     def post(self, request, workspace_id):
         workspace = _manage_ws(request, workspace_id)
@@ -404,7 +449,8 @@ class ReportingLineListCreateView(APIView):
             data=request.data, context={"request": request, "workspace": workspace}
         )
         ser.is_valid(raise_exception=True)
-        ser.save()
+        line = ser.save()
+        log_audit(request.user, workspace, "reporting_line.created", "ReportingLine", line.id, after=ser.data)
         broadcast(str(workspace.id), "org.reporting_line.created", ser.data)
         return Response(ser.data, status=status.HTTP_201_CREATED)
 
@@ -416,7 +462,9 @@ class ReportingLineDetailView(APIView):
         workspace = _manage_ws(request, workspace_id)
         line = get_object_or_404(ReportingLine, id=line_id, workspace=workspace)
         line_id_str = str(line.id)
+        before = {"manager_id": str(line.manager_id), "report_id": str(line.report_id)}
         line.delete()
+        log_audit(request.user, workspace, "reporting_line.deleted", "ReportingLine", line_id_str, before=before)
         broadcast(str(workspace.id), "org.reporting_line.deleted", {"id": line_id_str})
         return Response(status=status.HTTP_204_NO_CONTENT)
 
