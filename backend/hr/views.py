@@ -1,3 +1,4 @@
+import math
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
@@ -128,6 +129,54 @@ def _parse_date_window(request, default_lookback_days=31, max_span_days=366):
     if (date_to - date_from).days > max_span_days:
         raise ValidationError({"non_field_errors": f"Date range too large (max {max_span_days} days)."})
     return date_from, date_to
+
+
+def _client_ip(request):
+    """Server-side IP capture — never trust a client-supplied IP field.
+    X-Forwarded-For's first hop is the original client when behind a proxy/LB.
+    """
+    forwarded = request.META.get("HTTP_X_FORWARDED_FOR")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.META.get("REMOTE_ADDR")
+
+
+def _distance_meters(lat1, lng1, lat2, lng2):
+    """Haversine distance in meters between two lat/lng points."""
+    r = 6371000
+    p1, p2 = math.radians(float(lat1)), math.radians(float(lat2))
+    dp = math.radians(float(lat2) - float(lat1))
+    dl = math.radians(float(lng2) - float(lng1))
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return r * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def _check_geofence(workspace, member, latitude, longitude):
+    """Return True if the submitted coords fall outside the configured geofence.
+    Returns False (not flagged) if geofencing is off or coords are missing on
+    either side — this never blocks a clock-in/out, only flags it for HR."""
+    if latitude is None or longitude is None:
+        return False
+    policy = _get_attendance_policy(workspace)
+    if not policy.geofence_enabled:
+        return False
+    org_profile = getattr(member, "org_profile", None)
+    if not org_profile or org_profile.work_latitude is None or org_profile.work_longitude is None:
+        return False
+    distance = _distance_meters(latitude, longitude, org_profile.work_latitude, org_profile.work_longitude)
+    return distance > policy.geofence_radius_meters
+
+
+def _notify_geofence_breach(workspace, member):
+    for admin_member in access.workspace_admins(workspace):
+        if admin_member.user != member.user:
+            notify(
+                recipient=admin_member.user,
+                actor=member.user,
+                verb="attendance.geofence_flagged",
+                workspace=workspace,
+                task=None,
+            )
 
 
 # ── Leave Policies ─────────────────────────────────────────────────────────────
@@ -481,11 +530,22 @@ class ClockInView(APIView):
 
         today = timezone.localdate()
         now_time = timezone.localtime().time().replace(second=0, microsecond=0)
+        latitude = request.data.get("latitude")
+        longitude = request.data.get("longitude")
+        ip = _client_ip(request)
+        outside_geofence = _check_geofence(workspace, member, latitude, longitude)
 
         record, created = Attendance.objects.get_or_create(
             employee=member,
             date=today,
-            defaults={"clock_in": now_time, "source": Attendance.Source.MANUAL},
+            defaults={
+                "clock_in": now_time,
+                "source": Attendance.Source.MANUAL,
+                "clock_in_latitude": latitude,
+                "clock_in_longitude": longitude,
+                "clock_in_ip": ip,
+                "clock_in_outside_geofence": outside_geofence,
+            },
         )
 
         if not created and record.clock_in:
@@ -494,7 +554,17 @@ class ClockInView(APIView):
         if not created:
             record.clock_in = now_time
             record.source = Attendance.Source.MANUAL
-            record.save(update_fields=["clock_in", "source"])
+            record.clock_in_latitude = latitude
+            record.clock_in_longitude = longitude
+            record.clock_in_ip = ip
+            record.clock_in_outside_geofence = outside_geofence
+            record.save(update_fields=[
+                "clock_in", "source", "clock_in_latitude", "clock_in_longitude",
+                "clock_in_ip", "clock_in_outside_geofence",
+            ])
+
+        if outside_geofence:
+            _notify_geofence_breach(workspace, member)
 
         policy = _get_attendance_policy(workspace)
         return Response(AttendanceSerializer(record, context={"policy": policy}).data)
@@ -520,8 +590,22 @@ class ClockOutView(APIView):
         if record.clock_out:
             raise ValidationError({"non_field_errors": "Already clocked out today."})
 
+        latitude = request.data.get("latitude")
+        longitude = request.data.get("longitude")
+        outside_geofence = _check_geofence(workspace, member, latitude, longitude)
+
         record.clock_out = now_time
-        record.save(update_fields=["clock_out"])
+        record.clock_out_latitude = latitude
+        record.clock_out_longitude = longitude
+        record.clock_out_ip = _client_ip(request)
+        record.clock_out_outside_geofence = outside_geofence
+        record.save(update_fields=[
+            "clock_out", "clock_out_latitude", "clock_out_longitude",
+            "clock_out_ip", "clock_out_outside_geofence",
+        ])
+
+        if outside_geofence:
+            _notify_geofence_breach(workspace, member)
 
         policy = _get_attendance_policy(workspace)
         return Response(AttendanceSerializer(record, context={"policy": policy}).data)
@@ -583,6 +667,10 @@ class AttendanceSummaryView(APIView):
         policy = _get_attendance_policy(workspace)
         grace = timedelta(minutes=policy.grace_period_minutes)
         work_start = policy.work_start_time
+        daily_expected_hours = (
+            datetime.combine(date.today(), policy.work_end_time)
+            - datetime.combine(date.today(), policy.work_start_time)
+        ).total_seconds() / 3600
 
         records = Attendance.objects.select_related("employee__user").filter(
             employee__workspace=workspace,
@@ -596,17 +684,23 @@ class AttendanceSummaryView(APIView):
                 summary[emp_id] = {
                     "employee": MiniMemberSerializer(rec.employee).data,
                     "total_hours": 0.0,
+                    "overtime_hours": 0.0,
                     "late_count": 0,
                     "days_present": 0,
+                    "geofence_flags": 0,
                 }
             entry = summary[emp_id]
+            if rec.clock_in_outside_geofence or rec.clock_out_outside_geofence:
+                entry["geofence_flags"] += 1
             if rec.clock_in:
                 entry["days_present"] += 1
                 if rec.clock_out:
                     cin = datetime.combine(rec.date, rec.clock_in)
                     cout = datetime.combine(rec.date, rec.clock_out)
                     if cout > cin:
-                        entry["total_hours"] += (cout - cin).total_seconds() / 3600
+                        day_hours = (cout - cin).total_seconds() / 3600
+                        entry["total_hours"] += day_hours
+                        entry["overtime_hours"] += max(0.0, day_hours - daily_expected_hours)
                 actual_dt = datetime.combine(rec.date, rec.clock_in)
                 expected_dt = datetime.combine(rec.date, work_start)
                 if actual_dt > expected_dt + grace:
@@ -615,6 +709,7 @@ class AttendanceSummaryView(APIView):
         result = list(summary.values())
         for item in result:
             item["total_hours"] = round(item["total_hours"], 2)
+            item["overtime_hours"] = round(item["overtime_hours"], 2)
             item["expected_hours"] = policy.weekly_hours
 
         return Response(result)

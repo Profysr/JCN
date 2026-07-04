@@ -218,6 +218,11 @@ class AttendancePolicy(models.Model):
     work_end_time = models.TimeField(default="17:00")
     grace_period_minutes = models.PositiveSmallIntegerField(default=15)
     weekly_hours = models.PositiveSmallIntegerField(default=40)
+    # Off by default — an admin opts in once employees have work_latitude/longitude
+    # set on their OrgProfile (see organization.models.OrgProfile). Flags out-of-range
+    # clock-ins/outs for HR review; never blocks the clock-in itself.
+    geofence_enabled = models.BooleanField(default=False)
+    geofence_radius_meters = models.PositiveIntegerField(default=500)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -241,6 +246,23 @@ class Attendance(models.Model):
     clock_out = models.TimeField(null=True, blank=True)
     source = models.CharField(max_length=10, choices=Source.choices, default=Source.MANUAL)
     notes = models.TextField(blank=True)
+    # Captured from the browser's Geolocation API at clock-in/out time; null if the
+    # employee didn't grant location permission. IPs are captured server-side from
+    # the request, never client-supplied.
+    clock_in_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    clock_in_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    clock_in_ip = models.GenericIPAddressField(null=True, blank=True)
+    clock_out_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    clock_out_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    clock_out_ip = models.GenericIPAddressField(null=True, blank=True)
+    # Set when AttendancePolicy.geofence_enabled and the submitted coords fall
+    # outside geofence_radius_meters of the employee's OrgProfile location.
+    # Flag only, surfaced to HR — clock-in/out is never blocked on this.
+    clock_in_outside_geofence = models.BooleanField(default=False)
+    clock_out_outside_geofence = models.BooleanField(default=False)
+    # Dedup marker for hr.tasks.flag_missed_clock_outs — same pattern as
+    # EmployeeDocument.expiry_notified_at.
+    missed_clock_out_notified_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

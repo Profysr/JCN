@@ -2,6 +2,7 @@ from rest_framework import serializers
 
 from accounts.serializers import MiniUserSerializer
 from workspaces.models import WorkspaceMember
+from .geo import parse_maps_url
 from .models import Department, DepartmentMember, JobTitle, OrgProfile, ReportingLine, Team, TeamMember
 
 
@@ -264,6 +265,7 @@ class OrgProfileSerializer(serializers.ModelSerializer):
             "id", "member",
             "job_title", "job_title_id", "employment_type",
             "employee_id", "start_date", "location", "bio",
+            "work_location_url", "work_latitude", "work_longitude",
             "status", "submitted_at", "approved_at", "approved_by",
             "departments", "teams", "manager", "direct_reports_count",
             "updated_at",
@@ -271,7 +273,29 @@ class OrgProfileSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "id", "member", "status", "submitted_at", "approved_at", "approved_by",
             "updated_at", "departments", "teams", "manager", "direct_reports_count",
+            "work_latitude", "work_longitude",
         ]
+
+    def validate_work_location_url(self, value):
+        if not value:
+            return value
+        coords = parse_maps_url(value)
+        if not coords:
+            raise serializers.ValidationError(
+                "Couldn't read coordinates from this Google Maps link. "
+                "Paste a link that includes a pinned location (e.g. from the map's Share button)."
+            )
+        self._parsed_coords = coords
+        return value
+
+    def save(self, **kwargs):
+        coords = getattr(self, "_parsed_coords", None)
+        if coords:
+            self.validated_data["work_latitude"], self.validated_data["work_longitude"] = coords
+        elif "work_location_url" in self.validated_data and not self.validated_data["work_location_url"]:
+            self.validated_data["work_latitude"] = None
+            self.validated_data["work_longitude"] = None
+        return super().save(**kwargs)
 
     def validate_job_title_id(self, value):
         if value is None or self.instance is None:

@@ -89,7 +89,8 @@ class AttendancePolicySerializer(serializers.ModelSerializer):
         model = AttendancePolicy
         fields = [
             "id", "work_start_time", "work_end_time",
-            "grace_period_minutes", "weekly_hours", "updated_at",
+            "grace_period_minutes", "weekly_hours",
+            "geofence_enabled", "geofence_radius_meters", "updated_at",
         ]
         read_only_fields = ["id", "updated_at"]
 
@@ -99,14 +100,22 @@ class AttendanceSerializer(serializers.ModelSerializer):
     employee = MiniMemberSerializer(read_only=True)
     status = serializers.SerializerMethodField()
     total_hours = serializers.SerializerMethodField()
+    overtime_hours = serializers.SerializerMethodField()
 
     class Meta:
         model = Attendance
         fields = [
             "id", "employee", "date", "clock_in", "clock_out",
-            "source", "notes", "status", "total_hours", "created_at", "updated_at",
+            "clock_in_latitude", "clock_in_longitude", "clock_in_ip", "clock_in_outside_geofence",
+            "clock_out_latitude", "clock_out_longitude", "clock_out_ip", "clock_out_outside_geofence",
+            "source", "notes", "status", "total_hours", "overtime_hours", "created_at", "updated_at",
         ]
-        read_only_fields = ["id", "employee", "status", "total_hours", "created_at", "updated_at"]
+        read_only_fields = [
+            "id", "employee", "status", "total_hours", "overtime_hours",
+            "clock_in_latitude", "clock_in_longitude", "clock_in_ip", "clock_in_outside_geofence",
+            "clock_out_latitude", "clock_out_longitude", "clock_out_ip", "clock_out_outside_geofence",
+            "created_at", "updated_at",
+        ]
 
     def get_status(self, obj):
         if not obj.clock_in:
@@ -127,6 +136,14 @@ class AttendanceSerializer(serializers.ModelSerializer):
             if cout > cin:
                 return round((cout - cin).total_seconds() / 3600, 2)
         return None
+
+    def get_overtime_hours(self, obj):
+        total_hours = self.get_total_hours(obj)
+        policy = self.context.get("policy")
+        if total_hours is None or not policy:
+            return None
+        expected = datetime.combine(obj.date, policy.work_end_time) - datetime.combine(obj.date, policy.work_start_time)
+        return round(max(0.0, total_hours - expected.total_seconds() / 3600), 2)
 
 
 class EmployeeDocumentSerializer(serializers.ModelSerializer):

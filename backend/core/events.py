@@ -120,6 +120,8 @@ NOTIFICATION_VERBS = {
     "leave.rejected":  {"event_type": "assigned", "label": "❌ Leave Rejected"},
     "leave.carried_over": {"event_type": "hr", "label": "🔁 Leave Carried Over"},
     "document_expiring": {"event_type": "hr", "label": "📄 Document Expiring"},
+    "attendance.geofence_flagged": {"event_type": "hr", "label": "📍 Clock-in Outside Geofence"},
+    "attendance.missed_clock_out": {"event_type": "hr", "label": "⏰ Missed Clock-out"},
 }
 
 

@@ -24,4 +24,8 @@ app.conf.beat_schedule = {
         "task": "hr.tasks.apply_leave_carry_over",
         "schedule": crontab(month_of_year=1, day_of_month=1, hour=0, minute=30),
     },
+    "flag-missed-clock-outs-daily": {
+        "task": "hr.tasks.flag_missed_clock_outs",
+        "schedule": crontab(hour=1, minute=0),
+    },
 }

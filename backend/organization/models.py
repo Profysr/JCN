@@ -149,6 +149,12 @@ class OrgProfile(models.Model):
     employee_id = models.CharField(max_length=50, blank=True)
     start_date = models.DateField(null=True, blank=True)
     location = models.CharField(max_length=100, blank=True)
+    # Google Maps share link pasted by the employee/HR. work_latitude/longitude are
+    # parsed out of it on save (see organization.geo.parse_maps_url) so attendance
+    # geofencing (hr.models.Attendance) doesn't need to re-parse a URL per check.
+    work_location_url = models.URLField(max_length=500, blank=True)
+    work_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    work_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     bio = models.TextField(blank=True)
     status = models.CharField(
         max_length=20,

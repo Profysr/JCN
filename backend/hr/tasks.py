@@ -14,7 +14,7 @@ from django.utils import timezone
 from core.events import push_inbox_items
 from workspaces import access
 
-from .models import EmployeeDocument, LeaveBalance
+from .models import Attendance, EmployeeDocument, LeaveBalance
 
 logger = logging.getLogger(__name__)
 
@@ -130,3 +130,54 @@ def apply_leave_carry_over(self):
             }])
 
     return processed
+
+
+@shared_task(bind=True, max_retries=2, default_retry_delay=60)
+def flag_missed_clock_outs(self):
+    """Flag HR (workspace admins) about attendance records with a clock-in but no
+    clock-out from the prior day — likely someone forgot to clock out, not
+    an actual absence. Never auto-fills clock_out; HR follows up manually.
+
+    Only looks at yesterday's records (this runs once daily, shortly after
+    midnight) and dedupes via `missed_clock_out_notified_at`, same pattern as
+    `EmployeeDocument.expiry_notified_at`.
+    """
+    yesterday = timezone.localdate() - timedelta(days=1)
+    records = Attendance.objects.filter(
+        date=yesterday,
+        clock_in__isnull=False,
+        clock_out__isnull=True,
+        missed_clock_out_notified_at__isnull=True,
+    ).select_related("employee", "employee__user", "employee__workspace")
+
+    notified_ids = []
+    for rec in records:
+        workspace = rec.employee.workspace
+        employee_name = rec.employee.user.full_name or rec.employee.user.email
+        admin_members = access.workspace_admins(workspace)
+        if admin_members:
+            push_inbox_items([
+                {
+                    "user": m.user,
+                    "workspace": workspace,
+                    "actor_id": "",
+                    "actor_name": workspace.name,
+                    "verb": "attendance.missed_clock_out",
+                    "resource_name": employee_name,
+                    "meta": {
+                        "attendance_id": str(rec.id),
+                        "employee_id": str(rec.employee_id),
+                        "employee_name": employee_name,
+                        "date": str(rec.date),
+                        "clock_in": str(rec.clock_in),
+                    },
+                }
+                for m in admin_members
+            ])
+        notified_ids.append(rec.id)
+
+    if notified_ids:
+        Attendance.objects.filter(id__in=notified_ids).update(
+            missed_clock_out_notified_at=timezone.now()
+        )
+    return len(notified_ids)
