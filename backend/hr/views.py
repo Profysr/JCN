@@ -1,6 +1,5 @@
 import math
 from datetime import date, datetime, timedelta
-from decimal import Decimal
 
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -19,33 +18,26 @@ from .models import Attendance, AttendancePolicy, EmployeeDocument, EmployeeNote
 from .serializers import (
     AttendancePolicySerializer,
     AttendanceSerializer,
+    ClockCoordinatesSerializer,
     EmployeeDocumentSerializer,
     EmployeeNoteSerializer,
     HolidaySerializer,
     LeaveBalanceSerializer,
     LeavePolicySerializer,
+    LeaveRequestCreateSerializer,
     LeaveRequestReviewSerializer,
     LeaveRequestSerializer,
     MiniMemberSerializer,
+    WhosOffSerializer,
 )
-
-# Employee document upload constraints (basic first-line validation; content_type is
-# client-supplied so it's a guard, not a guarantee).
-ALLOWED_DOC_CONTENT_TYPES = {
-    "application/pdf",
-    "image/png",
-    "image/jpeg",
-    "image/gif",
-    "image/webp",
-    "application/msword",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-}
-MAX_DOC_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
 
 # ── Shared utilities ──────────────────────────────────────────────────────────
 
 def _get_member(workspace, user):
-    return get_object_or_404(WorkspaceMember, workspace=workspace, user=user, is_active=True)
+    return get_object_or_404(
+        WorkspaceMember.objects.select_related("role_assignment__role"),
+        workspace=workspace, user=user, is_active=True,
+    )
 
 
 # All access resolution lives in workspaces/access.py (see backend/ACCESS.md).
@@ -64,45 +56,6 @@ def _self_ws(request, workspace_id):
 def _manage_ws(request, workspace_id, perm, scope="write"):
     """HR management action gated on a specific fine-grained permission."""
     return access.authorize(request, workspace_id, perm=perm, scope=scope)
-
-
-def _holiday_dates_in_range(workspace, start, end):
-    """Expand Holiday rows (including recurring ones) into concrete dates within
-    [start, end]. Recurring holidays are stored once and matched by month/day in
-    any year they fall within the range.
-    """
-    dates = set()
-    for h in Holiday.objects.filter(workspace=workspace):
-        if h.is_recurring:
-            for year in range(start.year, end.year + 1):
-                try:
-                    occ = h.date.replace(year=year)
-                except ValueError:
-                    continue  # e.g. a Feb 29 holiday in a non-leap year
-                if start <= occ <= end:
-                    dates.add(occ)
-        elif start <= h.date <= end:
-            dates.add(h.date)
-    return dates
-
-
-def _leave_days(workspace, start, end, start_day_part=LeaveRequest.DayPart.FULL, end_day_part=LeaveRequest.DayPart.FULL):
-    """Business days in an inclusive date range, excluding weekends and workspace
-    holidays, with a half-day (0.5) adjustment on the start/end date when
-    requested. Returns a Decimal.
-    """
-    holidays = _holiday_dates_in_range(workspace, start, end)
-    total = Decimal("0")
-    for i in range((end - start).days + 1):
-        d = start + timedelta(days=i)
-        if d.weekday() >= 5 or d in holidays:
-            continue
-        is_half = (
-            (d == start and start_day_part != LeaveRequest.DayPart.FULL)
-            or (d == end and end_day_part != LeaveRequest.DayPart.FULL)
-        )
-        total += Decimal("0.5") if is_half else Decimal("1")
-    return total
 
 
 def _parse_date_window(request, default_lookback_days=31, max_span_days=366):
@@ -225,7 +178,7 @@ class HolidayListCreateView(APIView):
 
     def get(self, request, workspace_id):
         workspace = _view_ws(request, workspace_id)
-        holidays = Holiday.objects.filter(workspace=workspace)
+        holidays = Holiday.objects.filter(workspace=workspace).select_related("created_by")
         return Response(HolidaySerializer(holidays, many=True).data)
 
     def post(self, request, workspace_id):
@@ -267,7 +220,7 @@ class LeaveRequestListCreateView(APIView):
         member = _get_member(workspace, request.user)
 
         qs = LeaveRequest.objects.select_related(
-            "employee__user", "policy", "approver"
+            "employee__user", "employee__role_assignment__role", "policy", "approver"
         ).filter(employee__workspace=workspace)
 
         # Leave managers see every request; everyone else sees only their own.
@@ -290,33 +243,16 @@ class LeaveRequestListCreateView(APIView):
         workspace = _self_ws(request, workspace_id)
         member = _get_member(workspace, request.user)
 
-        serializer = LeaveRequestSerializer(data=request.data)
+        serializer = LeaveRequestCreateSerializer(data=request.data, context={"workspace": workspace})
         serializer.is_valid(raise_exception=True)
-
-        policy = get_object_or_404(
-            LeavePolicy,
-            id=serializer.validated_data["policy_id"],
-            workspace=workspace,
-        )
-
-        start = serializer.validated_data["start_date"]
-        end = serializer.validated_data["end_date"]
-        if end < start:
-            raise ValidationError({"end_date": "End date must be on or after start date."})
-
-        start_day_part = serializer.validated_data.get("start_day_part", LeaveRequest.DayPart.FULL)
-        end_day_part = serializer.validated_data.get("end_day_part", LeaveRequest.DayPart.FULL)
-        days_requested = _leave_days(workspace, start, end, start_day_part, end_day_part)
-        if days_requested <= 0:
-            raise ValidationError(
-                {"non_field_errors": "This date range has no working days to request (weekends/holidays only)."}
-            )
-
+        policy = serializer.validated_data["policy"]
+        days_requested = serializer.validated_data["days_requested"]
         # Balance is tracked per the year the leave is taken (start_date.year),
         # matching the review path — otherwise pending/used land on different rows.
+        current_year = serializer.validated_data["start_date"].year
+
         # Lock the balance row so concurrent requests can't both pass the check and
         # over-allocate (read-modify-write race).
-        current_year = start.year
         with transaction.atomic():
             balance, _ = LeaveBalance.objects.select_for_update().get_or_create(
                 employee=member, policy=policy, year=current_year,
@@ -328,7 +264,7 @@ class LeaveRequestListCreateView(APIView):
                     {"non_field_errors": f"Insufficient balance. Available: {available} days, requested: {days_requested} days."}
                 )
 
-            leave_request = serializer.save(employee=member, policy=policy, days_requested=days_requested)
+            leave_request = serializer.save(employee=member)
             balance.pending_days = float(balance.pending_days) + float(days_requested)
             balance.save(update_fields=["pending_days"])
 
@@ -370,7 +306,7 @@ class LeaveRequestReviewView(APIView):
         workspace = _manage_ws(request, workspace_id, "hr.manage_leave")
 
         leave_request = get_object_or_404(
-            LeaveRequest.objects.select_related("employee__user", "policy"),
+            LeaveRequest.objects.select_related("employee__user", "employee__role_assignment__role", "policy"),
             id=request_id,
             employee__workspace=workspace,
         )
@@ -449,7 +385,7 @@ class LeaveBalanceListView(APIView):
 
         current_year = timezone.localdate().year
         qs = LeaveBalance.objects.select_related(
-            "employee__user", "policy"
+            "employee__user", "employee__role_assignment__role", "policy"
         ).filter(policy__workspace=workspace, year=current_year)
 
         # Leave managers see everyone's balances; everyone else sees only their own.
@@ -471,7 +407,7 @@ class WhosOffView(APIView):
         window_end = today + timedelta(days=7)
 
         requests = (
-            LeaveRequest.objects.select_related("employee__user", "policy")
+            LeaveRequest.objects.select_related("employee__user", "employee__role_assignment__role", "policy")
             .filter(
                 employee__workspace=workspace,
                 status=LeaveRequest.Status.APPROVED,
@@ -481,18 +417,7 @@ class WhosOffView(APIView):
             .order_by("start_date")
         )
 
-        data = []
-        for req in requests:
-            data.append({
-                "id": str(req.id),
-                "employee": MiniMemberSerializer(req.employee).data,
-                "leave_type": req.policy.leave_type,
-                "policy_name": req.policy.name,
-                "start_date": str(req.start_date),
-                "end_date": str(req.end_date),
-                "is_today": req.start_date <= today <= req.end_date,
-            })
-        return Response(data)
+        return Response(WhosOffSerializer(requests, many=True, context={"today": today}).data)
 
 
 # ── Attendance Policy ──────────────────────────────────────────────────────────
@@ -528,10 +453,13 @@ class ClockInView(APIView):
         workspace = _self_ws(request, workspace_id)
         member = _get_member(workspace, request.user)
 
+        coords = ClockCoordinatesSerializer(data=request.data)
+        coords.is_valid(raise_exception=True)
+        latitude = coords.validated_data["latitude"]
+        longitude = coords.validated_data["longitude"]
+
         today = timezone.localdate()
         now_time = timezone.localtime().time().replace(second=0, microsecond=0)
-        latitude = request.data.get("latitude")
-        longitude = request.data.get("longitude")
         ip = _client_ip(request)
         outside_geofence = _check_geofence(workspace, member, latitude, longitude)
 
@@ -590,8 +518,10 @@ class ClockOutView(APIView):
         if record.clock_out:
             raise ValidationError({"non_field_errors": "Already clocked out today."})
 
-        latitude = request.data.get("latitude")
-        longitude = request.data.get("longitude")
+        coords = ClockCoordinatesSerializer(data=request.data)
+        coords.is_valid(raise_exception=True)
+        latitude = coords.validated_data["latitude"]
+        longitude = coords.validated_data["longitude"]
         outside_geofence = _check_geofence(workspace, member, latitude, longitude)
 
         record.clock_out = now_time
@@ -620,7 +550,7 @@ class AttendanceListView(APIView):
         workspace = _manage_ws(request, workspace_id, "hr.manage_attendance", scope="read")
 
         date_from, date_to = _parse_date_window(request)
-        qs = Attendance.objects.select_related("employee__user").filter(
+        qs = Attendance.objects.select_related("employee__user", "employee__role_assignment__role").filter(
             employee__workspace=workspace,
             date__range=[date_from, date_to],
         )
@@ -643,7 +573,9 @@ class MyAttendanceView(APIView):
         member = _get_member(workspace, request.user)
 
         date_from, date_to = _parse_date_window(request)
-        qs = Attendance.objects.filter(employee=member, date__range=[date_from, date_to])
+        qs = Attendance.objects.select_related("employee__user", "employee__role_assignment__role").filter(
+            employee=member, date__range=[date_from, date_to]
+        )
 
         policy = _get_attendance_policy(workspace)
         return Response(AttendanceSerializer(qs, many=True, context={"policy": policy}).data)
@@ -672,7 +604,7 @@ class AttendanceSummaryView(APIView):
             - datetime.combine(date.today(), policy.work_start_time)
         ).total_seconds() / 3600
 
-        records = Attendance.objects.select_related("employee__user").filter(
+        records = Attendance.objects.select_related("employee__user", "employee__role_assignment__role").filter(
             employee__workspace=workspace,
             date__range=[date_from, date_to],
         )
@@ -845,26 +777,9 @@ class EmployeeDocumentListCreateView(APIView):
         workspace = _manage_ws(request, workspace_id, "hr.manage_documents")
         employee = get_object_or_404(WorkspaceMember, id=member_id, workspace=workspace)
 
-        file_obj = request.FILES.get("file")
-        if not file_obj:
-            raise ValidationError({"file": "No file provided."})
-        if file_obj.size > MAX_DOC_SIZE_BYTES:
-            raise ValidationError(
-                {"file": f"File too large (max {MAX_DOC_SIZE_BYTES // (1024 * 1024)} MB)."}
-            )
-        if file_obj.content_type not in ALLOWED_DOC_CONTENT_TYPES:
-            raise ValidationError(
-                {"file": f"Unsupported file type '{file_obj.content_type}'. Allowed: PDF, images, Word documents."}
-            )
-
-        doc = EmployeeDocument.objects.create(
-            employee=employee,
-            doc_type=request.data.get("doc_type", EmployeeDocument.DocType.OTHER),
-            file=file_obj,
-            original_name=file_obj.name,
-            expiry_date=request.data.get("expiry_date") or None,
-            uploaded_by=request.user,
-        )
+        serializer = EmployeeDocumentSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        doc = serializer.save(employee=employee, uploaded_by=request.user)
         return Response(EmployeeDocumentSerializer(doc).data, status=status.HTTP_201_CREATED)
 
 
