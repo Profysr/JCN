@@ -6,6 +6,7 @@ from ..models import Board, WikiPage, WikiRevision, Document
 from ..serializers import WikiPageSerializer, WikiRevisionSerializer, DocumentSerializer
 from ..permissions import _require_board_perm
 from workspaces.access import APIKeyScopePermission
+from core.events import broadcast
 from .helpers import get_workspace_for_user
 
 
@@ -26,7 +27,9 @@ class WikiPageListCreateView(APIView):
         serializer = WikiPageSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         page = serializer.save(board=board, created_by=request.user)
-        return Response(WikiPageSerializer(page).data, status=status.HTTP_201_CREATED)
+        data = {**WikiPageSerializer(page).data, "board_id": str(board.id)}
+        broadcast(workspace.id, "wiki.created", data, actor_id=request.user.id)
+        return Response(data, status=status.HTTP_201_CREATED)
 
 
 class WikiPageDetailView(APIView):
@@ -51,12 +54,21 @@ class WikiPageDetailView(APIView):
         serializer = WikiPageSerializer(page, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        return Response(serializer.data)
+        data = {**serializer.data, "board_id": str(board.id)}
+        broadcast(workspace_id, "wiki.updated", data, actor_id=request.user.id)
+        return Response(data)
 
     def delete(self, request, workspace_id, board_id, page_id):
         page, board = self._get_page(workspace_id, board_id, page_id, request.user)
         _require_board_perm(request.user, board, "admin")
+        parent_id = str(page.parent_id) if page.parent_id else None
         page.delete()
+        broadcast(
+            workspace_id,
+            "wiki.deleted",
+            {"id": str(page_id), "board_id": str(board.id), "parent_id": parent_id},
+            actor_id=request.user.id,
+        )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

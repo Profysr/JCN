@@ -21,7 +21,7 @@ import {
   useDeleteSavedView,
 } from "@/apps/project-management/hooks/useSavedViews";
 import { useSprints } from "@/apps/project-management/hooks/useSprints";
-import { useBoardSocket } from "@/shared/hooks/useWorkspaceSocket";
+import { useBoardSocket } from "@/apps/project-management/hooks/useBoardSocket";
 import { useBoardPermissions } from "@/apps/project-management/hooks/useBoardPermissions";
 import { usePresence, useAnnouncePresence } from "@/shared/hooks/usePresence";
 import { useAuthStore } from "@/store/authStore";

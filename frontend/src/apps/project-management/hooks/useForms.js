@@ -26,6 +26,8 @@ export function useForms(workspaceId, boardId) {
     queryKey: ["forms", workspaceId, boardId],
     queryFn: () => api.get(formBase(workspaceId, boardId)).then((r) => r.data),
     enabled: !!boardId,
+    // Kept live by the board socket (form.created/updated/deleted) — see useBoardSocket.
+    staleTime: Infinity,
   });
 }
 
@@ -37,6 +39,7 @@ export function useForm(workspaceId, boardId, formId) {
         .get(`${formBase(workspaceId, boardId)}${formId}/`)
         .then((r) => r.data),
     enabled: !!formId,
+    staleTime: Infinity,
   });
 }
 
@@ -109,6 +112,8 @@ export function useFormSubmissions(workspaceId, boardId, formId) {
         .get(`${formBase(workspaceId, boardId)}${formId}/submissions/`)
         .then((r) => r.data),
     enabled: !!formId,
+    // Kept live by the board socket (form.submission_created/updated) — see useBoardSocket.
+    staleTime: Infinity,
   });
 }
 

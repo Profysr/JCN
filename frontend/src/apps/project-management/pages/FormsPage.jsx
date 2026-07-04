@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Loader } from "@/shared/components/ui/Loader";
+import { ConfirmModal } from "@/shared/components/ui/ConfirmModal";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   Plus,
@@ -28,6 +29,7 @@ import {
   useFormSubmissions,
   useUpdateSubmissionStatus,
 } from "@/apps/project-management/hooks/useForms";
+import { useBoardSocket } from "@/apps/project-management/hooks/useBoardSocket";
 import { useToast } from "@/shared/components/ui/toast";
 import { format } from "date-fns";
 
@@ -45,6 +47,8 @@ export default function FormsPage() {
   const { workspaceId, boardId } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  useBoardSocket();
 
   const { data: forms = [], isLoading } = useForms(workspaceId, boardId);
   const createForm = useCreateForm(workspaceId, boardId);
@@ -157,6 +161,8 @@ function FormEditor({ workspaceId, boardId, formId, onDelete, tab, setTab }) {
   const updateFields = useUpdateFormFields(workspaceId, boardId, formId);
   const { toast } = useToast();
 
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
   // Local drafts for name + description — only save on blur, not on every keystroke (Fix 3)
   const [nameDraft, setNameDraft] = useState("");
   const [descDraft, setDescDraft] = useState("");
@@ -249,7 +255,7 @@ function FormEditor({ workspaceId, boardId, formId, onDelete, tab, setTab }) {
             )}
             {form?.is_active ? "Active" : "Inactive"}
           </button>
-          {/* Fix 1: toast.success now works — useToast called inside this component */}
+
           <button
             onClick={() => {
               navigator.clipboard.writeText(shareUrl);
@@ -259,7 +265,7 @@ function FormEditor({ workspaceId, boardId, formId, onDelete, tab, setTab }) {
           >
             <Copy className="w-3.5 h-3.5" /> Copy link
           </button>
-          {/* Fix 2: preview navigates to the frontend public form route */}
+
           <button
             onClick={() => window.open(`/forms/${form?.token}`, "_blank")}
             className="p-1.5 border rounded-lg hover:bg-accent transition-colors text-muted-foreground"
@@ -268,13 +274,25 @@ function FormEditor({ workspaceId, boardId, formId, onDelete, tab, setTab }) {
             <ExternalLink className="w-3.5 h-3.5" />
           </button>
           <button
-            onClick={onDelete}
+            onClick={() => setConfirmingDelete(true)}
             className="p-1.5 border rounded-lg text-muted-foreground hover:text-destructive hover:border-destructive/30 transition-colors"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
+
+      {confirmingDelete && (
+        <ConfirmModal
+          title="Delete form?"
+          message={`"${form?.name}" and all its submissions will be permanently deleted.`}
+          onConfirm={() => {
+            setConfirmingDelete(false);
+            onDelete();
+          }}
+          onCancel={() => setConfirmingDelete(false)}
+        />
+      )}
 
       {/* Tabs */}
       <div className="flex border-b px-6 flex-shrink-0">
@@ -391,7 +409,9 @@ function FieldCard({ field, index, onChange, onFlush, onRemove }) {
                   setLabel(e.target.value);
                   onChange({ label: e.target.value });
                 }}
-                onBlur={() => onFlush({ label })}
+                onBlur={() => {
+                  if (label !== field.label) onFlush({ label });
+                }}
               />
             </div>
             <div>
@@ -418,7 +438,9 @@ function FieldCard({ field, index, onChange, onFlush, onRemove }) {
                   setPlaceholder(e.target.value);
                   onChange({ placeholder: e.target.value });
                 }}
-                onBlur={() => onFlush({ placeholder })}
+                onBlur={() => {
+                  if (placeholder !== field.placeholder) onFlush({ placeholder });
+                }}
                 placeholder="Optional…"
               />
             </div>

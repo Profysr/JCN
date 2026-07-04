@@ -29,12 +29,15 @@ import {
   useDeleteWikiPage,
   useWikiRevisions,
 } from "@/apps/project-management/hooks/useWiki";
+import { useBoardSocket } from "@/apps/project-management/hooks/useBoardSocket";
 import { useToast } from "@/shared/components/ui/toast";
 
 export default function WikiPage() {
   const { workspaceId, boardId, pageId } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  useBoardSocket();
 
   const { data: pages = [], isLoading: pagesLoading } = useWikiPages(
     workspaceId,

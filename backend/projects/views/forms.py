@@ -12,6 +12,7 @@ from ..serializers import (
 )
 from ..permissions import _require_board_perm
 from workspaces.access import APIKeyScopePermission
+from core.events import broadcast
 from .helpers import get_workspace_for_user
 
 
@@ -34,7 +35,9 @@ class FormListCreateView(APIView):
         serializer = FormSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         form = serializer.save(board=board, created_by=request.user)
-        return Response(FormSerializer(form).data, status=status.HTTP_201_CREATED)
+        data = {**FormSerializer(form).data, "board_id": str(board.id)}
+        broadcast(workspace.id, "form.created", data, actor_id=request.user.id)
+        return Response(data, status=status.HTTP_201_CREATED)
 
 
 class FormDetailView(APIView):
@@ -55,12 +58,20 @@ class FormDetailView(APIView):
         serializer = FormSerializer(form, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        return Response(serializer.data)
+        data = {**serializer.data, "board_id": str(board.id)}
+        broadcast(workspace_id, "form.updated", data, actor_id=request.user.id)
+        return Response(data)
 
     def delete(self, request, workspace_id, board_id, form_id):
         form, board = self._get_form(workspace_id, board_id, form_id, request.user)
         _require_board_perm(request.user, board, "admin")
         form.delete()
+        broadcast(
+            workspace_id,
+            "form.deleted",
+            {"id": str(form_id), "board_id": str(board.id)},
+            actor_id=request.user.id,
+        )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -89,7 +100,9 @@ class FormFieldsBulkUpdateView(APIView):
                 )
             )
         FormField.objects.bulk_create(new_fields)
-        return Response(FormSerializer(form).data)
+        data = {**FormSerializer(form).data, "board_id": str(board.id)}
+        broadcast(workspace_id, "form.updated", data, actor_id=request.user.id)
+        return Response(data)
 
 
 class PublicFormView(APIView):
@@ -149,6 +162,16 @@ class PublicFormSubmitView(APIView):
             submission.task = task
             submission.save(update_fields=["task"])
 
+        broadcast(
+            form.board.workspace_id,
+            "form.submission_created",
+            {
+                "form_id": str(form.id),
+                "board_id": str(form.board_id),
+                "submission": FormSubmissionSerializer(submission).data,
+            },
+        )
+
         return Response(
             {"success": True, "submission_id": str(submission.id)},
             status=status.HTTP_201_CREATED,
@@ -178,4 +201,11 @@ class FormSubmissionListView(APIView):
         if new_status in [s[0] for s in FormSubmission.Status.choices]:
             sub.status = new_status
             sub.save(update_fields=["status"])
-        return Response(FormSubmissionSerializer(sub).data)
+        data = FormSubmissionSerializer(sub).data
+        broadcast(
+            workspace_id,
+            "form.submission_updated",
+            {"form_id": str(form_id), "board_id": str(board_id), "submission": data},
+            actor_id=request.user.id,
+        )
+        return Response(data)

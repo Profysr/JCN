@@ -13,6 +13,8 @@ export function useWikiPages(workspaceId, boardId) {
     queryKey: ["wiki", workspaceId, boardId],
     queryFn: () => api.get(wikiBase(workspaceId, boardId)).then((r) => r.data),
     enabled: !!boardId,
+    // Kept live by the board socket (wiki.created/updated/deleted) — see useBoardSocket.
+    staleTime: Infinity,
   });
 }
 
@@ -24,6 +26,7 @@ export function useWikiPage(workspaceId, boardId, pageId) {
         .get(`${wikiBase(workspaceId, boardId)}${pageId}/`)
         .then((r) => r.data),
     enabled: !!pageId,
+    staleTime: Infinity,
   });
 }
 

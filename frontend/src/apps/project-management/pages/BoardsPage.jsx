@@ -97,7 +97,7 @@ export default function BoardsPage() {
             <div
               key={itm.id}
               onClick={() => navigate(`/w/${workspaceId}/boards/${itm.id}`)}
-              className="relative min-w-[320px] flex-1 group/card cursor-pointer rounded-xl border bg-card p-5 shadow-card hover:shadow-card-hover hover:border-primary/30 transition-all duration-200 overflow-hidden"
+              className="relative min-w-80 flex-1 group/card cursor-pointer rounded-md border bg-card p-5 shadow-card hover:shadow-card-hover hover:border-primary/30 transition-all duration-200 overflow-hidden"
             >
               {/* Header — board type icon left, health badge + delete right */}
               <div className="flex items-start justify-between gap-2 mb-3">

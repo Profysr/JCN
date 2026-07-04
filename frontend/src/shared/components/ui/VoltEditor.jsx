@@ -112,6 +112,7 @@ const VoltEditor = forwardRef(function VoltEditor(
       onChange?.(editor.storage.markdown.getMarkdown());
     },
     onBlur({ editor }) {
+      if (editor.isDestroyed) return;
       onBlur?.(editor.storage.markdown.getMarkdown());
     },
     editorProps: {
@@ -134,7 +135,7 @@ const VoltEditor = forwardRef(function VoltEditor(
   // Sync editor content only when the value comes from an external source
   // (e.g. switching tasks). Skip when the editor itself triggered the change.
   useEffect(() => {
-    if (!editor) return;
+    if (!editor || editor.isDestroyed) return;
     if (internalChange.current) {
       internalChange.current = false; // reset flag, don't call setContent
       return;
