@@ -33,6 +33,23 @@ function extractApiMessage(data) {
   return "Something went wrong. Please try again.";
 }
 
+// Shared across every failed request so N concurrent 401s (e.g. on page
+// refresh, where several queries fire at once) trigger exactly one
+// /token/refresh/ call — the rest await this same promise instead of each
+// racing their own.
+let refreshPromise = null;
+
+function refreshAccessToken() {
+  const refresh = localStorage.getItem("refresh_token");
+  if (!refresh) return Promise.reject(new Error("No refresh token"));
+  return axios
+    .post(`${BACKEND_URL}/api/auth/token/refresh/`, { refresh })
+    .then(({ data }) => {
+      localStorage.setItem("access_token", data.access);
+      return data.access;
+    });
+}
+
 api.interceptors.response.use(
   (res) => res,
   async (error) => {
@@ -40,26 +57,24 @@ api.interceptors.response.use(
 
     if (error.response?.status === 401 && !original._retry) {
       original._retry = true;
-      const refresh = localStorage.getItem("refresh_token");
-      if (refresh) {
-        try {
-          const { data } = await axios.post(
-            `${BACKEND_URL}/api/auth/token/refresh/`,
-            { refresh },
-          );
-          localStorage.setItem("access_token", data.access);
-          original.headers.Authorization = `Bearer ${data.access}`;
-          return api(original);
-        } catch {
-          [
-            "access_token",
-            "refresh_token",
-            "accessToken",
-            "refreshToken",
-            "auth",
-          ].forEach((k) => localStorage.removeItem(k));
-          window.location.href = "/login";
+      try {
+        if (!refreshPromise) {
+          refreshPromise = refreshAccessToken().finally(() => {
+            refreshPromise = null;
+          });
         }
+        const access = await refreshPromise;
+        original.headers.Authorization = `Bearer ${access}`;
+        return api(original);
+      } catch {
+        [
+          "access_token",
+          "refresh_token",
+          "accessToken",
+          "refreshToken",
+          "auth",
+        ].forEach((k) => localStorage.removeItem(k));
+        window.location.href = "/login";
       }
     }
 

@@ -2,57 +2,10 @@ import { useState, useMemo } from "react";
 import { Loader } from "@/shared/components/ui/Loader";
 import { useNavigate } from "react-router-dom";
 import { useMyWork } from "@/shared/hooks/useMyWork";
-import { Calendar, ChevronDown, ChevronRight } from "lucide-react";
+import { Calendar, ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
-import { getPriority, pickColor } from "@/shared/lib/constants";
-import { formatShortDate } from "@/shared/lib/dateUtils";
-
-// ── Urgency bucketing ─────────────────────────────────────────────────────────
-function sectionFor(task) {
-  if (!task.due_date) return "no_date";
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const weekEnd = new Date(today);
-  weekEnd.setDate(today.getDate() + 7);
-  const d = new Date(task.due_date + "T00:00:00");
-  if (d < today) return "overdue";
-  if (d.getTime() === today.getTime()) return "today";
-  if (d <= weekEnd) return "this_week";
-  return "later";
-}
-
-const SECTIONS = [
-  {
-    id: "overdue",
-    label: "Overdue",
-    headerCls: "text-red-500",
-    countCls: "bg-red-500/10 text-red-500",
-  },
-  {
-    id: "today",
-    label: "Due Today",
-    headerCls: "text-orange-500",
-    countCls: "bg-orange-500/10 text-orange-500",
-  },
-  {
-    id: "this_week",
-    label: "This Week",
-    headerCls: "text-foreground",
-    countCls: "bg-muted text-muted-foreground",
-  },
-  {
-    id: "later",
-    label: "Later",
-    headerCls: "text-muted-foreground",
-    countCls: "bg-muted text-muted-foreground",
-  },
-  {
-    id: "no_date",
-    label: "No Due Date",
-    headerCls: "text-muted-foreground",
-    countCls: "bg-muted text-muted-foreground",
-  },
-];
+import { getPriority, pickColor, URGENCY_SECTIONS } from "@/shared/lib/constants";
+import { formatShortDate, getTaskUrgency } from "@/shared/lib/dateUtils";
 
 // ── Task row ──────────────────────────────────────────────────────────────────
 function TaskRow({ task, sectionId, onOpen }) {
@@ -116,11 +69,11 @@ function Section({ id, label, headerCls, countCls, tasks, onOpen }) {
   const [open, setOpen] = useState(true);
 
   return (
-    <div className="mb-1">
+    <div className="mb-3">
       {/* Section header */}
       <button
         onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-accent/40 transition-colors group"
+        className="w-full flex items-center gap-2 px-4 py-2 rounded-md bg-muted border border-border hover:bg-muted transition-colors group"
       >
         {open ? (
           <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
@@ -129,7 +82,7 @@ function Section({ id, label, headerCls, countCls, tasks, onOpen }) {
         )}
         <span
           className={cn(
-            "text-xs font-semibold uppercase tracking-wider",
+            "text-xs font-bold uppercase tracking-wider",
             headerCls,
           )}
         >
@@ -147,7 +100,7 @@ function Section({ id, label, headerCls, countCls, tasks, onOpen }) {
 
       {/* Task rows */}
       {open && (
-        <div className="mt-0.5">
+        <div className="mt-1.5 pl-2 border-l border-border ml-4">
           {tasks.map((t) => (
             <TaskRow key={t.id} task={t} sectionId={id} onOpen={onOpen} />
           ))}
@@ -160,13 +113,13 @@ function Section({ id, label, headerCls, countCls, tasks, onOpen }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function MyWorkPage() {
   const navigate = useNavigate();
-  const { data: tasks = [], isLoading } = useMyWork();
+  const { data: tasks = [], isLoading, isRefetching, refetch } = useMyWork();
 
   const grouped = useMemo(
     () =>
-      SECTIONS.map((s) => ({
+      URGENCY_SECTIONS.map((s) => ({
         ...s,
-        tasks: tasks.filter((t) => sectionFor(t) === s.id),
+        tasks: tasks.filter((t) => getTaskUrgency(t) === s.id),
       })).filter((s) => s.tasks.length > 0),
     [tasks],
   );
@@ -192,20 +145,32 @@ export default function MyWorkPage() {
               Tasks assigned to you across all projects
             </p>
           </div>
-          {tasks.length > 0 && (
-            <span className="text-xs font-semibold text-muted-foreground bg-muted px-2.5 py-1 rounded-full">
-              {tasks.length} task{tasks.length !== 1 ? "s" : ""}
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {tasks.length > 0 && (
+              <span className="text-xs font-semibold text-muted-foreground bg-muted px-2.5 py-1 rounded-full">
+                {tasks.length} task{tasks.length !== 1 ? "s" : ""}
+              </span>
+            )}
+            <button
+              onClick={() => refetch()}
+              disabled={isRefetching}
+              title="Refresh"
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+            >
+              <RefreshCw
+                className={cn("w-3.5 h-3.5", isRefetching && "animate-spin")}
+              />
+            </button>
+          </div>
         </div>
 
         {/* Quick stats */}
         {tasks.length > 0 && (
           <div className="flex items-center gap-3 mt-3">
-            {SECTIONS.filter(
-              (s) => tasks.filter((t) => sectionFor(t) === s.id).length > 0,
+            {URGENCY_SECTIONS.filter(
+              (s) => tasks.filter((t) => getTaskUrgency(t) === s.id).length > 0,
             ).map((s) => {
-              const count = tasks.filter((t) => sectionFor(t) === s.id).length;
+              const count = tasks.filter((t) => getTaskUrgency(t) === s.id).length;
               return (
                 <div key={s.id} className="flex items-center gap-1.5">
                   <span

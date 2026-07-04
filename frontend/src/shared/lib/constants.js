@@ -104,6 +104,47 @@ export const PRIORITY_ORDER = Object.fromEntries(
   PRIORITIES.map((p) => [p.value, p.order]),
 );
 
+// ── Task due-date urgency buckets ─────────────────────────────────────────────
+// Ids match getTaskUrgency() in @/shared/lib/dateUtils. Was duplicated as
+// SECTIONS (MyWorkPage) and TASK_SECTIONS (DashboardsPage).
+export const URGENCY_SECTIONS = [
+  {
+    id: "overdue",
+    label: "Overdue",
+    headerCls: "text-red-500",
+    countCls: "bg-red-500/10 text-red-500",
+    dot: "bg-red-500",
+  },
+  {
+    id: "today",
+    label: "Due Today",
+    headerCls: "text-orange-500",
+    countCls: "bg-orange-500/10 text-orange-500",
+    dot: "bg-orange-500",
+  },
+  {
+    id: "this_week",
+    label: "This Week",
+    headerCls: "text-foreground",
+    countCls: "bg-muted text-muted-foreground",
+    dot: "bg-primary",
+  },
+  {
+    id: "later",
+    label: "Later",
+    headerCls: "text-muted-foreground",
+    countCls: "bg-muted text-muted-foreground",
+    dot: "bg-muted-foreground",
+  },
+  {
+    id: "no_date",
+    label: "No Due Date",
+    headerCls: "text-muted-foreground",
+    countCls: "bg-muted text-muted-foreground",
+    dot: "bg-muted-foreground/40",
+  },
+];
+
 // ── Project / sprint / label colour palette ───────────────────────────────────
 // Same 8-colour set used by projects, roadmap, labels, avatars.
 export const APP_COLORS = [

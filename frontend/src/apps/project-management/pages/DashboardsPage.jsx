@@ -33,26 +33,12 @@ import {
 } from "@/shared/hooks/useInbox";
 import { notificationUrl } from "@/shared/lib/notificationNav";
 import { useAuthStore } from "@/store/authStore";
-import { getPriority, pickColor } from "@/shared/lib/constants";
-import { formatShortDate } from "@/shared/lib/dateUtils";
+import { getPriority, pickColor, URGENCY_SECTIONS } from "@/shared/lib/constants";
+import { formatShortDate, getTaskUrgency } from "@/shared/lib/dateUtils";
 import BoardTypeIcon from "@/shared/components/ui/BoardTypeIcon";
 import { Avatar } from "@/shared/components/ui/avatar";
 import GettingStartedChecklist from "@/apps/project-management/components/GettingStartedChecklist";
 import { Loader } from "@/shared/components/ui/Loader";
-
-// ── Urgency bucketing ─────────────────────────────────────────────────────────
-function sectionFor(task) {
-  if (!task.due_date) return "no_date";
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const weekEnd = new Date(today);
-  weekEnd.setDate(today.getDate() + 7);
-  const d = new Date(task.due_date + "T00:00:00");
-  if (d < today) return "overdue";
-  if (d.getTime() === today.getTime()) return "today";
-  if (d <= weekEnd) return "this_week";
-  return "later";
-}
 
 function greetingFor(name) {
   const h = new Date().getHours();
@@ -63,7 +49,7 @@ function greetingFor(name) {
 
 // ── Task row ──────────────────────────────────────────────────────────────────
 function TaskRow({ task, onOpen }) {
-  const bucket = sectionFor(task);
+  const bucket = getTaskUrgency(task);
   const p = getPriority(task.priority);
   const PIcon = p.icon;
   const color = pickColor(task.board_name);
@@ -110,39 +96,6 @@ function TaskRow({ task, onOpen }) {
 }
 
 // ── My Tasks widget ───────────────────────────────────────────────────────────
-const TASK_SECTIONS = [
-  {
-    id: "overdue",
-    label: "Overdue",
-    dot: "bg-red-500",
-    labelCls: "text-red-500",
-  },
-  {
-    id: "today",
-    label: "Due Today",
-    dot: "bg-orange-500",
-    labelCls: "text-orange-500",
-  },
-  {
-    id: "this_week",
-    label: "This Week",
-    dot: "bg-primary",
-    labelCls: "text-foreground",
-  },
-  {
-    id: "later",
-    label: "Later",
-    dot: "bg-muted-foreground",
-    labelCls: "text-muted-foreground",
-  },
-  {
-    id: "no_date",
-    label: "No Date",
-    dot: "bg-muted-foreground/40",
-    labelCls: "text-muted-foreground",
-  },
-];
-
 function MyTasksWidget({ tasks, workspaceId }) {
   const navigate = useNavigate();
 
@@ -155,9 +108,9 @@ function MyTasksWidget({ tasks, workspaceId }) {
 
   const sections = useMemo(
     () =>
-      TASK_SECTIONS.map((s) => ({
+      URGENCY_SECTIONS.map((s) => ({
         ...s,
-        tasks: tasks.filter((t) => sectionFor(t) === s.id).slice(0, 6),
+        tasks: tasks.filter((t) => getTaskUrgency(t) === s.id).slice(0, 6),
       })).filter((s) => s.tasks.length > 0),
     [tasks],
   );
@@ -203,7 +156,7 @@ function MyTasksWidget({ tasks, workspaceId }) {
                 <span
                   className={cn(
                     "text-[11px] font-semibold uppercase tracking-wide",
-                    s.labelCls,
+                    s.headerCls,
                   )}
                 >
                   {s.label}
@@ -654,11 +607,11 @@ export default function DashboardsPage() {
   const { data: boards = [] } = useBoards(workspaceId);
 
   const overdueTasks = useMemo(
-    () => tasks.filter((t) => sectionFor(t) === "overdue"),
+    () => tasks.filter((t) => getTaskUrgency(t) === "overdue"),
     [tasks],
   );
   const todayTasks = useMemo(
-    () => tasks.filter((t) => sectionFor(t) === "today"),
+    () => tasks.filter((t) => getTaskUrgency(t) === "today"),
     [tasks],
   );
 

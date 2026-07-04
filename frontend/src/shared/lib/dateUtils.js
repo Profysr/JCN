@@ -66,3 +66,18 @@ export function formatShortDate(value) {
   const d = typeof value === "string" ? new Date(value + "T00:00:00") : value;
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
+
+// ── Urgency bucketing ─────────────────────────────────────────────────────────
+// Was duplicated identically in MyWorkPage and DashboardsPage — bucket ids
+// match URGENCY_SECTIONS in @/shared/lib/constants.
+export function getTaskUrgency(task) {
+  if (!task.due_date) return "no_date";
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const weekEnd = addDays(today, 7);
+  const d = new Date(task.due_date + "T00:00:00");
+  if (d < today) return "overdue";
+  if (d.getTime() === today.getTime()) return "today";
+  if (d <= weekEnd) return "this_week";
+  return "later";
+}
