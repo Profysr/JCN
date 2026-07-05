@@ -1,12 +1,14 @@
 import { useParams, Link } from "react-router-dom";
 import {
   Users, UserPlus, CalendarDays, Timer, AlertTriangle, Gift, Star,
-  Clock, UserCheck, PieChart,
+  Clock, UserCheck, PieChart, Plane,
 } from "lucide-react";
 import { Loader } from "@/shared/components/ui/Loader";
 import { SectionCard } from "@/shared/components/ui/SectionCard";
+import { Avatar } from "@/shared/components/ui/avatar";
 import { cn } from "@/shared/lib/utils";
 import { useHRDashboard } from "@/apps/hr-management/hooks/useHRDashboard";
+import { useWhosOff } from "@/apps/hr-management/hooks/useLeave";
 import GettingStartedChecklist from "@/apps/hr-management/components/GettingStartedChecklist";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -58,6 +60,7 @@ function formatDate(dateStr) {
 export default function HRDashboardPage() {
   const { workspaceId } = useParams();
   const { data, isLoading, isError } = useHRDashboard(workspaceId);
+  const { data: whosOff } = useWhosOff(workspaceId);
 
   if (isLoading) return <Loader className="h-96" />;
   if (isError) {
@@ -171,6 +174,35 @@ export default function HRDashboardPage() {
           </Link>
         </SectionCard>
       </div>
+
+      {/* ── Who's Off ── */}
+      <SectionCard title="Who's Off (today + next 7 days)" icon={Plane}>
+        {!whosOff || whosOff.length === 0 ? (
+          <p className="text-center text-sm text-muted-foreground py-6">No one is off this week</p>
+        ) : (
+          <div className="divide-y -m-5">
+            {whosOff.map((off) => (
+              <div key={off.id} className="flex items-center gap-3 px-5 py-3">
+                <Avatar user={off.employee.user} size="sm" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{off.employee.user.full_name}</p>
+                  <p className="text-xs text-muted-foreground capitalize">
+                    {off.policy_name} · {off.leave_type.replace("_", " ")}
+                  </p>
+                </div>
+                {off.is_today && (
+                  <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/30 px-2 py-0.5 rounded-full">
+                    Today
+                  </span>
+                )}
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                  {formatDate(off.start_date)} → {formatDate(off.end_date)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </SectionCard>
 
       {/* ── Upcoming Events ── */}
       <SectionCard title="Upcoming Events (next 30 days)" icon={Gift}>
