@@ -510,7 +510,7 @@ function PolicyModal({ policy, workspaceId, onClose }) {
   }
 
   return (
-    <Modal title="Attendance Policy" onClose={onClose}>
+    <Modal isOpen title="Attendance Policy" onClose={onClose} showFooter={false}>
       <div className="flex flex-col gap-4 p-1">
         <div className="grid grid-cols-2 gap-3">
           <label className="flex flex-col gap-1">

@@ -14,6 +14,7 @@ from django.db.models import Count
 from workspaces.models import WorkspaceMember
 from workspaces import access
 from core.events import broadcast, notify
+from .holiday_import import fetch_public_holidays
 from .models import Attendance, AttendancePolicy, EmployeeDocument, EmployeeNote, Holiday, LeaveBalance, LeavePolicy, LeaveRequest
 from .serializers import (
     AttendancePolicySerializer,
@@ -208,6 +209,64 @@ class HolidayDetailView(APIView):
         workspace, holiday = self._get_holiday(request, workspace_id, holiday_id)
         holiday.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class HolidaySuggestionsView(APIView):
+    """Read-only proxy onto Nager.Date — lets the frontend show a checklist of
+    a country's bank holidays for a given year before bulk-importing them."""
+
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
+
+    def get(self, request, workspace_id):
+        _manage_ws(request, workspace_id, "hr.manage_leave", scope="read")
+        country = request.query_params.get("country", "").strip().upper()
+        year = request.query_params.get("year", "").strip()
+        if not country or not year.isdigit():
+            raise ValidationError({"error": "country and year query params are required."})
+        results = fetch_public_holidays(country, year)
+        return Response({"country": country, "year": int(year), "results": results})
+
+
+class HolidayBulkCreateView(APIView):
+    """Bulk-create holidays in one request — backs both the Nager.Date import
+    checklist and manually-typed one-off rows added in the same modal."""
+
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
+
+    def post(self, request, workspace_id):
+        workspace = _manage_ws(request, workspace_id, "hr.manage_leave")
+        items = request.data.get("holidays")
+        if not isinstance(items, list) or not items:
+            raise ValidationError({"error": "holidays must be a non-empty list."})
+        if len(items) > 100:
+            raise ValidationError({"error": "Max 100 holidays per bulk import."})
+
+        created_ids = []
+        skipped = 0
+        with transaction.atomic():
+            for item in items:
+                serializer = HolidaySerializer(data=item)
+                serializer.is_valid(raise_exception=True)
+                holiday, was_created = Holiday.objects.get_or_create(
+                    workspace=workspace,
+                    date=serializer.validated_data["date"],
+                    name=serializer.validated_data["name"],
+                    defaults={
+                        "is_recurring": serializer.validated_data.get("is_recurring", False),
+                        "location": serializer.validated_data.get("location", ""),
+                        "created_by": request.user,
+                    },
+                )
+                if was_created:
+                    created_ids.append(holiday.id)
+                else:
+                    skipped += 1
+
+        holidays = Holiday.objects.filter(workspace=workspace, id__in=created_ids).select_related("created_by")
+        return Response(
+            {"created": HolidaySerializer(holidays, many=True).data, "skipped": skipped},
+            status=status.HTTP_201_CREATED,
+        )
 
 
 # ── Leave Requests ─────────────────────────────────────────────────────────────

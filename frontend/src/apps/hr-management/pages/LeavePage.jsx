@@ -4,6 +4,7 @@ import {
   CalendarDays, CheckCircle2, Clock, XCircle, Plus,
   ChevronLeft, ChevronRight, Users, AlertCircle,
   Pencil, Trash2, ShieldCheck, Wallet, History, UserCheck, PartyPopper, Repeat,
+  Globe, Search, X,
 } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { Loader } from "@/shared/components/ui/Loader";
@@ -27,6 +28,8 @@ import {
   useCreateHoliday,
   useUpdateHoliday,
   useDeleteHoliday,
+  useHolidaySuggestions,
+  useBulkCreateHolidays,
 } from "@/apps/hr-management/hooks/useLeave";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -230,7 +233,7 @@ function RequestFormModal({ workspaceId, open, onClose }) {
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Request Leave">
+    <Modal isOpen={open} onClose={onClose} title="Request Leave" showFooter={false}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-muted-foreground">Leave type</label>
@@ -492,7 +495,7 @@ function PolicyFormModal({ workspaceId, open, onClose, existing }) {
   const isPending = createPolicy.isPending || updatePolicy.isPending;
 
   return (
-    <Modal open={open} onClose={onClose} title={isEdit ? "Edit policy" : "New leave policy"}>
+    <Modal isOpen={open} onClose={onClose} title={isEdit ? "Edit policy" : "New leave policy"} showFooter={false}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-muted-foreground">Policy name</label>
@@ -588,6 +591,220 @@ function PolicyFormModal({ workspaceId, open, onClose, existing }) {
   );
 }
 
+// ── Import Holidays Modal ─────────────────────────────────────────────────────
+// Common countries first — Nager.Date (https://date.nager.at) supports ~100,
+// any other ISO-3166 alpha-2 code can still be typed into the field below.
+const COMMON_COUNTRIES = [
+  { value: "US", label: "United States" }, { value: "GB", label: "United Kingdom" },
+  { value: "CA", label: "Canada" },         { value: "AU", label: "Australia" },
+  { value: "PK", label: "Pakistan" },       { value: "IN", label: "India" },
+  { value: "AE", label: "United Arab Emirates" }, { value: "SA", label: "Saudi Arabia" },
+  { value: "DE", label: "Germany" },        { value: "FR", label: "France" },
+  { value: "NL", label: "Netherlands" },    { value: "SG", label: "Singapore" },
+  { value: "ZA", label: "South Africa" },   { value: "NG", label: "Nigeria" },
+  { value: "IE", label: "Ireland" },        { value: "NZ", label: "New Zealand" },
+];
+
+function yearOptions() {
+  const y = new Date().getFullYear();
+  return [y - 1, y, y + 1, y + 2].map((v) => ({ value: String(v), label: String(v) }));
+}
+
+let _manualRowId = 0;
+
+function ImportHolidaysModal({ workspaceId, open, onClose, existingHolidays }) {
+  const { toast } = useToast();
+  const suggestions = useHolidaySuggestions(workspaceId);
+  const bulkCreate = useBulkCreateHolidays(workspaceId);
+
+  const [country, setCountry] = useState("US");
+  const [year, setYear] = useState(String(new Date().getFullYear()));
+  const [results, setResults] = useState(null); // [{name, date, is_recurring, checked}]
+  const [manualRows, setManualRows] = useState([]);
+
+  const existingKeys = new Set(existingHolidays.map((h) => `${h.name}::${h.date}`));
+
+  async function handleFetch() {
+    const data = await suggestions.mutateAsync({ country, year });
+    setResults(
+      (data.results ?? []).map((r) => ({
+        ...r,
+        alreadyAdded: existingKeys.has(`${r.name}::${r.date}`),
+        checked: !existingKeys.has(`${r.name}::${r.date}`),
+      })),
+    );
+  }
+
+  function toggleResult(i) {
+    setResults((rs) => rs.map((r, idx) => (idx === i ? { ...r, checked: !r.checked } : r)));
+  }
+
+  function toggleAll(checked) {
+    setResults((rs) => rs.map((r) => (r.alreadyAdded ? r : { ...r, checked })));
+  }
+
+  function addManualRow() {
+    setManualRows((rows) => [...rows, { _id: ++_manualRowId, name: "", date: "", is_recurring: false }]);
+  }
+
+  function updateManualRow(id, patch) {
+    setManualRows((rows) => rows.map((r) => (r._id === id ? { ...r, ...patch } : r)));
+  }
+
+  function removeManualRow(id) {
+    setManualRows((rows) => rows.filter((r) => r._id !== id));
+  }
+
+  const selectedSuggestions = (results ?? []).filter((r) => r.checked);
+  const validManualRows = manualRows.filter((r) => r.name.trim() && r.date);
+  const totalToImport = selectedSuggestions.length + validManualRows.length;
+
+  async function handleImport() {
+    const holidays = [
+      ...selectedSuggestions.map((r) => ({ name: r.name, date: r.date, is_recurring: r.is_recurring })),
+      ...validManualRows.map((r) => ({ name: r.name.trim(), date: r.date, is_recurring: r.is_recurring })),
+    ];
+    try {
+      const res = await bulkCreate.mutateAsync(holidays);
+      toast.success(
+        `Imported ${res.created.length} holiday${res.created.length === 1 ? "" : "s"}`,
+        res.skipped ? `${res.skipped} skipped (already existed)` : undefined,
+      );
+      setResults(null);
+      setManualRows([]);
+      onClose();
+    } catch (err) {
+      toast.error("Couldn't import holidays", err.message);
+    }
+  }
+
+  return (
+    <Modal isOpen={open} onClose={onClose} title="Import holidays" maxWidth="560px" showFooter={false}>
+      <div className="flex flex-col gap-5">
+        {/* Country / year lookup */}
+        <div className="flex items-end gap-2">
+          <div className="flex-1 flex flex-col gap-1">
+            <label className="text-xs font-medium text-muted-foreground">Country</label>
+            <Select
+              value={country}
+              onChange={setCountry}
+              options={COMMON_COUNTRIES}
+            />
+          </div>
+          <div className="w-28 flex flex-col gap-1">
+            <label className="text-xs font-medium text-muted-foreground">Year</label>
+            <Select value={year} onChange={setYear} options={yearOptions()} />
+          </div>
+          <Button type="button" size="sm" onClick={handleFetch} disabled={suggestions.isPending}>
+            <Search className="w-3.5 h-3.5 mr-1" />
+            {suggestions.isPending ? "Looking up…" : "Look up"}
+          </Button>
+        </div>
+
+        {suggestions.isError && (
+          <p className="text-xs text-rose-500">Couldn&apos;t reach the holiday lookup service. Try again, or add holidays manually below.</p>
+        )}
+
+        {/* Suggestion checklist */}
+        {results && (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium text-muted-foreground">
+                {results.length === 0 ? "No public holidays found." : `${results.length} public holidays found`}
+              </p>
+              {results.length > 0 && (
+                <div className="flex gap-2">
+                  <button type="button" className="text-xs text-primary hover:underline" onClick={() => toggleAll(true)}>Select all</button>
+                  <button type="button" className="text-xs text-muted-foreground hover:underline" onClick={() => toggleAll(false)}>Clear</button>
+                </div>
+              )}
+            </div>
+            <div className="max-h-56 overflow-y-auto rounded-lg border divide-y">
+              {results.map((r, i) => (
+                <label
+                  key={`${r.name}-${r.date}`}
+                  className={cn(
+                    "flex items-center gap-2.5 px-3 py-2 text-sm",
+                    r.alreadyAdded ? "opacity-50" : "cursor-pointer hover:bg-muted/40",
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    checked={r.checked}
+                    disabled={r.alreadyAdded}
+                    onChange={() => toggleResult(i)}
+                    className="h-4 w-4 rounded border-input shrink-0"
+                  />
+                  <span className="flex-1 truncate">{r.name}</span>
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">{formatDate(r.date)}</span>
+                  {r.is_recurring && (
+                    <Repeat className="w-3 h-3 text-indigo-500 shrink-0" title="Recurs yearly" />
+                  )}
+                  {r.alreadyAdded && <span className="text-xs text-muted-foreground shrink-0">Added</span>}
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Manual one-off rows */}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium text-muted-foreground">Manual days off</p>
+            <button type="button" onClick={addManualRow} className="text-xs text-primary hover:underline flex items-center gap-1">
+              <Plus className="w-3 h-3" /> Add a day off
+            </button>
+          </div>
+          {manualRows.length > 0 && (
+            <div className="flex flex-col gap-2">
+              {manualRows.map((row) => (
+                <div key={row._id} className="flex items-center gap-2">
+                  <input
+                    placeholder="Name"
+                    value={row.name}
+                    onChange={(e) => updateManualRow(row._id, { name: e.target.value })}
+                    className="flex-1 h-8 rounded-md border bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <input
+                    type="date"
+                    value={row.date}
+                    onChange={(e) => updateManualRow(row._id, { date: e.target.value })}
+                    className="h-8 rounded-md border bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <label className="flex items-center gap-1 text-xs text-muted-foreground shrink-0" title="Recurs every year">
+                    <input
+                      type="checkbox"
+                      checked={row.is_recurring}
+                      onChange={(e) => updateManualRow(row._id, { is_recurring: e.target.checked })}
+                      className="h-3.5 w-3.5 rounded border-input"
+                    />
+                    Yearly
+                  </label>
+                  <button type="button" onClick={() => removeManualRow(row._id)} className="p-1 text-muted-foreground hover:text-destructive">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 pt-1 border-t">
+          <Button type="button" variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+          <Button
+            type="button"
+            size="sm"
+            onClick={handleImport}
+            disabled={totalToImport === 0 || bulkCreate.isPending}
+          >
+            {bulkCreate.isPending ? "Importing…" : `Import ${totalToImport || ""} holiday${totalToImport === 1 ? "" : "s"}`}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 // ── Holiday Form Modal ────────────────────────────────────────────────────────
 const EMPTY_HOLIDAY = { name: "", date: "", is_recurring: false };
 
@@ -612,7 +829,7 @@ function HolidayFormModal({ workspaceId, open, onClose, existing }) {
   const isPending = createHoliday.isPending || updateHoliday.isPending;
 
   return (
-    <Modal open={open} onClose={onClose} title={isEdit ? "Edit holiday" : "New holiday"}>
+    <Modal isOpen={open} onClose={onClose} title={isEdit ? "Edit holiday" : "New holiday"} showFooter={false}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-muted-foreground">Name</label>
@@ -667,6 +884,7 @@ function HolidaysTab({ workspaceId }) {
   const deleteHoliday = useDeleteHoliday(workspaceId);
   const { toast } = useToast();
   const [formOpen, setFormOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState(null);
 
   const handleDelete = async (id) => {
@@ -689,10 +907,16 @@ function HolidaysTab({ workspaceId }) {
         <p className="text-sm text-muted-foreground">
           {holidays.length} holiday{holidays.length === 1 ? "" : "s"} configured — excluded from leave day-counting
         </p>
-        <Button size="sm" onClick={() => { setEditing(null); setFormOpen(true); }}>
-          <Plus className="w-3.5 h-3.5 mr-1" />
-          Add holiday
-        </Button>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>
+            <Globe className="w-3.5 h-3.5 mr-1" />
+            Import holidays
+          </Button>
+          <Button size="sm" onClick={() => { setEditing(null); setFormOpen(true); }}>
+            <Plus className="w-3.5 h-3.5 mr-1" />
+            Add holiday
+          </Button>
+        </div>
       </div>
 
       {holidays.length === 0 ? (
@@ -761,6 +985,13 @@ function HolidaysTab({ workspaceId }) {
         open={formOpen}
         onClose={() => setFormOpen(false)}
         existing={editing}
+      />
+
+      <ImportHolidaysModal
+        workspaceId={workspaceId}
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        existingHolidays={holidays}
       />
     </div>
   );

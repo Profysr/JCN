@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/shared/lib/api";
 import { useInvalidatingMutation } from "@/shared/hooks/useInvalidatingMutation";
 
@@ -121,3 +121,21 @@ export const useDeleteHoliday = (workspaceId) =>
       api.delete(`/api/workspaces/${workspaceId}/hr/holidays/${holidayId}/`),
     holidaysKey(workspaceId),
   );
+
+// Fetched on demand (country/year picked by the user) rather than a useQuery.
+export const useHolidaySuggestions = (workspaceId) =>
+  useMutation({
+    mutationFn: ({ country, year }) =>
+      api
+        .get(`/api/workspaces/${workspaceId}/hr/holidays/suggestions/?country=${country}&year=${year}`)
+        .then((r) => r.data),
+  });
+
+export const useBulkCreateHolidays = (workspaceId) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (holidays) =>
+      api.post(`/api/workspaces/${workspaceId}/hr/holidays/bulk/`, { holidays }).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: holidaysKey(workspaceId) }),
+  });
+};
