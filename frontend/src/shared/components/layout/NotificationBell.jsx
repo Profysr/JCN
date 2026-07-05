@@ -311,7 +311,8 @@ export default function NotificationBell() {
   const grouped = useMemo(
     () =>
       visible.reduce((acc, item) => {
-        const key = item.board_name || "General";
+        const appDef = NOTIFYING_APPS.find((a) => a.key === item.app);
+        const key = `${appDef?.label || "Workspace"} >> ${item.board_name || "General"}`;
         (acc[key] ||= []).push(item);
         return acc;
       }, {}),
