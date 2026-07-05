@@ -24,7 +24,8 @@ import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { cn } from "@/shared/lib/utils";
-import { SHORTCUT_GROUPS } from "@/shared/lib/shortcutsRegistry";
+import { visibleShortcutGroups } from "@/shared/lib/shortcutsRegistry";
+import { usePermission } from "@/contexts/PermissionsContext";
 import {
   THEMES,
   ACCENT_COLORS,
@@ -550,6 +551,12 @@ function AppearanceTab() {
 
 // ── Shortcuts tab ─────────────────────────────────────────────────────────────
 function ShortcutsTab() {
+  const { can, isOwner, hasAppAccess } = usePermission();
+  const groups = visibleShortcutGroups(
+    (app) => isOwner || hasAppAccess(app),
+    (perm) => isOwner || can(perm),
+  );
+
   return (
     <div className="space-y-5">
       <p className="text-xs text-muted-foreground leading-relaxed">
@@ -558,7 +565,7 @@ function ShortcutsTab() {
       </p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
-        {SHORTCUT_GROUPS.map((group) => (
+        {groups.map((group) => (
           <div key={group.id} className="space-y-0">
             <h4 className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest mb-2">
               {group.label}

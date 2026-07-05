@@ -1,68 +1,29 @@
-import {
-  FolderKanban,
-  Users2,
-  Settings,
-  Users,
-  Plug,
-  Key,
-  Webhook,
-} from "lucide-react";
+import { Settings, Users, Plug, Key, Webhook } from "lucide-react";
 
 import { PM_NAV_ITEMS, PM_NAV_GROUPS } from "@/apps/project-management/nav";
 import { NAV_ITEMS as PEOPLE_NAV_ITEMS, NAV_GROUPS as PEOPLE_NAV_GROUPS } from "@/apps/people/nav";
+import { PROJECTS_APP } from "@/apps/project-management/app";
+import { PEOPLE_APP } from "@/apps/people/app";
 
-// ── App definitions ─────────────────────────────────────────────────────────
-// Single source of truth for every product app in the workspace.
-// Keys must match the backend APP_REGISTRY keys exactly.
-//
-// Fields consumed across the codebase:
-//   icon       → AppSwitcher, AppLauncher, RolesSection
-//   landing    → route suffix after /w/:id/ when switching to this app
-//   colors     → icon bubble bg / icon text / active dot / accent bar
-//
-// People (Org Structure + HR) is one frontend app and one backend app
-// ("people" — see workspaces/constants.py APP_REGISTRY) since HR's data
-// model is built entirely on org data (employment profile, departments,
-// job titles).
+// ── App definitions ────────────────────────────────────────────────────────
+// Aggregated registry of every app. Each product app owns its definition in its
+// folder (apps/<app>/app.js) — like it owns its nav and shortcuts. "workspace"
+// is defined here: it's the always-on settings/home pseudo-app, never a product
+// module and not in the backend APP_REGISTRY.
+const WORKSPACE_APP = {
+  key: "workspace",
+  label: "Workspace",
+  shortLabel: "Workspace",
+  icon: Settings,
+  landing: "members",
+  colors: {
+    bg: "bg-slate-500/15",
+    text: "text-slate-400",
+    solid: "bg-slate-400",
+  },
+};
 
-export const APP_DEFS = [
-  {
-    key: "projects",
-    label: "Project Management",
-    shortLabel: "Projects",
-    icon: FolderKanban,
-    landing: "boards",
-    colors: {
-      bg: "bg-violet-500/15",
-      text: "text-violet-500",
-      solid: "bg-violet-500",
-    },
-  },
-  {
-    key: "people",
-    label: "People & HR",
-    shortLabel: "People",
-    icon: Users2,
-    landing: "departments",
-    colors: {
-      bg: "bg-blue-500/15",
-      text: "text-blue-500",
-      solid: "bg-blue-500",
-    },
-  },
-  {
-    key: "workspace",
-    label: "Workspace",
-    shortLabel: "Workspace",
-    icon: Settings,
-    landing: "members",
-    colors: {
-      bg: "bg-slate-500/15",
-      text: "text-slate-400",
-      solid: "bg-slate-400",
-    },
-  },
-];
+export const APP_DEFS = [PROJECTS_APP, PEOPLE_APP, WORKSPACE_APP];
 
 // Derived lookup — kept for backward compatibility with any direct APP_LANDING[key] usage.
 export const APP_LANDING = Object.fromEntries(APP_DEFS.map((a) => [a.key, a.landing]));

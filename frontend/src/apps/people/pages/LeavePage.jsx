@@ -267,7 +267,7 @@ function RequestRow({ req, isAdmin, workspaceId, onApprove, onReject }) {
     <div className="flex items-center gap-3 rounded-lg border bg-card px-4 py-3">
       {isAdmin && (
         <Link
-          to={`/w/${workspaceId}/members/${req.employee.id}`}
+          to={`/w/${workspaceId}/people/${req.employee.id}`}
           className="shrink-0"
         >
           <Avatar user={req.employee.user} size="sm" />
@@ -276,7 +276,7 @@ function RequestRow({ req, isAdmin, workspaceId, onApprove, onReject }) {
       <div className="flex-1 min-w-0">
         {isAdmin && (
           <Link
-            to={`/w/${workspaceId}/members/${req.employee.id}`}
+            to={`/w/${workspaceId}/people/${req.employee.id}`}
             className="text-sm font-medium text-foreground truncate hover:text-primary hover:underline block"
           >
             {req.employee.user.full_name}

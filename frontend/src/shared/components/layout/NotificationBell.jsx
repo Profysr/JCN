@@ -5,39 +5,55 @@ import {
   useInbox,
   useUpdateInboxItem,
   useBulkUpdateInbox,
-  useInboxUnreadCount,
+  useHasUnreadNotifications,
+  useNotificationVerbMeta,
 } from "@/shared/hooks/useInbox";
+import { usePermissions } from "@/shared/hooks/usePermissions";
+import { APP_DEFS } from "@/shared/lib/navLinks";
 import { EmptyState } from "@/shared/components/ui/empty-state";
 import LoadMoreButton from "@/shared/components/ui/LoadMoreButton";
 
-import { Bell, CheckCheck, Activity, UserPlus, MessageSquare, AtSign, ShieldCheck } from "lucide-react";
+import {
+  Bell,
+  CheckCheck,
+  Activity,
+  UserPlus,
+  MessageSquare,
+  AtSign,
+  ShieldCheck,
+  ListPlus,
+  CheckCircle2,
+  Rocket,
+  Flag,
+  CalendarClock,
+  CalendarCheck2,
+  CalendarX2,
+  RefreshCw,
+  FileWarning,
+  MapPin,
+  Clock,
+} from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Avatar } from "@/shared/components/ui/avatar";
 import { cn } from "@/shared/lib/utils";
 import { Loader } from "../ui/Loader";
 
-// Meta dictionaries used for building out notification templates
-const VERB_META = {
-  task_assigned: {
-    label: "assigned you to",
-    icon: UserPlus,
-    tone: "text-indigo-500",
-  },
-  task_commented: {
-    label: "commented on",
-    icon: MessageSquare,
-    tone: "text-sky-500",
-  },
-  task_mentioned: {
-    label: "mentioned you in",
-    icon: AtSign,
-    tone: "text-violet-500",
-  },
-  approval_requested: {
-    label: "requested approval on",
-    icon: ShieldCheck,
-    tone: "text-amber-500",
-  },
+const ICON_MAP = {
+  "user-plus": UserPlus,
+  "message-square": MessageSquare,
+  "at-sign": AtSign,
+  "shield-check": ShieldCheck,
+  "list-plus": ListPlus,
+  "check-circle-2": CheckCircle2,
+  rocket: Rocket,
+  flag: Flag,
+  "calendar-clock": CalendarClock,
+  "calendar-check-2": CalendarCheck2,
+  "calendar-x-2": CalendarX2,
+  "refresh-cw": RefreshCw,
+  "file-warning": FileWarning,
+  "map-pin": MapPin,
+  clock: Clock,
 };
 
 const fallbackMeta = (verb) => ({
@@ -46,10 +62,31 @@ const fallbackMeta = (verb) => ({
   tone: "text-muted-foreground",
 });
 
+function buildVerbMeta(rawVerbs) {
+  const meta = {};
+  for (const [verb, v] of Object.entries(rawVerbs || {})) {
+    // The backend sends an icon NAME; we map it to a lucide component here. A
+    // name we don't know still renders (generic Activity icon) but that's a
+    // silent degrade — warn in dev so adding a new icon name to a verb without
+    // adding it to ICON_MAP gets noticed.
+    if (v.icon && !ICON_MAP[v.icon] && import.meta.env.DEV) {
+      console.warn(
+        `[NotificationBell] verb "${verb}" uses icon "${v.icon}" which is not in ICON_MAP — falling back to a generic icon. Add it to ICON_MAP.`,
+      );
+    }
+    meta[verb] = {
+      label: v.label,
+      icon: ICON_MAP[v.icon] || Activity,
+      tone: v.tone || "text-muted-foreground",
+    };
+  }
+  return meta;
+}
+
 /* ==========================================
    1. TRIGGER BUTTON
    ========================================== */
-function NotificationTrigger({ open, onClick, unreadCount }) {
+function NotificationTrigger({ open, onClick, hasUnread }) {
   return (
     <button
       onClick={onClick}
@@ -62,10 +99,8 @@ function NotificationTrigger({ open, onClick, unreadCount }) {
       aria-label="Notifications"
     >
       <Bell className="w-4 h-4" />
-      {unreadCount > 0 && (
-        <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none ring-2 ring-[hsl(var(--sidebar-bg))]">
-          {unreadCount > 9 ? "9+" : unreadCount}
-        </span>
+      {hasUnread && (
+        <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-[hsl(var(--sidebar-bg))]" />
       )}
     </button>
   );
@@ -103,9 +138,12 @@ function NotificationHeader({
         </button>
       </div>
 
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 flex-wrap">
         {filters.map((f) => {
-          const count = f.key === "unread" ? unreadCount : totalItems;
+          // App tabs scope the fetch itself (see `app` query param), so there's
+          // no cheap accurate count to show without an extra request per app —
+          // only "All"/"Unread" (drawn from the already-loaded list) get a badge.
+          const count = f.key === "unread" ? unreadCount : f.app ? null : totalItems;
           return (
             <button
               key={f.key}
@@ -132,8 +170,8 @@ function NotificationHeader({
 /* ==========================================
    3. SINGLE NOTIFICATION ROW
    ========================================== */
-function NotificationItem({ item, onClick }) {
-  const meta = VERB_META[item.verb] || fallbackMeta(item.verb);
+function NotificationItem({ item, verbMeta, onClick }) {
+  const meta = verbMeta[item.verb] || fallbackMeta(item.verb);
   const VerbIcon = meta.icon;
 
   return (
@@ -170,10 +208,13 @@ function NotificationItem({ item, onClick }) {
 /* ==========================================
    MAIN COMPONENT
    ========================================== */
-const FILTERS = [
+const BASE_FILTERS = [
   { key: "all", label: "All" },
   { key: "unread", label: "Unread" },
 ];
+
+// "workspace" is a frontend-only pseudo-app (workspace settings) — it never produces notifications, so it never gets a tab here.
+const NOTIFYING_APPS = APP_DEFS.filter((a) => a.key !== "workspace");
 
 export default function NotificationBell() {
   const { workspaceId } = useParams();
@@ -186,17 +227,48 @@ export default function NotificationBell() {
   const ref = useRef(null);
 
   const limit = expanded ? 50 : 20;
+  const isAppFilter = !["all", "unread"].includes(filter);
 
-  const {
-    data: items = [],
-    isLoading,
-    isFetching,
-  } = useInbox(workspaceId, {
+  const { data: rawVerbMeta } = useNotificationVerbMeta();
+  const verbMeta = useMemo(() => buildVerbMeta(rawVerbMeta), [rawVerbMeta]);
+
+  // Apps the current user actually has access to in this workspace — tabs
+  // only ever show apps the caller could otherwise fetch notifications for,
+  // so a user never sees (or requests) a tab for a module they can't access.
+  const { data: permissions } = usePermissions(workspaceId);
+  const appTabs = useMemo(
+    () =>
+      NOTIFYING_APPS.filter((a) => permissions?.apps?.[a.key]).map((a) => ({
+        key: a.key,
+        label: a.shortLabel,
+        app: true,
+      })),
+    [permissions],
+  );
+  const filters = useMemo(() => [...BASE_FILTERS, ...appTabs], [appTabs]);
+
+  // Unscoped fetch — powers the "All"/"Unread" tabs.
+  const unscoped = useInbox(workspaceId, {
     tab: "for_you",
     limit,
-    enabled: open,
+    enabled: open && !isAppFilter,
   });
-  const unreadCount = useInboxUnreadCount(workspaceId);
+  // App-scoped fetch — only one app's notifications, via the `app` query
+  // param (InboxItem.app). Selected on demand so a quiet app's items are
+  // never pushed out of the unscoped list's `limit` by a noisier app.
+  const scoped = useInbox(workspaceId, {
+    tab: "for_you",
+    limit,
+    app: isAppFilter ? filter : undefined,
+    enabled: open && isAppFilter,
+  });
+
+  const active = isAppFilter ? scoped : unscoped;
+  const items = active.data || [];
+  const isLoading = active.isLoading;
+  const isFetching = active.isFetching;
+
+  const hasUnread = useHasUnreadNotifications(workspaceId);
   const updateItem = useUpdateInboxItem(workspaceId);
   const bulkUpdate = useBulkUpdateInbox(workspaceId);
 
@@ -210,6 +282,10 @@ export default function NotificationBell() {
   useEffect(() => {
     if (!open) setExpanded(false);
   }, [open]);
+
+  useEffect(() => {
+    setExpanded(false);
+  }, [filter]);
 
   useEffect(() => {
     const handler = (e) => {
@@ -266,7 +342,7 @@ export default function NotificationBell() {
       <NotificationTrigger
         open={open}
         onClick={() => setOpen((o) => !o)}
-        unreadCount={unreadCount}
+        hasUnread={hasUnread}
       />
 
       {open && (
@@ -275,7 +351,7 @@ export default function NotificationBell() {
             unreadCount={panelUnreadCount}
             onMarkAllRead={handleMarkAllRead}
             isPending={bulkUpdate.isPending}
-            filters={FILTERS}
+            filters={filters}
             activeFilter={filter}
             onFilterChange={setFilter}
             totalItems={items.length}
@@ -320,6 +396,7 @@ export default function NotificationBell() {
                       <NotificationItem
                         key={item.id}
                         item={item}
+                        verbMeta={verbMeta}
                         onClick={handleItemClick}
                       />
                     ))}

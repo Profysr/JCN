@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { presenceKey } from "@/shared/hooks/usePresence";
 import { BACKEND_WS_URL } from "@/shared/lib/env";
+import { INBOX_KEY_APP_INDEX } from "@/shared/hooks/useInbox";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Handler registry
@@ -39,24 +40,18 @@ export function registerSocketHandler(fn) {
 // ════════════════════════════════════════════════════════════════════════════
 function handleWorkspaceEvent(type, payload, qc, workspaceId) {
   if (type === "notification.created") {
-    qc.setQueryData(
-      ["inbox-unread-count", workspaceId],
-      (c) => (c ?? 0) + 1,
-    );
-    // Prepend directly — eliminates a GET /inbox/ round-trip when the bell is open.
-    // Falls back gracefully when the list isn't loaded yet (updater receives undefined).
-    qc.setQueriesData(
-      { queryKey: ["inbox", workspaceId] },
-      (old) => {
-        if (!old || !Array.isArray(old.results)) return old;
-        if (old.results.some((item) => item.id === payload.id)) return old;
-        return {
-          ...old,
-          count: (old.count || 0) + 1,
-          results: [{ ...payload, status: "unread" }, ...old.results],
-        };
-      },
-    );
+    qc.setQueryData(["inbox-unread-count", workspaceId], (c) => ({
+      has_unread: true,
+      by_app: payload.app ? { ...c?.by_app, [payload.app]: true } : c?.by_app,
+    }));
+
+    qc.getQueriesData({ queryKey: ["inbox", workspaceId] }).forEach(([key, old]) => {
+      if (!Array.isArray(old)) return;
+      const cachedApp = key[INBOX_KEY_APP_INDEX];
+      if (cachedApp && cachedApp !== payload.app) return;
+      if (old.some((item) => item.id === payload.id)) return;
+      qc.setQueryData(key, [{ ...payload, status: "unread" }, ...old]);
+    });
   }
 
   if (

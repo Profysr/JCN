@@ -193,7 +193,7 @@ export default function App() {
                   <Route path="hr" element={<HRDashboardPage />} />
                   <Route path="hr/leave" element={<LeavePage />} />
                   <Route path="hr/attendance" element={<AttendancePage />} />
-                  <Route path="members/:memberId" element={<MemberDetailPage />} />
+                  <Route path="people/:memberId" element={<MemberDetailPage />} />
                 </Route>
               </Route>
 

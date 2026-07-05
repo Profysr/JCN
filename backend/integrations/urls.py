@@ -1,6 +1,7 @@
 from django.urls import path
 from .views import (
     IntegrationStatusView,
+    IntegrationEventsView,
     TeamsIntegrationView,
     TeamsTestView,
     GoogleChatIntegrationView,
@@ -14,6 +15,8 @@ _ws = "workspaces/<str:workspace_id>"
 urlpatterns = [
     # ── Status (all platforms) ────────────────────────────────────────────────
     path(f"{_ws}/integrations/", IntegrationStatusView.as_view()),
+    # ── Subscribable events (derived from core.events.EVENTS) ─────────────────
+    path(f"{_ws}/integrations/events/", IntegrationEventsView.as_view()),
     # ── Teams ─────────────────────────────────────────────────────────────────
     path(f"{_ws}/integrations/teams/", TeamsIntegrationView.as_view()),
     path(f"{_ws}/integrations/teams/test/", TeamsTestView.as_view()),

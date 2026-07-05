@@ -384,7 +384,7 @@ function ProfileTab({ workspaceId, memberId, isAdmin }) {
             <SectionCard title="Reports to" icon={User}>
               {profile.manager ? (
                 <Link
-                  to={`/w/${workspaceId}/members/${profile.manager.id}`}
+                  to={`/w/${workspaceId}/people/${profile.manager.id}`}
                   className="flex items-center gap-3 group"
                 >
                   <Avatar

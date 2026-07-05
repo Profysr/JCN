@@ -34,8 +34,8 @@ export const NAV_ITEMS = [
   {
     key: "people",
     icon: Users,
-    label: "People",
-    desc: "People directory",
+    label: "Employee Hub",
+    desc: "Browse teams and the org chart",
     path: "people",
   },
   {
@@ -48,8 +48,8 @@ export const NAV_ITEMS = [
   {
     key: "hr-dashboard",
     icon: BarChart3,
-    label: "HR Overview",
-    desc: "Headcount, leave & attendance summary",
+    label: "Dashboard",
+    desc: "Your overview, leave & attendance",
     path: "hr",
     end: true,
   },
@@ -70,9 +70,9 @@ export const NAV_ITEMS = [
 ];
 
 export const NAV_GROUPS = [
+  { label: "HR", items: ["hr-dashboard", "hr-leave", "hr-attendance"] },
   {
     label: "Organization",
-    items: ["departments", "teams", "org-chart", "people", "job-titles"],
+    items: ["departments", "teams", "people", "job-titles"],
   },
-  { label: "HR", items: ["hr-dashboard", "hr-leave", "hr-attendance"] },
 ];

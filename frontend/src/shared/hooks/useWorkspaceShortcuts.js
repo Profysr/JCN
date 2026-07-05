@@ -41,7 +41,6 @@ import { isTypingTarget } from "@/shared/lib/shortcutMatch";
  */
 
 export function useWorkspaceShortcuts({
-  onOpenPalette,
   onOpenShortcuts,
   onToggleSidebar,
   onOpenPermissions,
@@ -66,15 +65,8 @@ export function useWorkspaceShortcuts({
     };
 
     const handler = (e) => {
-      // Never swallow modifier-key combos (Ctrl/Meta/Alt) except ⌘ K
+      // Never swallow modifier-key combos (Ctrl/Meta/Alt) except ⌘.
       const isModified = e.ctrlKey || e.metaKey || e.altKey;
-
-      // ⌘ K / Ctrl+K — command palette
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        onOpenPalette?.();
-        return;
-      }
 
       // ⌘. / Ctrl+. — toggle sidebar
       if ((e.metaKey || e.ctrlKey) && e.key === ".") {
@@ -140,7 +132,6 @@ export function useWorkspaceShortcuts({
   }, [
     workspaceId,
     navigate,
-    onOpenPalette,
     onOpenShortcuts,
     onToggleSidebar,
     onOpenPermissions,

@@ -157,9 +157,9 @@ export default function ProfileSetupGate() {
   const { workspaceId } = useParams();
   usePeopleSocket();
   usePeopleNavShortcuts();
-  const { isLoading: permsLoading } = usePermission();
+  const { isLoading: permsLoading, isOwner, can } = usePermission();
   // const isExempt = isOwner || can("settings.manage");
-  const isExempt = false;
+  const isExempt = isOwner;
   const { data: profile, isLoading: profileLoading } = useMyOrgProfile(workspaceId, {
     enabled: !isExempt,
   });

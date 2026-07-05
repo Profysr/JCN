@@ -186,8 +186,8 @@ grouping merged.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/inbox/` | Inbox items (filterable by status: UNREAD/READ/ARCHIVED/SNOOZED) |
-| GET | `/api/inbox/unread-count/` | Fast unread count (optionally scoped to workspace) |
+| GET | `/api/inbox/` | Inbox items (filterable by `status`, `event_type`, `app`; `app` requires `workspace` + app access) |
+| GET | `/api/inbox/unread-count/` | `{has_unread}` boolean (optionally scoped to `workspace`/`app`); unscoped also returns `by_app` (booleans, per-app) |
 | PATCH | `/api/inbox/{id}/` | Update single inbox item (read, archive, snooze) |
 | POST | `/api/inbox/bulk/` | Bulk update inbox items |
 
@@ -202,6 +202,7 @@ grouping merged.
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/workspaces/{ws}/api-keys/` | List active API keys (no raw key exposed) |
+| GET | `/api/workspaces/{ws}/api-keys/scopes/` | Available scopes as `[{value, label, description}]`, derived from `WorkspaceAPIKey.Scope` (`models.API_KEY_SCOPES`). Frontend fetches this — never hardcoded. Route registered **before** `api-keys/{id}/` so `scopes` isn't parsed as a key id. |
 | POST | `/api/workspaces/{ws}/api-keys/` | Create API key — raw key returned once |
 | DELETE | `/api/workspaces/{ws}/api-keys/{id}/` | Deactivate (soft-delete) an API key |
 
@@ -438,6 +439,7 @@ Views live in `projects/views/comments.py` (extracted from `tasks.py`).
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/workspaces/{ws}/integrations/` | Status of all integration platforms |
+| GET | `/api/workspaces/{ws}/integrations/events/` | Subscribable chat events as `[{value, label}]`, derived from `core.events.CHAT_EVENTS` (every `EVENTS` entry with a `chat` surface); labels from `NOTIFICATION_VERBS`. Frontend fetches this — never hardcoded. |
 | GET/PUT/DELETE | `/api/workspaces/{ws}/integrations/teams/` | Configure MS Teams webhook |
 | POST | `/api/workspaces/{ws}/integrations/teams/test/` | Send test message to Teams |
 | GET/PUT/DELETE | `/api/workspaces/{ws}/integrations/google-chat/` | Configure Google Chat webhook |

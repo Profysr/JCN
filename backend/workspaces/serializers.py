@@ -115,12 +115,12 @@ class InboxItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = InboxItem
         fields = [
-            "id", "actor_id", "actor_name", "verb", "event_type",
+            "id", "actor_id", "actor_name", "verb", "event_type", "app",
             "resource_name", "board_id", "board_name",
             "meta", "status", "snoozed_until", "created_at",
         ]
         read_only_fields = [
-            "actor_id", "actor_name", "verb", "event_type",
+            "actor_id", "actor_name", "verb", "event_type", "app",
             "resource_name", "board_id", "board_name",
             "meta", "created_at",
         ]

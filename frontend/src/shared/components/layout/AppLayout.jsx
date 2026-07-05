@@ -7,7 +7,6 @@ import { PermissionsProvider } from "@/contexts/PermissionsContext";
 import { useWorkspaceSocket } from "@/shared/hooks/useWorkspaceSocket";
 import { useWorkspaceShortcuts } from "@/shared/hooks/useWorkspaceShortcuts";
 import Sidebar from "@/shared/components/layout/Sidebar";
-const CommandPalette = lazy(() => import("@/shared/components/CommandPalette"));
 const ShortcutOverlay = lazy(
   () => import("@/shared/components/ShortcutOverlay"),
 );
@@ -36,7 +35,6 @@ export default function AppLayout() {
     navigate("/login");
   };
 
-  const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState("me");
@@ -61,7 +59,6 @@ export default function AppLayout() {
   };
 
   useWorkspaceShortcuts({
-    onOpenPalette: () => setPaletteOpen((o) => !o),
     onOpenShortcuts: () => setShortcutsOpen((o) => !o),
     onToggleSidebar: () => setSidebarCollapsed((v) => !v),
     onOpenPermissions: () => {
@@ -75,15 +72,6 @@ export default function AppLayout() {
       setSettingsOpen(true);
     },
   });
-
-  // Per-app headers (e.g. ProjectsHeader) trigger the shared command palette
-  // via this event instead of a prop, since they render below Sidebar/Outlet
-  // and have no direct handle on AppLayout's palette state.
-  useEffect(() => {
-    const handler = () => setPaletteOpen(true);
-    window.addEventListener("jcn:open-palette", handler);
-    return () => window.removeEventListener("jcn:open-palette", handler);
-  }, []);
 
   return (
     <PermissionsProvider workspaceId={workspaceId}>
@@ -110,13 +98,6 @@ export default function AppLayout() {
           <Outlet />
         </main>
 
-        <Suspense fallback={null}>
-          <CommandPalette
-            open={paletteOpen}
-            onClose={() => setPaletteOpen(false)}
-            workspaceId={workspaceId}
-          />
-        </Suspense>
         <Suspense fallback={null}>
           {shortcutsOpen && (
             <ShortcutOverlay onClose={() => setShortcutsOpen(false)} />

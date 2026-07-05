@@ -98,34 +98,186 @@ EVENTS = {
     "leave.rejected": {"chat": "leave.rejected"},
 }
 
+# Public chat-event verbs — every distinct "chat" surface declared in EVENTS.
+# Integrations (Teams/Google Chat) let a channel subscribe to these; derived
+# here so the subscribable list can't drift from what broadcast() actually
+# delivers (the old hand-maintained list offered dead events and omitted live
+# ones). Ordered by first appearance in EVENTS.
+CHAT_EVENTS = list(
+    dict.fromkeys(meta["chat"] for meta in EVENTS.values() if "chat" in meta)
+)
+
 # ── Notification verb registry ────────────────────────────────────────────────
+# THE contract for every notification verb. Adding a verb here is the ONLY step
+# needed to make it render correctly in the bell for every app — the frontend
+# fetches this registry (GET /api/notifications/verb-meta/) instead of keeping
+# its own copy, so backend and frontend can never drift out of sync.
+#
+#   app   — APP_REGISTRY key (workspaces/constants.py) the verb belongs to.
+#           Drives per-app inbox filtering (InboxItem.app) and the bell's
+#           per-app tabs. Required — every verb must belong to exactly one app.
+#   icon  — kebab-case name resolved to a lucide-react component via the
+#           frontend's ICON_MAP (NotificationBell.jsx). Unknown/missing names
+#           fall back to a generic icon so a typo here never breaks the UI.
+#   tone  — Tailwind text-color class for the icon badge.
 NOTIFICATION_VERBS = {
     # projects
-    "task_created": {"event_type": "assigned", "label": "📋 Task Created"},
-    "task_assigned": {"event_type": "assigned", "label": "👤 Task Assigned"},
-    "task_commented": {"event_type": "commented", "label": "💬 New Comment"},
-    "task_mentioned": {"event_type": "mentioned", "label": "💬 You Were Mentioned"},
-    "task_completed": {"event_type": "assigned", "label": "✅ Task Completed"},
-    "sprint_started": {"event_type": "automated", "label": "🚀 Sprint Started"},
-    "sprint_completed": {"event_type": "automated", "label": "🏁 Sprint Completed"},
-    "approval_requested": {"event_type": "approved", "label": "✋ Approval Requested"},
-    # hr
-    "leave.requested": {"event_type": "assigned", "label": "🌴 Leave Requested"},
-    "leave.approved": {"event_type": "assigned", "label": "✅ Leave Approved"},
-    "leave.rejected": {"event_type": "assigned", "label": "❌ Leave Rejected"},
-    "leave.carried_over": {"event_type": "hr", "label": "🔁 Leave Carried Over"},
-    "document_expiring": {"event_type": "hr", "label": "📄 Document Expiring"},
+    "task_created": {
+        "event_type": "assigned",
+        "label": "📋 Task Created",
+        "app": "projects",
+        "icon": "list-plus",
+        "tone": "text-emerald-500",
+    },
+    "task_assigned": {
+        "event_type": "assigned",
+        "label": "👤 Task Assigned",
+        "app": "projects",
+        "icon": "user-plus",
+        "tone": "text-indigo-500",
+    },
+    "task_commented": {
+        "event_type": "commented",
+        "label": "💬 New Comment",
+        "app": "projects",
+        "icon": "message-square",
+        "tone": "text-sky-500",
+    },
+    "task_mentioned": {
+        "event_type": "mentioned",
+        "label": "💬 You Were Mentioned",
+        "app": "projects",
+        "icon": "at-sign",
+        "tone": "text-violet-500",
+    },
+    "task_completed": {
+        "event_type": "assigned",
+        "label": "✅ Task Completed",
+        "app": "projects",
+        "icon": "check-circle-2",
+        "tone": "text-green-500",
+    },
+    "sprint_started": {
+        "event_type": "automated",
+        "label": "🚀 Sprint Started",
+        "app": "projects",
+        "icon": "rocket",
+        "tone": "text-purple-500",
+    },
+    "sprint_completed": {
+        "event_type": "automated",
+        "label": "🏁 Sprint Completed",
+        "app": "projects",
+        "icon": "flag",
+        "tone": "text-teal-500",
+    },
+    "approval_requested": {
+        "event_type": "approved",
+        "label": "✋ Approval Requested",
+        "app": "projects",
+        "icon": "shield-check",
+        "tone": "text-amber-500",
+    },
+    # people (org + hr)
+    "leave.requested": {
+        "event_type": "assigned",
+        "label": "🌴 Leave Requested",
+        "app": "people",
+        "icon": "calendar-clock",
+        "tone": "text-amber-500",
+    },
+    "leave.approved": {
+        "event_type": "assigned",
+        "label": "✅ Leave Approved",
+        "app": "people",
+        "icon": "calendar-check-2",
+        "tone": "text-green-500",
+    },
+    "leave.rejected": {
+        "event_type": "assigned",
+        "label": "❌ Leave Rejected",
+        "app": "people",
+        "icon": "calendar-x-2",
+        "tone": "text-red-500",
+    },
+    "leave.carried_over": {
+        "event_type": "hr",
+        "label": "🔁 Leave Carried Over",
+        "app": "people",
+        "icon": "refresh-cw",
+        "tone": "text-blue-500",
+    },
+    "document_expiring": {
+        "event_type": "hr",
+        "label": "📄 Document Expiring",
+        "app": "people",
+        "icon": "file-warning",
+        "tone": "text-orange-500",
+    },
     "attendance.geofence_flagged": {
         "event_type": "hr",
         "label": "📍 Clock-in Outside Geofence",
+        "app": "people",
+        "icon": "map-pin",
+        "tone": "text-rose-500",
     },
-    "attendance.missed_clock_out": {"event_type": "hr", "label": "⏰ Missed Clock-out"},
+    "attendance.missed_clock_out": {
+        "event_type": "hr",
+        "label": "⏰ Missed Clock-out",
+        "app": "people",
+        "icon": "clock",
+        "tone": "text-red-500",
+    },
+    # workspace — membership/role events. "workspace" isn't in
+    # workspaces.constants.APP_REGISTRY (it's the always-on pseudo-app every
+    # member implicitly has access to, never module-gated), but it's a real
+    # bucket here so these notifications get their own inbox tab like any
+    # other app instead of landing unattributed.
+    "member.invited": {
+        "event_type": "assigned",
+        "label": "✉️ Member Invited",
+        "app": "workspace",
+        "icon": "user-plus",
+        "tone": "text-indigo-500",
+    },
+    "invite.accepted": {
+        "event_type": "assigned",
+        "label": "🎉 Invite Accepted",
+        "app": "workspace",
+        "icon": "user-check",
+        "tone": "text-green-500",
+    },
+    "member.removed": {
+        "event_type": "assigned",
+        "label": "🚪 Member Removed",
+        "app": "workspace",
+        "icon": "user-minus",
+        "tone": "text-red-500",
+    },
+    "member.role_assigned": {
+        "event_type": "assigned",
+        "label": "🔑 Role Updated",
+        "app": "workspace",
+        "icon": "key-round",
+        "tone": "text-amber-500",
+    },
 }
+
+# Every valid InboxItem.app value — derived from the verb registry above, not
+# hand-maintained separately, so a new app added here is automatically a valid
+# value everywhere else (the model's CheckConstraint, admin, etc). Sorted so
+# the generated migration's constraint SQL doesn't churn on registry reorders.
+VALID_NOTIFICATION_APPS = sorted({v["app"] for v in NOTIFICATION_VERBS.values()})
 
 
 def verb_event_type(verb):
     """InboxItem.event_type for a verb (defaults to "assigned")."""
     return NOTIFICATION_VERBS.get(verb, {}).get("event_type", "assigned")
+
+
+def verb_app(verb):
+    """APP_REGISTRY key a verb belongs to (blank if the verb is unregistered)."""
+    return NOTIFICATION_VERBS.get(verb, {}).get("app", "")
 
 
 def verb_label(verb):
@@ -246,9 +398,30 @@ def push_inbox_items(rows):
     """
     from workspaces.models import InboxItem
 
+    # Fail loud per-row on an unregistered verb rather than silently writing
+    # app="" — InboxItem.app has a DB CheckConstraint against
+    # VALID_NOTIFICATION_APPS, so that row would fail bulk_create anyway
+    # (taking every OTHER row in the batch down with it). Dropping just the
+    # bad row and logging it loudly means a typo'd/forgotten verb shows up in
+    # logs immediately instead of silently corrupting app attribution or
+    # (worse) killing a legitimate row's notification.
+    good_rows = []
+    for row in rows:
+        if row["verb"] not in NOTIFICATION_VERBS:
+            logger.error(
+                "push_inbox_items: verb %r is not registered in NOTIFICATION_VERBS — "
+                "dropping this notification instead of writing an unattributed row.",
+                row["verb"],
+            )
+            continue
+        good_rows.append(
+            {**row, "event_type": verb_event_type(row["verb"]), "app": verb_app(row["verb"])}
+        )
+    if not good_rows:
+        return []
+
     try:
-        rows = [{**row, "event_type": verb_event_type(row["verb"])} for row in rows]
-        items = InboxItem.objects.bulk_create([InboxItem(**row) for row in rows])
+        items = InboxItem.objects.bulk_create([InboxItem(**row) for row in good_rows])
     except Exception as exc:
         logger.exception("push_inbox_items bulk_create failed: %s", exc)
         return []
@@ -266,6 +439,7 @@ def push_inbox_items(rows):
                 "actor_name": item.actor_name,
                 "verb": item.verb,
                 "event_type": item.event_type,
+                "app": item.app,
                 "resource_name": item.resource_name,
                 "board_id": item.board_id,
                 "board_name": item.board_name,

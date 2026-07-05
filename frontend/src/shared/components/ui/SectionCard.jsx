@@ -2,13 +2,13 @@ import { cn } from "@/shared/lib/utils";
 
 export function SectionCard({ title, icon: Icon, children, className, action }) {
   return (
-    <div className={cn("rounded-xl border border-border bg-card overflow-hidden", className)}>
-      <div className="flex items-center gap-2 px-5 py-3.5 border-b border-border/60 bg-muted/30">
+    <div className={cn("rounded-md border border-border bg-card shadow-card overflow-hidden", className)}>
+      <div className="flex items-center gap-2 px-5 py-4 border-b border-border">
         <Icon className="w-4 h-4 text-muted-foreground" />
         <h2 className="text-sm font-semibold text-foreground flex-1">{title}</h2>
         {action}
       </div>
-      <div className="p-5">{children}</div>
+      <div className="p-4">{children}</div>
     </div>
   );
 }

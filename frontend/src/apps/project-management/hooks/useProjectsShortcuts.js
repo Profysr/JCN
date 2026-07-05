@@ -8,6 +8,7 @@ import { isTypingTarget } from "@/shared/lib/shortcutMatch";
  * the global useWorkspaceShortcuts and fired everywhere, including People/HR
  * pages that have no boards/tasks to act on.
  *
+ *   ⌘K / Ctrl+K — open the command palette (ProjectsAppShell listens for jcn:open-palette)
  *   c        — create task (context-aware, KanbanPage listens for jcn:create-task)
  *   Shift+F  — open/close the board filter panel (FilterBar listens for jcn:open-filters)
  *   /        — focus the board search box (FilterBar listens for jcn:focus-search)
@@ -32,6 +33,13 @@ export function useProjectsShortcuts() {
     };
 
     const handler = (e) => {
+      // ⌘K / Ctrl+K — command palette. Handled before the modifier guard below.
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent("jcn:open-palette"));
+        return;
+      }
+
       const isModified = e.ctrlKey || e.metaKey || e.altKey;
       if (isTypingTarget(e) || isModified) return;
 

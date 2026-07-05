@@ -5,9 +5,10 @@ import { LayoutGrid, Home } from "lucide-react";
 import { APP_DEFS, workspaceUrl } from "@/shared/lib/navLinks";
 import { usePermission } from "@/contexts/PermissionsContext";
 import { useActiveApp } from "@/shared/hooks/useActiveApp";
+import { useUnreadNotificationsByApp } from "@/shared/hooks/useInbox";
 import { Tooltip } from "@/shared/components/ui/tooltip";
 
-function AppList({ activeApp, visibleApps, onNavigate, onGoHome }) {
+function AppList({ activeApp, visibleApps, unreadByApp, onNavigate, onGoHome }) {
   return (
     <div className="py-1">
       <button
@@ -40,8 +41,13 @@ function AppList({ activeApp, visibleApps, onNavigate, onGoHome }) {
             )}
             style={{ width: "calc(100% - 8px)" }}
           >
-            <div className={cn("w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0", c.bg)}>
+            <div className={cn("relative w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0", c.bg)}>
               <Icon className={cn("w-3.5 h-3.5", c.text)} />
+              {/* Unread dot — the only way to notice a missed notification in
+                  an app you haven't opened without going through the bell. */}
+              {unreadByApp[app.key] && (
+                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-500 ring-2 ring-popover" />
+              )}
             </div>
             <span className={cn("flex-1 text-left text-sm", isActive && "font-medium")}>
               {app.label}
@@ -62,6 +68,7 @@ export default function AppSwitcherDropdown({ workspaceId, collapsed }) {
   const navigate = useNavigate();
   const activeApp = useActiveApp();
   const { isOwner, hasAppAccess, isLoading: permsLoading } = usePermission();
+  const unreadByApp = useUnreadNotificationsByApp(workspaceId);
 
   const visibleApps = APP_DEFS.filter((app) => {
     if (app.key === "workspace") return false;
@@ -117,6 +124,7 @@ export default function AppSwitcherDropdown({ workspaceId, collapsed }) {
             <AppList
               activeApp={activeApp}
               visibleApps={visibleApps}
+              unreadByApp={unreadByApp}
               onNavigate={handleNavigate}
               onGoHome={handleGoHome}
             />
@@ -155,6 +163,7 @@ export default function AppSwitcherDropdown({ workspaceId, collapsed }) {
           <AppList
             activeApp={activeApp}
             visibleApps={visibleApps}
+            unreadByApp={unreadByApp}
             onNavigate={handleNavigate}
             onGoHome={handleGoHome}
           />

@@ -2,15 +2,37 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/shared/lib/api";
 import { SOCKET_BACKED } from "@/shared/lib/queryClient";
 
-const inboxKey = (workspaceId, tab, eventType, limit) =>
-  ["inbox", workspaceId, tab, eventType, limit].filter(Boolean);
+// Fixed positions (null, not omitted, for an unset segment) — the socket
+// handler (useWorkspaceSocket.js) reads INBOX_KEY_APP_INDEX back out of a
+// cached query's key to know which `app` it's scoped to. `.filter(Boolean)`
+// would shift positions whenever `eventType` (or `app`) is unset, making that
+// unrecoverable from the key alone.
+export const INBOX_KEY_APP_INDEX = 5;
+const inboxKey = (workspaceId, tab, eventType, limit, app) => [
+  "inbox",
+  workspaceId,
+  tab,
+  eventType ?? null,
+  limit,
+  app ?? null,
+];
 
+/**
+ * `app` scopes the fetch to one product module's notifications (an
+ * APP_REGISTRY key, e.g. "projects"/"people") via InboxItem.app — set on the
+ * backend at creation from core.events.NOTIFICATION_VERBS, never inferred
+ * client-side. Without it every app's notifications compete for the same
+ * `limit`, so a quiet app's items can be pushed out of the page entirely by a
+ * noisy one; passing `app` guarantees that app's own items are fetched.
+ * Backend enforces the caller actually has access to that app — see
+ * `_require_app_filter_access` in workspaces/views.py.
+ */
 export function useInbox(
   workspaceId,
-  { tab = "for_you", eventType, limit = 20, enabled = true } = {},
+  { tab = "for_you", eventType, limit = 20, app, enabled = true } = {},
 ) {
   return useQuery({
-    queryKey: inboxKey(workspaceId, tab, eventType, limit),
+    queryKey: inboxKey(workspaceId, tab, eventType, limit, app),
     queryFn: () =>
       api
         .get("/api/inbox/", {
@@ -19,6 +41,7 @@ export function useInbox(
             tab,
             limit,
             ...(eventType ? { event_type: eventType } : {}),
+            ...(app ? { app } : {}),
           },
         })
         .then((r) => r.data),
@@ -30,33 +53,67 @@ export function useInbox(
 }
 
 /**
- * Total unread count for the bell/nav badges.
- * Uses a dedicated lightweight endpoint so the full inbox list is NOT fetched
- * on load — that list loads lazily only when the notification panel opens.
+ * Whether the user has any pending (unread) notification — for the bell/nav
+ * dot. Uses a dedicated lightweight endpoint so the full inbox list is NOT
+ * fetched on load — that list loads lazily only when the notification panel
+ * opens. A plain boolean, not a count: the UI only ever renders a red dot,
+ * never a number, so the backend doesn't need to compute one.
  *
  * Fetched ONCE per session then kept fresh purely by events, never by polling:
- *   • created  → workspace socket (`notification.created`) increments in place
+ *   • created  → workspace socket (`notification.created`) sets it to true
  *   • read     → useUpdateInboxItem / useBulkUpdateInbox invalidate this key
- * Hence `staleTime: Infinity` + focus/reconnect refetch disabled — the badge no
+ * Hence `staleTime: Infinity` + focus/reconnect refetch disabled — the dot no
  * longer re-hits the backend on every window focus. Requires the workspace
  * socket to be mounted app-wide (AppLayout) so `notification.created` lands on
  * every page, not just the board.
  */
-export function useInboxUnreadCount(workspaceId) {
-  const { data } = useQuery({
-    queryKey: ["inbox-unread-count", workspaceId],
+function useInboxUnreadCountQuery(workspaceId, app) {
+  return useQuery({
+    queryKey: ["inbox-unread-count", workspaceId, app].filter(Boolean),
     queryFn: () =>
       api
         .get("/api/inbox/unread-count/", {
-          params: { workspace: workspaceId },
+          params: { workspace: workspaceId, ...(app ? { app } : {}) },
         })
-        .then((r) => r.data.count),
+        .then((r) => r.data),
     enabled: !!workspaceId,
     staleTime: Infinity,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
-  return data ?? 0;
+}
+
+export function useHasUnreadNotifications(workspaceId, app) {
+  const { data } = useInboxUnreadCountQuery(workspaceId, app);
+  return data?.has_unread ?? false;
+}
+
+/**
+ * Per-app unread flags ({ [appKey]: true }) for the AppSwitcher's per-app
+ * dots — so a user notices a missed notification in an app they haven't
+ * opened without ever opening the bell. Same queryKey/queryFn as
+ * `useHasUnreadNotifications(workspaceId)` (no app arg) — React Query dedupes
+ * them into one request/cache entry instead of firing a second network call.
+ * An app missing from the object has no unread item — treat as falsy.
+ */
+export function useUnreadNotificationsByApp(workspaceId) {
+  const { data } = useInboxUnreadCountQuery(workspaceId);
+  return data?.by_app ?? {};
+}
+
+/**
+ * Notification verb registry (label/icon/tone/app per verb) — fetched from
+ * the backend instead of hardcoded, so core.events.NOTIFICATION_VERBS is the
+ * single source of truth and a new verb never needs a matching frontend edit.
+ * Static payload; cached indefinitely like usePermissions().
+ */
+export function useNotificationVerbMeta() {
+  return useQuery({
+    queryKey: ["notification-verb-meta"],
+    queryFn: () => api.get("/api/notifications/verb-meta/").then((r) => r.data),
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+  });
 }
 
 export function useUpdateInboxItem(workspaceId) {
@@ -66,15 +123,19 @@ export function useUpdateInboxItem(workspaceId) {
       api.patch(`/api/inbox/${id}/`, data).then((r) => r.data),
     onMutate: async ({ status }) => {
       if (status === "read") {
-        await qc.cancelQueries({ queryKey: ["inbox-unread-count", workspaceId] });
-        const prevCount = qc.getQueryData(["inbox-unread-count", workspaceId]);
-        qc.setQueryData(["inbox-unread-count", workspaceId], (c) => Math.max(0, (c ?? 0) - 1));
-        return { prevCount };
+        const key = ["inbox-unread-count", workspaceId];
+        await qc.cancelQueries({ queryKey: key });
+        const prev = qc.getQueryData(key);
+        // Optimistically clear the dot — this may be wrong if other unread
+        // items remain, but the onSuccess invalidation below refetches the
+        // true state moments later.
+        qc.setQueryData(key, (c) => ({ ...c, has_unread: false }));
+        return { prev };
       }
     },
     onError: (_err, _vars, context) => {
-      if (context?.prevCount !== undefined) {
-        qc.setQueryData(["inbox-unread-count", workspaceId], context.prevCount);
+      if (context?.prev !== undefined) {
+        qc.setQueryData(["inbox-unread-count", workspaceId], context.prev);
       }
     },
     onSuccess: () => {
@@ -91,15 +152,19 @@ export function useBulkUpdateInbox(workspaceId) {
       api.post("/api/inbox/bulk/", data).then((r) => r.data),
     onMutate: async ({ action }) => {
       if (action === "read") {
-        await qc.cancelQueries({ queryKey: ["inbox-unread-count", workspaceId] });
-        const prevCount = qc.getQueryData(["inbox-unread-count", workspaceId]);
-        qc.setQueryData(["inbox-unread-count", workspaceId], 0);
-        return { prevCount };
+        const key = ["inbox-unread-count", workspaceId];
+        await qc.cancelQueries({ queryKey: key });
+        const prev = qc.getQueryData(key);
+        // Approximate — bulk mark-all-read only covers whatever's currently
+        // visible (possibly one app's scope), but the exact remainder is
+        // known moments later via the onSuccess invalidation below.
+        qc.setQueryData(key, { has_unread: false, by_app: {} });
+        return { prev };
       }
     },
     onError: (_err, _vars, context) => {
-      if (context?.prevCount !== undefined) {
-        qc.setQueryData(["inbox-unread-count", workspaceId], context.prevCount);
+      if (context?.prev !== undefined) {
+        qc.setQueryData(["inbox-unread-count", workspaceId], context.prev);
       }
     },
     onSuccess: () => {

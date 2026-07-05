@@ -1,5 +1,6 @@
 import { useParams, Link } from "react-router-dom";
 import {
+  LayoutDashboard,
   Users,
   UserPlus,
   CalendarDays,
@@ -10,18 +11,24 @@ import {
   Clock,
   UserCheck,
   PieChart,
-  Plane,
 } from "lucide-react";
 import { Loader } from "@/shared/components/ui/Loader";
 import { SectionCard } from "@/shared/components/ui/SectionCard";
-import { Avatar } from "@/shared/components/ui/avatar";
 import { cn } from "@/shared/lib/utils";
+import { useAuthStore } from "@/store/authStore";
+import { usePermission } from "@/contexts/PermissionsContext";
 import { useHRDashboard } from "@/apps/people/hooks/useHRDashboard";
-import { useWhosOff } from "@/apps/people/hooks/useLeave";
 import GettingStartedChecklist from "@/apps/people/components/GettingStartedChecklist";
+import MyOverview from "@/apps/people/components/MyOverview";
+
+function greetingFor(name) {
+  const h = new Date().getHours();
+  const salutation =
+    h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+  return name ? `${salutation}, ${name.split(" ")[0]}` : salutation;
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
 const EMP_TYPE_LABELS = {
   full_time: "Full-time",
   part_time: "Part-time",
@@ -40,15 +47,15 @@ const LEAVE_TYPE_COLORS = {
 
 function StatCard({ icon: Icon, label, value, sub, iconCls }) {
   return (
-    <div className="bg-card border rounded-xl p-5 flex items-start gap-4">
-      <div className={cn("p-2.5 rounded-lg", iconCls)}>
-        <Icon className="w-5 h-5" />
+    <div className="bg-card border border-border rounded-md p-4 flex items-start gap-3">
+      <div className={cn("p-2 rounded-md", iconCls)}>
+        <Icon className="w-4 h-4" />
       </div>
       <div className="min-w-0">
         <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
           {label}
         </p>
-        <p className="text-2xl font-bold leading-tight mt-0.5">{value}</p>
+        <p className="text-xl font-bold leading-tight mt-0.5">{value}</p>
         {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
       </div>
     </div>
@@ -72,18 +79,49 @@ function formatDate(dateStr) {
 
 export default function HRDashboardPage() {
   const { workspaceId } = useParams();
-  const { data, isLoading, isError } = useHRDashboard(workspaceId);
-  const { data: whosOff } = useWhosOff(workspaceId);
+  const user = useAuthStore((s) => s.user);
+  const { isOwner, can } = usePermission();
+  const isAdmin = isOwner || can("hr.manage_leave");
+  const { data, isLoading, isError } = useHRDashboard(workspaceId, {
+    enabled: isAdmin,
+  });
 
-  if (isLoading) return <Loader className="h-96" />;
-  if (isError) {
-    return (
-      <div className="p-8 text-center text-muted-foreground">
-        Failed to load HR dashboard. You may need admin access.
+  return (
+    <div>
+      {/* Page header */}
+      <div className="border-b border-border bg-card px-6 py-4 flex items-center gap-2">
+        <LayoutDashboard className="w-5 h-5 text-muted-foreground" />
+        <h1 className="text-lg font-semibold">Dashboard</h1>
       </div>
-    );
-  }
 
+      <div className="p-6 px-3 space-y-2.5">
+        {/* Greeting */}
+        <div>
+          <h2 className="text-xl font-bold">
+            {greetingFor(user?.full_name || user?.email)}
+          </h2>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Here&apos;s your leave, attendance & team overview.
+          </p>
+        </div>
+
+        <MyOverview />
+
+        {isAdmin && isLoading && <Loader className="h-96" />}
+        {isAdmin && isError && (
+          <div className="p-8 text-center text-muted-foreground">
+            Failed to load workspace overview.
+          </div>
+        )}
+        {isAdmin && data && (
+          <AdminOverview data={data} workspaceId={workspaceId} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AdminOverview({ data, workspaceId }) {
   const { headcount, leave_overview, attendance_overview, upcoming_events } =
     data;
 
@@ -93,18 +131,18 @@ export default function HRDashboardPage() {
   );
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
+    <div className="space-y-4">
       <GettingStartedChecklist />
 
       <div>
-        <h1 className="text-2xl font-bold">HR Dashboard</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Workspace people overview
+        <h2 className="text-base font-bold">Workspace Overview</h2>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Headcount, leave & attendance across the workspace
         </p>
       </div>
 
       {/* ── Headcount ── */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <StatCard
           icon={Users}
           label="Total Employees"
@@ -150,12 +188,12 @@ export default function HRDashboardPage() {
       </div>
 
       {/* ── Leave & Attendance ── */}
-      <div className="grid md:grid-cols-2 gap-4">
+      <div className="grid md:grid-cols-2 gap-3">
         <SectionCard title="Leave Overview — This Month" icon={CalendarDays}>
-          <p className="text-3xl font-bold">
+          <p className="text-2xl font-bold">
             {leave_overview.total_days_taken}
           </p>
-          <p className="text-xs text-muted-foreground mb-4">total days taken</p>
+          <p className="text-xs text-muted-foreground mb-3">total days taken</p>
           {Object.keys(leave_overview.by_type).length === 0 ? (
             <p className="text-xs text-muted-foreground">
               No approved leave this month
@@ -221,39 +259,6 @@ export default function HRDashboardPage() {
         </SectionCard>
       </div>
 
-      {/* ── Who's Off ── */}
-      <SectionCard title="Who's Off (today + next 7 days)" icon={Plane}>
-        {!whosOff || whosOff.length === 0 ? (
-          <p className="text-center text-sm text-muted-foreground py-6">
-            No one is off this week
-          </p>
-        ) : (
-          <div className="divide-y -m-5">
-            {whosOff.map((off) => (
-              <div key={off.id} className="flex items-center gap-3 px-5 py-3">
-                <Avatar user={off.employee.user} size="sm" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">
-                    {off.employee.user.full_name}
-                  </p>
-                  <p className="text-xs text-muted-foreground capitalize">
-                    {off.policy_name} · {off.leave_type.replace("_", " ")}
-                  </p>
-                </div>
-                {off.is_today && (
-                  <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/30 px-2 py-0.5 rounded-full">
-                    Today
-                  </span>
-                )}
-                <span className="text-xs text-muted-foreground whitespace-nowrap">
-                  {formatDate(off.start_date)} → {formatDate(off.end_date)}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </SectionCard>
-
       {/* ── Upcoming Events ── */}
       <SectionCard title="Upcoming Events (next 30 days)" icon={Gift}>
         {upcoming_events.length === 0 ? (
@@ -261,9 +266,9 @@ export default function HRDashboardPage() {
             No upcoming events
           </p>
         ) : (
-          <div className="divide-y -m-5">
+          <div className="divide-y -m-4">
             {upcoming_events.map((ev, i) => (
-              <div key={i} className="flex items-center gap-3 px-5 py-3">
+              <div key={i} className="flex items-center gap-3 px-4 py-2.5">
                 <EventIcon type={ev.type} />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{ev.name}</p>

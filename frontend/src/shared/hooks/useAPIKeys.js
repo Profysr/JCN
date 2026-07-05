@@ -30,3 +30,17 @@ export function useRevokeAPIKey(workspaceId) {
     apiKeysKey(workspaceId),
   );
 }
+
+// Available scopes ([{ value, label, description }]) — derived on the backend
+// from WorkspaceAPIKey.Scope, so the picker never hardcodes them. Static.
+export function useAPIKeyScopes(workspaceId) {
+  return useQuery({
+    queryKey: ["api-key-scopes", workspaceId],
+    queryFn: () =>
+      api
+        .get(`/api/workspaces/${workspaceId}/api-keys/scopes/`)
+        .then((r) => r.data),
+    enabled: !!workspaceId,
+    staleTime: Infinity,
+  });
+}

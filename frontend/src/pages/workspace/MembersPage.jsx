@@ -404,7 +404,7 @@ export default function MembersPage() {
                         }
                         isAdmin={isAdmin}
                         onOpenProfile={() =>
-                          navigate(`/w/${workspaceId}/members/${member.id}`)
+                          navigate(`/w/${workspaceId}/people/${member.id}`)
                         }
                         isChecked={checkedIds.has(member.id)}
                         onCheck={toggleCheck}

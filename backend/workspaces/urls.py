@@ -14,9 +14,11 @@ from .views import (
     InboxItemUpdateView,
     InboxBulkUpdateView,
     InboxUnreadCountView,
+    NotificationVerbMetaView,
     # v4.5.0
     APIKeyListCreateView,
     APIKeyDetailView,
+    ApiKeyScopesView,
     WebhookListCreateView,
     WebhookDetailView,
     WebhookTestView,
@@ -64,10 +66,12 @@ urlpatterns = [
     path("inbox/", InboxListView.as_view()),
     path("inbox/bulk/", InboxBulkUpdateView.as_view()),
     path("inbox/unread-count/", InboxUnreadCountView.as_view()),
+    path("notifications/verb-meta/", NotificationVerbMetaView.as_view()),
     path("inbox/<str:item_id>/", InboxItemUpdateView.as_view()),
 
     # API Keys (v4.5.0)
     path(f"{_ws}/api-keys/", APIKeyListCreateView.as_view()),
+    path(f"{_ws}/api-keys/scopes/", ApiKeyScopesView.as_view()),
     path(f"{_ws}/api-keys/<str:key_id>/", APIKeyDetailView.as_view()),
 
     # Webhooks (v4.5.0)

@@ -2,7 +2,7 @@ import datetime
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import permissions, status
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.generics import ListAPIView
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
@@ -34,7 +34,7 @@ from .serializers import (
     WorkspaceSerializer,
 )
 from .tasks import deliver_webhook, run_import
-from .access import APIKeyScopePermission
+from .access import APIKeyScopePermission, require_app_access
 
 
 # ── SHARED PRODUCTION UTILITIES ──────────────────────────────────────────────────
@@ -312,6 +312,21 @@ class AcceptInviteView(APIView):
 # ==============================================================================
 
 
+def _require_app_filter_access(request, workspace_id, app):
+    """An `app` filter narrows the inbox to one product module — the same module
+    the requester must already have app-access to. Requires workspace_id (app
+    access is per-workspace) and raises PermissionDenied if the user's role
+    doesn't grant that app, so a scoped fetch (e.g. only Project Management
+    notifications) can never leak items from an app the caller can't see.
+    """
+    if not app:
+        return
+    if not workspace_id:
+        raise ValidationError({"detail": "app filter requires a workspace."})
+    workspace = _get_workspace(workspace_id, request.user)
+    require_app_access(request.user, workspace, app)
+
+
 class InboxListView(APIView):
     permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
@@ -319,18 +334,23 @@ class InboxListView(APIView):
         workspace_id = request.query_params.get("workspace")
         tab = request.query_params.get("tab", "for_you")
         event_type = request.query_params.get("event_type")
+        app = request.query_params.get("app")
         limit = min(int(request.query_params.get("limit", 20)), 50)
 
+        _require_app_filter_access(request, workspace_id, app)
+
         qs = InboxItem.objects.filter(user=request.user).select_related("workspace")
-        qs = self._filter_queryset(qs, tab, workspace_id, event_type)
+        qs = self._filter_queryset(qs, tab, workspace_id, event_type, app)
 
         return Response(InboxItemSerializer(qs[:limit], many=True).data)
 
-    def _filter_queryset(self, qs, tab, workspace_id=None, event_type=None):
+    def _filter_queryset(self, qs, tab, workspace_id=None, event_type=None, app=None):
         if workspace_id:
             qs = qs.filter(workspace__id=workspace_id)
         if event_type:
             qs = qs.filter(event_type=event_type)
+        if app:
+            qs = qs.filter(app=app)
 
         qs.filter(
             status=InboxItem.Status.SNOOZED, snoozed_until__lte=timezone.now()
@@ -353,10 +373,44 @@ class InboxUnreadCountView(APIView):
 
     def get(self, request):
         workspace_id = request.query_params.get("workspace")
+        app = request.query_params.get("app")
+
+        _require_app_filter_access(request, workspace_id, app)
+
         qs = InboxItem.objects.filter(user=request.user, status=InboxItem.Status.UNREAD)
         if workspace_id:
             qs = qs.filter(workspace__id=workspace_id)
-        return Response({"count": qs.count()})
+        if app:
+            qs = qs.filter(app=app)
+            return Response({"has_unread": qs.exists()})
+
+        # No app filter — also return which apps have an unread item, in the
+        # same round-trip, so the app switcher can show a dot per app without
+        # firing one request per app. Only apps with an unread item appear
+        # (as True); the frontend treats a missing key as falsy.
+        by_app = {
+            app_key: True
+            for app_key in qs.exclude(app="").values_list("app", flat=True).distinct()
+        }
+        return Response({"has_unread": qs.exists(), "by_app": by_app})
+
+
+class NotificationVerbMetaView(APIView):
+    """
+    GET /api/notifications/verb-meta/
+
+    Returns the full notification verb registry (core.events.NOTIFICATION_VERBS)
+    so the frontend renders labels/icons/tones/app grouping from the same
+    source of truth backend uses to create InboxItem rows — no verb metadata
+    is ever hardcoded on the frontend. Static — the frontend caches it
+    indefinitely (staleTime: Infinity), same pattern as WorkspacePermissionsView.
+    """
+
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
+
+    def get(self, request):
+        from core.events import NOTIFICATION_VERBS
+        return Response(NOTIFICATION_VERBS)
 
 
 class InboxItemUpdateView(APIView):
@@ -588,6 +642,20 @@ class WebhookEventsView(APIView):
 
         _get_workspace(workspace_id, request.user)
         return Response(WEBHOOK_EVENTS)
+
+
+class ApiKeyScopesView(APIView):
+    """The API-key scopes the UI offers — derived from WorkspaceAPIKey.Scope so
+    the frontend never hardcodes them and they can't drift from what the
+    serializer accepts."""
+
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
+
+    def get(self, request, workspace_id):
+        from .models import API_KEY_SCOPES
+
+        _get_workspace(workspace_id, request.user)
+        return Response(API_KEY_SCOPES)
 
 
 # ==============================================================================

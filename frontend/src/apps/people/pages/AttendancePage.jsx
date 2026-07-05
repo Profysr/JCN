@@ -512,7 +512,7 @@ function AdminGrid({ workspaceId }) {
                   >
                     <td className="py-2.5 px-3">
                       <Link
-                        to={`/w/${workspaceId}/members/${employee.id}`}
+                        to={`/w/${workspaceId}/people/${employee.id}`}
                         className="flex items-center gap-2 group/link"
                       >
                         <Avatar

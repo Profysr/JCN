@@ -124,6 +124,10 @@ class InboxItem(models.Model):
     actor_name = models.CharField(max_length=255, blank=True)
     verb = models.CharField(max_length=50)
     event_type = models.CharField(max_length=20, default="assigned")
+    # APP_REGISTRY key (workspaces/constants.py), derived from the verb via
+    # core.events.NOTIFICATION_VERBS at creation time — never set directly.
+    # Lets the inbox be filtered/tabbed per app without re-deriving it from verb.
+    app = models.CharField(max_length=30, blank=True)
     resource_name = models.CharField(max_length=500, blank=True)
     board_id = models.CharField(max_length=100, blank=True)
     board_name = models.CharField(max_length=255, blank=True)
@@ -139,6 +143,7 @@ class InboxItem(models.Model):
         indexes = [
             models.Index(fields=["user", "status"], name="inbox_user_status_idx"),
             models.Index(fields=["user", "workspace", "status"], name="inbox_user_ws_status_idx"),
+            models.Index(fields=["user", "workspace", "app", "status"], name="inbox_user_ws_app_status_idx"),
         ]
 
     def __str__(self):
@@ -223,6 +228,21 @@ class WorkspaceAPIKey(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.key_prefix}…)"
+
+
+# API-key scope metadata for the settings UI, served by ApiKeyScopesView so the
+# frontend never hardcodes the scope list. Value + label come from the Scope
+# enum (single source, also enforced by the serializer's validate_scopes);
+# description is UI-only copy with no other home. Add a scope → update here too.
+_SCOPE_DESCRIPTIONS = {
+    WorkspaceAPIKey.Scope.READ: "Read tasks, projects, and members",
+    WorkspaceAPIKey.Scope.WRITE: "Create and update tasks and projects",
+    WorkspaceAPIKey.Scope.ADMIN: "Manage workspace settings and members",
+}
+API_KEY_SCOPES = [
+    {"value": s.value, "label": s.label, "description": _SCOPE_DESCRIPTIONS[s]}
+    for s in WorkspaceAPIKey.Scope
+]
 
 
 class Webhook(models.Model):

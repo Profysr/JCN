@@ -3,7 +3,7 @@ import { cn } from "@/shared/lib/utils";
 import { ChevronsLeft, ChevronsRight } from "lucide-react";
 import { resolvedNavGroups, workspaceUrl } from "@/shared/lib/navLinks";
 import { usePermission } from "@/contexts/PermissionsContext";
-import { useInboxUnreadCount } from "@/shared/hooks/useInbox";
+import { useHasUnreadNotifications } from "@/shared/hooks/useInbox";
 import UserPanel from "@/shared/components/layout/UserPanel";
 import { ShortcutTooltip } from "@/shared/components/ui/ShortcutTooltip";
 import AppSwitcherDropdown from "@/shared/components/layout/AppSwitcherDropdown";
@@ -23,7 +23,7 @@ export default function Sidebar({
   onDisableFocus,
   onLogout,
 }) {
-  const inboxUnread = useInboxUnreadCount(workspaceId);
+  const inboxUnread = useHasUnreadNotifications(workspaceId);
   const { can, isOwner, hasAppAccess, isLoading: permsLoading } = usePermission();
   const activeApp = useActiveApp();
   const navigate = useNavigate();
@@ -50,11 +50,9 @@ export default function Sidebar({
     }))
     .filter((group) => group.items.length > 0);
 
-  // Show only the current app's groups; gate all product apps by app_access.
-  // workspace is always visible (settings, members, etc. are permission-gated per item).
-  const targetApp = activeApp === "launcher" ? "workspace" : activeApp;
+  // Show only the current app's groups; gate all product apps by app_access.workspace is always visible (settings, members, etc. are permission-gated per item).
   const navGroups = allNavGroups.filter((g) => {
-    if (g.app !== targetApp) return false;
+    if (g.app !== activeApp) return false;
     if (g.app === "workspace") return true;
     if (permsLoading) return true;
     if (!isOwner && !hasAppAccess(g.app)) return false;
@@ -153,7 +151,7 @@ export default function Sidebar({
                         )}
                       >
                         <Icon className="w-4 h-4 flex-shrink-0" />
-                        {key === "inbox" && inboxUnread > 0 && (
+                        {key === "inbox" && inboxUnread && (
                           <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-primary" />
                         )}
                       </span>
@@ -200,10 +198,8 @@ export default function Sidebar({
                     >
                       <Icon className="w-4 h-4 flex-shrink-0" />
                       <span className="flex-1">{label}</span>
-                      {key === "inbox" && inboxUnread > 0 && !isFocusMode && (
-                        <span className="min-w-[18px] h-[18px] rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center px-1">
-                          {inboxUnread > 9 ? "9+" : inboxUnread}
-                        </span>
+                      {key === "inbox" && inboxUnread && !isFocusMode && (
+                        <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />
                       )}
                       {shortcut && (
                         <kbd className="hidden group-hover/nav:inline-flex text-xs font-mono bg-muted border border-border rounded px-1 py-0.5 leading-none text-muted-foreground">

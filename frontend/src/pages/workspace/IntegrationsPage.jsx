@@ -29,21 +29,12 @@ import {
   useCreateChannelMapping,
   useUpdateChannelMapping,
   useDeleteChannelMapping,
+  useIntegrationEvents,
 } from "@/shared/hooks/useIntegrations";
 import { useBoards } from "@/apps/project-management/hooks/useBoards";
 import { useToast } from "@/shared/components/ui/toast";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const ALL_EVENTS = [
-  { id: "task_created", label: "Task created" },
-  { id: "task_assigned", label: "Task assigned" },
-  { id: "task_commented", label: "New comment" },
-  { id: "task_completed", label: "Task completed" },
-  { id: "sprint_started", label: "Sprint started" },
-  { id: "sprint_completed", label: "Sprint completed" },
-  { id: "approval_requested", label: "Approval requested" },
-];
-
 const INPUT_CLS =
   "w-full text-sm bg-background border border-border rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ring";
 
@@ -112,14 +103,16 @@ function IntegrationCard({ logo, name, description, badge, children }) {
 }
 
 // ── EventsPicker ──────────────────────────────────────────────────────────────
-function EventsPicker({ value = [], onChange }) {
-  const allSelected = value.length === 0 || value.length === ALL_EVENTS.length;
+// allEvents ([{ value, label }]) is fetched from the backend by the parent and
+// passed down — the subscribable list is never hardcoded on the frontend.
+function EventsPicker({ value = [], onChange, allEvents = [] }) {
+  const allSelected = value.length === 0 || value.length === allEvents.length;
 
   const toggle = (id) => {
     const next = value.includes(id)
       ? value.filter((e) => e !== id)
       : [...value, id];
-    onChange(next.length === ALL_EVENTS.length ? [] : next);
+    onChange(next.length === allEvents.length ? [] : next);
   };
 
   return (
@@ -136,11 +129,11 @@ function EventsPicker({ value = [], onChange }) {
         </button>
       </div>
       <div className="grid grid-cols-2 gap-1">
-        {ALL_EVENTS.map((ev) => {
-          const active = value.length === 0 || value.includes(ev.id);
+        {allEvents.map((ev) => {
+          const active = value.length === 0 || value.includes(ev.value);
           return (
             <label
-              key={ev.id}
+              key={ev.value}
               className={cn(
                 "flex items-center gap-1.5 px-2 py-1 rounded-lg cursor-pointer text-xs transition-colors",
                 active
@@ -151,7 +144,7 @@ function EventsPicker({ value = [], onChange }) {
               <input
                 type="checkbox"
                 checked={active}
-                onChange={() => toggle(ev.id)}
+                onChange={() => toggle(ev.value)}
                 className="accent-primary"
               />
               {ev.label}
@@ -173,6 +166,7 @@ function MappingRow({ mapping, workspaceId, onDelete }) {
     is_active: mapping.is_active,
   });
   const update = useUpdateChannelMapping(workspaceId);
+  const { data: allEvents = [] } = useIntegrationEvents(workspaceId);
   const { toast } = useToast();
 
   const patch = (key, val) => setForm((f) => ({ ...f, [key]: val }));
@@ -272,6 +266,7 @@ function MappingRow({ mapping, workspaceId, onDelete }) {
           <EventsPicker
             value={form.enabled_events}
             onChange={(v) => patch("enabled_events", v)}
+            allEvents={allEvents}
           />
 
           <label className="flex items-center gap-2 cursor-pointer text-xs">

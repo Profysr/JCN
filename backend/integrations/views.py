@@ -5,6 +5,7 @@ from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from core.events import CHAT_EVENTS, verb_label
 from workspaces import access
 from .models import GoogleChatIntegration, IntegrationChannelMapping, TeamsIntegration
 from .serializers import (
@@ -14,17 +15,6 @@ from .serializers import (
 )
 
 logger = logging.getLogger(__name__)
-
-# Events that can trigger a notification across all integrations.
-ALL_EVENTS = [
-    "task_created",
-    "task_assigned",
-    "task_commented",
-    "task_completed",
-    "sprint_started",
-    "sprint_completed",
-    "approval_requested",
-]
 
 
 # ==============================================================================
@@ -51,7 +41,7 @@ def _ensure_default_mapping(ws, platform):
         platform=platform,
         defaults={
             "notification_format": "detailed",
-            "enabled_events": ALL_EVENTS,
+            "enabled_events": list(CHAT_EVENTS),
             "is_active": True,
         },
     )
@@ -107,6 +97,22 @@ class IntegrationStatusView(APIView):
                 "teams": _get_teams_data_or_none(ws),
                 "google_chat": _get_gchat_data_or_none(ws),
             },
+            status=status.HTTP_200_OK,
+        )
+
+
+class IntegrationEventsView(APIView):
+    """The chat-notifiable events a channel mapping can subscribe to — derived
+    from core.events.EVENTS (every event with a chat surface) so the picker
+    can't drift from what actually gets delivered. Labels come from the shared
+    NOTIFICATION_VERBS registry."""
+
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
+
+    def get(self, request, workspace_id):
+        _read_ws(request, workspace_id)
+        return Response(
+            [{"value": v, "label": verb_label(v)} for v in CHAT_EVENTS],
             status=status.HTTP_200_OK,
         )
 

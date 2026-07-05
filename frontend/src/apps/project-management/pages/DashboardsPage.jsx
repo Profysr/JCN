@@ -27,7 +27,7 @@ import { useBoards } from "@/apps/project-management/hooks/useBoards";
 import { useObjectives, CONFIDENCE_CONFIG } from "@/shared/hooks/useGoals";
 import {
   useInbox,
-  useInboxUnreadCount,
+  useHasUnreadNotifications,
   useBulkUpdateInbox,
   useUpdateInboxItem,
 } from "@/shared/hooks/useInbox";
@@ -392,7 +392,7 @@ function NotificationRow({ item, onItemClick }) {
 function RecentNotificationsWidget({ workspaceId }) {
   const navigate = useNavigate();
   const { data: items = [], isLoading } = useInbox(workspaceId, { limit: 10 });
-  const unreadCount = useInboxUnreadCount(workspaceId);
+  const hasUnread = useHasUnreadNotifications(workspaceId);
   const updateItem = useUpdateInboxItem(workspaceId);
   const bulkUpdate = useBulkUpdateInbox(workspaceId);
 
@@ -403,9 +403,13 @@ function RecentNotificationsWidget({ workspaceId }) {
     if (url) navigate(url);
   };
 
+  const visibleUnreadIds = items
+    .filter((i) => i.status === "unread")
+    .map((i) => i.id);
+
   const handleMarkAllRead = () => {
-    const ids = items.filter((i) => i.status === "unread").map((i) => i.id);
-    if (ids.length) bulkUpdate.mutate({ ids, action: "read" });
+    if (visibleUnreadIds.length)
+      bulkUpdate.mutate({ ids: visibleUnreadIds, action: "read" });
   };
 
   return (
@@ -414,13 +418,11 @@ function RecentNotificationsWidget({ workspaceId }) {
         <div className="flex items-center gap-2">
           <Bell className="w-4 h-4 text-muted-foreground" />
           <h2 className="text-sm font-semibold">Notifications</h2>
-          {unreadCount > 0 && (
-            <span className="text-[10px] font-bold text-primary bg-primary/10 rounded-full px-1.5 py-0.5 leading-none">
-              {unreadCount} new
-            </span>
+          {hasUnread && (
+            <span className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0" />
           )}
         </div>
-        {unreadCount > 0 && (
+        {visibleUnreadIds.length > 0 && (
           <button
             onClick={handleMarkAllRead}
             disabled={bulkUpdate.isPending}
@@ -442,7 +444,7 @@ function RecentNotificationsWidget({ workspaceId }) {
           </p>
         </div>
       ) : (
-        <div className="divide-y divide-border/60">
+        <div className="divide-y divide-border/60 max-h-96 overflow-y-auto">
           {items.map((item) => (
             <NotificationRow
               key={item.id}

@@ -23,6 +23,7 @@ import {
   useAPIKeys,
   useCreateAPIKey,
   useRevokeAPIKey,
+  useAPIKeyScopes,
 } from "@/shared/hooks/useAPIKeys";
 import { formatDistanceToNow } from "date-fns";
 import { useToast } from "@/shared/components/ui/toast";
@@ -38,16 +39,6 @@ const EXPIRY_OPTIONS = [
   { value: "30", label: "30 days" },
   { value: "90", label: "90 days" },
   { value: "365", label: "1 year" },
-];
-
-const SCOPES = [
-  { id: "read", label: "Read", desc: "Read tasks, projects, members" },
-  { id: "write", label: "Write", desc: "Create and update tasks and projects" },
-  {
-    id: "admin",
-    label: "Admin",
-    desc: "Manage workspace settings and members",
-  },
 ];
 
 function FormField({ label, children }) {
@@ -66,6 +57,7 @@ function NewKeyModal({ workspaceId, onClose, onCreated }) {
   const [scopes, setScopes] = useState(["read"]);
   const [expiryDays, setExpiry] = useState("");
   const create = useCreateAPIKey(workspaceId);
+  const { data: availableScopes = [] } = useAPIKeyScopes(workspaceId);
 
   const toggleScope = (s) =>
     setScopes((prev) =>
@@ -109,25 +101,25 @@ function NewKeyModal({ workspaceId, onClose, onCreated }) {
 
         <FormField label="Scopes">
           <div className="space-y-2">
-            {SCOPES.map((s) => (
+            {availableScopes.map((s) => (
               <label
-                key={s.id}
+                key={s.value}
                 className={cn(
                   "flex items-start gap-3 px-3 py-2.5 rounded-md border cursor-pointer transition-colors",
-                  scopes.includes(s.id)
+                  scopes.includes(s.value)
                     ? "border-primary bg-primary/5"
                     : "border-border hover:bg-accent",
                 )}
               >
                 <input
                   type="checkbox"
-                  checked={scopes.includes(s.id)}
-                  onChange={() => toggleScope(s.id)}
+                  checked={scopes.includes(s.value)}
+                  onChange={() => toggleScope(s.value)}
                   className="accent-primary mt-0.5"
                 />
                 <div>
                   <p className="text-sm font-medium">{s.label}</p>
-                  <p className="text-xs text-muted-foreground">{s.desc}</p>
+                  <p className="text-xs text-muted-foreground">{s.description}</p>
                 </div>
               </label>
             ))}

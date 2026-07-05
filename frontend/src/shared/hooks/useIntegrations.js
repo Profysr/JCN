@@ -20,6 +20,20 @@ export function useIntegrationStatus(workspaceId) {
   });
 }
 
+// Subscribable chat events ([{ value, label }]) — derived on the backend from
+// core.events.EVENTS, so the picker can't drift from what actually delivers.
+export function useIntegrationEvents(workspaceId) {
+  return useQuery({
+    queryKey: ["integration-events", workspaceId],
+    queryFn: () =>
+      api
+        .get(`/api/workspaces/${workspaceId}/integrations/events/`)
+        .then((r) => r.data),
+    enabled: !!workspaceId,
+    staleTime: Infinity,
+  });
+}
+
 // ── Teams ─────────────────────────────────────────────────────────────────────
 export function useSaveTeams(workspaceId) {
   return useInvalidatingMutation(
