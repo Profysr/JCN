@@ -8,6 +8,7 @@ const requestsKey  = (ws, s)     => ["hr-leave-requests",  ws, s ?? "all"];
 const balancesKey  = (ws)        => ["hr-leave-balances",  ws];
 const whosOffKey   = (ws)        => ["hr-whos-off",        ws];
 const holidaysKey  = (ws)        => ["hr-holidays",        ws];
+const holidayCountriesKey = (ws) => ["hr-holiday-countries", ws];
 
 // ── Leave Policies ────────────────────────────────────────────────────────────
 export const useLeavePolicies = (workspaceId) =>
@@ -121,6 +122,16 @@ export const useDeleteHoliday = (workspaceId) =>
       api.delete(`/api/workspaces/${workspaceId}/hr/holidays/${holidayId}/`),
     holidaysKey(workspaceId),
   );
+
+export const useHolidayCountries = (workspaceId) =>
+  useQuery({
+    queryKey: holidayCountriesKey(workspaceId),
+    queryFn: () =>
+      api.get(`/api/workspaces/${workspaceId}/hr/holidays/countries/`).then((r) => r.data.results),
+    enabled: !!workspaceId,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+  });
 
 // Fetched on demand (country/year picked by the user) rather than a useQuery.
 export const useHolidaySuggestions = (workspaceId) =>

@@ -28,6 +28,7 @@ import {
   useCreateHoliday,
   useUpdateHoliday,
   useDeleteHoliday,
+  useHolidayCountries,
   useHolidaySuggestions,
   useBulkCreateHolidays,
 } from "@/apps/hr-management/hooks/useLeave";
@@ -592,19 +593,6 @@ function PolicyFormModal({ workspaceId, open, onClose, existing }) {
 }
 
 // ── Import Holidays Modal ─────────────────────────────────────────────────────
-// Common countries first — Nager.Date (https://date.nager.at) supports ~100,
-// any other ISO-3166 alpha-2 code can still be typed into the field below.
-const COMMON_COUNTRIES = [
-  { value: "US", label: "United States" }, { value: "GB", label: "United Kingdom" },
-  { value: "CA", label: "Canada" },         { value: "AU", label: "Australia" },
-  { value: "PK", label: "Pakistan" },       { value: "IN", label: "India" },
-  { value: "AE", label: "United Arab Emirates" }, { value: "SA", label: "Saudi Arabia" },
-  { value: "DE", label: "Germany" },        { value: "FR", label: "France" },
-  { value: "NL", label: "Netherlands" },    { value: "SG", label: "Singapore" },
-  { value: "ZA", label: "South Africa" },   { value: "NG", label: "Nigeria" },
-  { value: "IE", label: "Ireland" },        { value: "NZ", label: "New Zealand" },
-];
-
 function yearOptions() {
   const y = new Date().getFullYear();
   return [y - 1, y, y + 1, y + 2].map((v) => ({ value: String(v), label: String(v) }));
@@ -614,10 +602,11 @@ let _manualRowId = 0;
 
 function ImportHolidaysModal({ workspaceId, open, onClose, existingHolidays }) {
   const { toast } = useToast();
+  const { data: countries = [] } = useHolidayCountries(workspaceId);
   const suggestions = useHolidaySuggestions(workspaceId);
   const bulkCreate = useBulkCreateHolidays(workspaceId);
 
-  const [country, setCountry] = useState("US");
+  const [country, setCountry] = useState("PK");
   const [year, setYear] = useState(String(new Date().getFullYear()));
   const [results, setResults] = useState(null); // [{name, date, is_recurring, checked}]
   const [manualRows, setManualRows] = useState([]);
@@ -688,7 +677,7 @@ function ImportHolidaysModal({ workspaceId, open, onClose, existingHolidays }) {
             <Select
               value={country}
               onChange={setCountry}
-              options={COMMON_COUNTRIES}
+              options={countries.map((c) => ({ value: c.code, label: c.name }))}
             />
           </div>
           <div className="w-28 flex flex-col gap-1">

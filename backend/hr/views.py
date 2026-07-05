@@ -14,7 +14,7 @@ from django.db.models import Count
 from workspaces.models import WorkspaceMember
 from workspaces import access
 from core.events import broadcast, notify
-from .holiday_import import fetch_public_holidays
+from .holiday_import import COMMON_COUNTRIES, fetch_public_holidays, HolidayLookupError, UnsupportedCountry
 from .models import Attendance, AttendancePolicy, EmployeeDocument, EmployeeNote, Holiday, LeaveBalance, LeavePolicy, LeaveRequest
 from .serializers import (
     AttendancePolicySerializer,
@@ -211,9 +211,22 @@ class HolidayDetailView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+class HolidayCountriesView(APIView):
+    """Static picker list for the "Import holidays" country dropdown — see
+    `hr/holiday_import.py::COMMON_COUNTRIES` for the single source of truth."""
+
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
+
+    def get(self, request, workspace_id):
+        _manage_ws(request, workspace_id, "hr.manage_leave", scope="read")
+        results = [{"code": code, "name": name} for code, name in COMMON_COUNTRIES]
+        return Response({"results": results})
+
+
 class HolidaySuggestionsView(APIView):
-    """Read-only proxy onto Nager.Date — lets the frontend show a checklist of
-    a country's bank holidays for a given year before bulk-importing them."""
+    """Computes a checklist of a country's bank holidays for a given year
+    (via the `holidays` PyPI library — 140+ countries, no network call) so
+    HR can review and bulk-import them instead of typing each one by hand."""
 
     permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
@@ -223,13 +236,18 @@ class HolidaySuggestionsView(APIView):
         year = request.query_params.get("year", "").strip()
         if not country or not year.isdigit():
             raise ValidationError({"error": "country and year query params are required."})
-        results = fetch_public_holidays(country, year)
+        try:
+            results = fetch_public_holidays(country, int(year))
+        except UnsupportedCountry:
+            raise ValidationError({"error": f"Country code '{country}' is not supported."})
+        except HolidayLookupError as exc:
+            raise ValidationError({"error": f"Couldn't compute holidays for {country}/{year}: {exc}"})
         return Response({"country": country, "year": int(year), "results": results})
 
 
 class HolidayBulkCreateView(APIView):
-    """Bulk-create holidays in one request — backs both the Nager.Date import
-    checklist and manually-typed one-off rows added in the same modal."""
+    """Bulk-create holidays in one request — backs both the country-lookup
+    import checklist and manually-typed one-off rows added in the same modal."""
 
     permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
 
