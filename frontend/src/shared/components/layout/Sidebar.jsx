@@ -1,6 +1,6 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { cn } from "@/shared/lib/utils";
-import { Search, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { ChevronsLeft, ChevronsRight } from "lucide-react";
 import { resolvedNavGroups, workspaceUrl } from "@/shared/lib/navLinks";
 import { usePermission } from "@/contexts/PermissionsContext";
 import { useInboxUnreadCount } from "@/shared/hooks/useInbox";
@@ -17,7 +17,6 @@ export default function Sidebar({
   isFocusMode,
   collapsed,
   onToggleCollapse,
-  onOpenPalette,
   onOpenSettings,
   onOpenShortcuts,
   onEnableFocus,
@@ -126,22 +125,6 @@ export default function Sidebar({
               </button>
             </ShortcutTooltip>
           </div>
-        </div>
-      )}
-
-      {/* Search bar — hidden when collapsed or on launcher page */}
-      {!collapsed && activeApp !== "launcher" && (
-        <div className="px-3 pt-3 pb-2">
-          <button
-            onClick={onOpenPalette}
-            className="w-full flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs text-muted-foreground bg-background border border-border/70 hover:border-border hover:text-foreground shadow-sm transition-all active:scale-[0.98]"
-          >
-            <Search className="w-3.5 h-3.5 flex-shrink-0" />
-            <span className="flex-1 text-left">Search…</span>
-            <kbd className="text-[10px] font-semibold bg-muted border border-border rounded px-1 py-0.5 leading-none font-mono">
-              ⌘ + K
-            </kbd>
-          </button>
         </div>
       )}
 

@@ -1,39 +1,32 @@
 import { useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { isTypingTarget } from "@/shared/lib/shortcutMatch";
 
 /**
- * Returns true when the keyboard event originates from an interactive element.
- * We suppress shortcuts in those cases so typing still works normally.
- */
-function isTypingTarget(e) {
-  const tag = e.target.tagName;
-  return (
-    tag === "INPUT" ||
-    tag === "TEXTAREA" ||
-    tag === "SELECT" ||
-    e.target.isContentEditable
-  );
-}
-
-/**
- * Registers all global keyboard shortcuts.
+ * Registers the shortcuts that apply everywhere, regardless of which app
+ * (Projects, People, Workspace) is active: command palette, sidebar toggle,
+ * the shortcut overlay, and navigation to workspace-level pages (members,
+ * settings, notifications).
+ *
+ * App-specific shortcuts (task creation, board filters, org create/review, …)
+ * live in that app's own hook — see useProjectsShortcuts and
+ * usePeopleShortcuts — mounted only while that app's routes are active.
  *
  * @param {object} opts
  * @param {() => void} opts.onOpenPalette   — open ⌘K command palette
  * @param {() => void} opts.onOpenShortcuts — open ? shortcut overlay
- * @param {() => void} opts.onCreateTask    — trigger "create task" (context-aware)
  */
 
 /**
- * Adding a new shortcut - Say you want Shift+N to open notifications.
+ * Adding a new global shortcut - Say you want Shift+N to open notifications.
  * Step 1 — Register it in the registry (shortcutsRegistry.js:56):
   { keys: ["Shift+N"], display: ["⇧", "N"], description: "Open notifications" }
   This makes it appear in the ? overlay automatically.
 
- * Step 2 — Handle it in the hook (useKeyboardShortcuts.js:27):
+ * Step 2 — Handle it in the hook (useWorkspaceShortcuts.js:27):
   Add the param and the case in the switch (or before it for modifier combos):
 
-  export function useKeyboardShortcuts({ ..., onOpenNotifications } = {}) {
+  export function useWorkspaceShortcuts({ ..., onOpenNotifications } = {}) {
     // inside the handler:
     if (e.shiftKey && e.key === "N") {
       e.preventDefault();
@@ -41,27 +34,24 @@ function isTypingTarget(e) {
       return;
     }
  * Step 3 — Wire the callback in AppLayout (AppLayout.jsx:92):
-  useKeyboardShortcuts({
+  useWorkspaceShortcuts({
     ...existing,
     onOpenNotifications: () => setNotificationsOpen(true),
-}); 
+});
  */
 
-export function useKeyboardShortcuts({
+export function useWorkspaceShortcuts({
   onOpenPalette,
   onOpenShortcuts,
   onToggleSidebar,
-  onCreateTask,
   onOpenPermissions,
-  onOpenFilters,
-  onFocusSearch,
   onOpenProfile,
   onOpenSettings,
 } = {}) {
   const navigate = useNavigate();
   const { workspaceId } = useParams();
 
-  // Tracks the first key of a chord (e.g. "g" in "g p")
+  // Tracks the first key of a chord (e.g. "g" in "g m")
   const chordRef = useRef(null);
   const chordTimer = useRef(null);
 
@@ -69,13 +59,8 @@ export function useKeyboardShortcuts({
     if (!workspaceId) return;
     const ws = (path) => `/w/${workspaceId}/${path}`;
     const CHORD_MAP = {
-      b: () => navigate(ws("boards")),
-      d: () => navigate(ws("dashboards")),
-      w: () => navigate(ws("my-work")),
       i: () =>
         window.dispatchEvent(new CustomEvent("jcn:toggle-notifications")),
-      a: () => navigate(ws("analytics")),
-      g: () => navigate(ws("goals")),
       s: () => navigate(ws("settings")),
       m: () => navigate(ws("members")),
     };
@@ -99,13 +84,6 @@ export function useKeyboardShortcuts({
       }
 
       if (isTypingTarget(e) || isModified) return;
-
-      // Shift+F — open/close filter panel
-      if (e.shiftKey && e.key === "F") {
-        e.preventDefault();
-        onOpenFilters?.();
-        return;
-      }
 
       // Chord: pending "g ..."
       if (chordRef.current === "g") {
@@ -134,19 +112,9 @@ export function useKeyboardShortcuts({
           onOpenShortcuts?.();
           break;
 
-        case "c":
-          e.preventDefault();
-          onCreateTask?.();
-          break;
-
         case "r":
           e.preventDefault();
           onOpenPermissions?.();
-          break;
-
-        case "/":
-          e.preventDefault();
-          onFocusSearch?.();
           break;
 
         case "u":
@@ -174,10 +142,8 @@ export function useKeyboardShortcuts({
     navigate,
     onOpenPalette,
     onOpenShortcuts,
-    onCreateTask,
     onToggleSidebar,
-    onOpenFilters,
-    onFocusSearch,
+    onOpenPermissions,
     onOpenProfile,
     onOpenSettings,
   ]);

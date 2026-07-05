@@ -1,8 +1,11 @@
 /**
  * Single source of truth for all keyboard shortcuts.
  * Consumed by:
- *   - useKeyboardShortcuts (registers handlers)
+ *   - useWorkspaceShortcuts (global handlers: palette, sidebar toggle, overlay,
+ *     "?", plus the workspace-level "g m"/"g s"/"g i" nav chords)
+ *   - useProjectsShortcuts (Project Management app: "g b/d/w/a/g", c, Shift+F, /)
  *   - useBoardShortcuts (board-local handlers)
+ *   - usePeopleShortcuts (People app: org:create, org:review-*)
  *   - useShortcutBindings (returns effective bindings for all consumers)
  *   - ShortcutOverlay (? overlay)
  *   - PreferencesPage > Shortcuts tab (settings page)

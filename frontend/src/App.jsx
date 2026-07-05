@@ -10,6 +10,7 @@ import AppLayout from "@/shared/components/layout/AppLayout";
 import AppGuard from "@/shared/components/layout/PermissionRoute";
 import WorkspaceRedirect from "@/pages/workspace/WorkspaceRedirect";
 import OrgOnboardingGate from "@/apps/people/components/OrgOnboardingGate";
+import ProjectsAppShell from "@/apps/project-management/components/ProjectsAppShell";
 
 // ── Public pages ──────────────────────────────────────────────────────────────
 const LoginPage = lazy(() => import("@/pages/auth/LoginPage"));
@@ -170,16 +171,18 @@ export default function App() {
 
               {/* ── Project Management ──────────────────────────────────── */}
               <Route element={<AppGuard app="projects" />}>
-                <Route path="boards" element={<BoardsPage />} />
-                <Route path="boards/:boardId" element={<KanbanPage />} />
-                <Route path="boards/:boardId/wiki" element={<WikiPage />} />
-                <Route path="boards/:boardId/wiki/:pageId" element={<WikiPage />} />
-                <Route path="boards/:boardId/forms" element={<FormsPage />} />
-                <Route path="dashboards" element={<DashboardsPage />} />
-                <Route path="analytics" element={<AnalyticsPage />} />
-                <Route path="goals" element={<GoalsPage />} />
-                <Route path="my-work" element={<MyWorkPage />} />
-                <Route path="import" element={<ImportPage />} />
+                <Route element={<ProjectsAppShell />}>
+                  <Route path="boards" element={<BoardsPage />} />
+                  <Route path="boards/:boardId" element={<KanbanPage />} />
+                  <Route path="boards/:boardId/wiki" element={<WikiPage />} />
+                  <Route path="boards/:boardId/wiki/:pageId" element={<WikiPage />} />
+                  <Route path="boards/:boardId/forms" element={<FormsPage />} />
+                  <Route path="dashboards" element={<DashboardsPage />} />
+                  <Route path="analytics" element={<AnalyticsPage />} />
+                  <Route path="goals" element={<GoalsPage />} />
+                  <Route path="my-work" element={<MyWorkPage />} />
+                  <Route path="import" element={<ImportPage />} />
+                </Route>
               </Route>
 
               {/* ── People & HR (Org Structure + HR Management) ─────────── */}

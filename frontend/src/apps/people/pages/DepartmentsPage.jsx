@@ -13,6 +13,7 @@ import { ShortcutTooltip } from "@/shared/components/ui/ShortcutTooltip";
 import { cn } from "@/shared/lib/utils";
 import { useMembers } from "@/shared/hooks/useMembers";
 import { usePermission } from "@/contexts/PermissionsContext";
+import { useCreateShortcut } from "@/apps/people/hooks/usePeopleShortcuts";
 import {
   useDepartments,
   useCreateDepartment,
@@ -536,15 +537,7 @@ export default function DepartmentsPage() {
   const openCreate = () => setModal({ mode: "create" });
   const openEdit = (dept) => { setModal({ mode: "edit", dept }); };
 
-  useEffect(() => {
-    const handleKey = (e) => {
-      if (modal) return;
-      if (e.target.matches("input,textarea,[contenteditable]")) return;
-      if (e.key === "n") { e.preventDefault(); openCreate(); }
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [modal]);
+  useCreateShortcut(openCreate, { disabled: !!modal });
   const closeModal = () => setModal(null);
 
   const handleDelete = async () => {

@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -18,6 +17,7 @@ import { Button } from "@/shared/components/ui/button";
 import { Loader } from "@/shared/components/ui/Loader";
 import { ShortcutTooltip } from "@/shared/components/ui/ShortcutTooltip";
 import { cn } from "@/shared/lib/utils";
+import { useProfileReviewShortcuts } from "@/apps/people/hooks/usePeopleShortcuts";
 import {
   ONBOARDING_STATUS,
   PROFILE_STATUS_CONFIG,
@@ -255,15 +255,14 @@ export default function PendingProfileModal({
   const hasNext = index < total - 1;
 
   // Keyboard shortcuts: ← → navigate · Enter approve · Esc close (Esc is handled by Modal)
-  useEffect(() => {
-    const handleKey = (e) => {
-      if (e.key === "ArrowLeft" && hasPrev) { onNavigate(index - 1); return; }
-      if (e.key === "ArrowRight" && hasNext) { onNavigate(index + 1); return; }
-      if (e.key === "Enter" && !isApproving) { onApprove(profile?.id); }
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [index, hasPrev, hasNext, isApproving, profile?.id, onNavigate, onApprove]);
+  useProfileReviewShortcuts({
+    hasPrev,
+    hasNext,
+    isApproving,
+    onPrev: () => onNavigate(index - 1),
+    onNext: () => onNavigate(index + 1),
+    onApprove: () => onApprove(profile?.id),
+  });
 
   const handleApprove = async () => {
     await onApprove(profile.id);

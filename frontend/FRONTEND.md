@@ -26,8 +26,8 @@ Since **vB.0** the frontend is feature-sliced. Each product module is a self-con
 ```
 src/apps/project-management/   — PM: boards, tasks, sprints, kanban, gantt, wiki, forms, time
    ├── pages/        KanbanPage, BoardsPage, WikiPage, FormsPage, …
-   ├── components/   tasks/*, projects/*, GettingStartedChecklist
-   └── hooks/        useTasks, useBoards, useSprints, useBoardMembers, useBoardPermissions, useBulkActions, useBoardShortcuts, … (see Hooks reference)
+   ├── components/   tasks/*, projects/*, GettingStartedChecklist, ProjectsHeader, ProjectsAppShell
+   └── hooks/        useTasks, useBoards, useSprints, useBoardMembers, useBoardPermissions, useBulkActions, useBoardShortcuts, useProjectsShortcuts, … (see Hooks reference)
 src/apps/people/                — People & HR: departments, teams, org chart, job titles,
                                    profiles, leave, attendance, HR dashboard, employee docs/notes
    ├── pages/        DepartmentsPage, TeamsPage, OrgChartPage, PeopleDirectoryPage,
@@ -35,11 +35,15 @@ src/apps/people/                — People & HR: departments, teams, org chart, 
                       AttendancePage, MemberDetailPage
    ├── components/   GettingStartedChecklist (single, covers both org + HR items)
    └── hooks/        useOrg, useLeave, useAttendance, useHRDashboard, useEmployeeDocs,
-                      useEmployeeNotes, usePeopleSocket
+                      useEmployeeNotes, usePeopleSocket, usePeopleShortcuts
 src/shared/                    — cross-app primitives
-   ├── components/   layout/ (AppLayout, Sidebar), CommandPalette, ui/*
-   ├── hooks/        useWorkspace, useMembers, useModules, useWorkspaceSocket, usePresence, …
-   └── lib/          api.js, env.js, navLinks.js, queryClient.js, constants.js, dateUtils.js, utils.js, boardTypes.js
+   ├── components/   layout/ (AppLayout, Sidebar — Sidebar is a plain nav/app-switcher/user-panel
+                      shell with no search bar; each app owns its own header if it needs one),
+                      CommandPalette, ui/*
+   ├── hooks/        useWorkspace, useMembers, useModules, useWorkspaceSocket, usePresence,
+                      useWorkspaceShortcuts, useShortcutBindings, …
+   └── lib/          api.js, env.js, navLinks.js, queryClient.js, constants.js, dateUtils.js,
+                      utils.js, boardTypes.js, shortcutsRegistry.js, shortcutMatch.js
 src/store/                     — Zustand stores (authStore, themeStore) — NOT under shared/
 ```
 
@@ -498,9 +502,9 @@ Single export `useBulkUpdateTasks(ws, boardId)` — mutation only, no query.
 
 ---
 
-### `useBoardShortcuts.js` _(new — not a React Query hook)_
+### `useBoardShortcuts.js` _(not a React Query hook)_
 
-Effect-based keyboard handler for board views. Signature:
+Effect-based keyboard handler for board views (`src/apps/project-management/hooks/`). Signature:
 
 ```js
 useBoardShortcuts({ tasks, selectedTaskId, focusedTaskId, setFocusedTaskId, onOpenTask, onCloseTask });
@@ -509,6 +513,7 @@ useBoardShortcuts({ tasks, selectedTaskId, focusedTaskId, setFocusedTaskId, onOp
 - Reads the user's custom key bindings via `useShortcutBindings()` (`src/shared/hooks/`).
 - Handles `board:focus-up`, `board:focus-down`, `board:open-task`, `board:close`, plus 2-key task-action chords (e.g. `z` then `e`).
 - Task-property chords dispatch a DOM `window → "jcn:task-action"` custom event that the card/detail layer listens for.
+- Matches keydowns against bindings via `isTypingTarget`/`matchesBinding` from `src/shared/lib/shortcutMatch.js` — the same helpers `useWorkspaceShortcuts`, `useProjectsShortcuts`, and `usePeopleShortcuts` use, so there's one implementation of "does this keydown match this binding" for the whole app.
 
 ---
 
@@ -1161,24 +1166,31 @@ Pure React hook (useState + useEffect). Used in KanbanPage for search: `useDebou
 
 ---
 
-### `useKeyboardShortcuts.js`
+### Keyboard shortcuts — three app-scoped hooks, not one global manager
 
-Global keyboard shortcut manager. Not React Query.
+Shortcuts used to live in a single global `useKeyboardShortcuts` mounted in `AppLayout`, which meant Project-Management-only chords (create task, board filters) fired on every page, including People/HR. That hook is now split into three, each mounted only where its shortcuts make sense. All read their key bindings from the shared `shortcutsRegistry.js` (source of truth for display strings + the `?` overlay) via `useShortcutBindings()`, and match keydowns with `isTypingTarget`/`matchesBinding` from `shared/lib/shortcutMatch.js`.
 
-Shortcuts:
+**`useWorkspaceShortcuts.js`** (`src/shared/hooks/`) — mounted once in `AppLayout`, active on every page regardless of app:
 
-- `Ctrl/Cmd+K` — command palette
-- `?` — help modal
-- `c` — create task (fires `window.dispatchEvent(new CustomEvent("jcn:create-task"))`)
-- `/` — focus search
-- `g p` — go to projects
-- `g d` — go to dashboard
-- `g m` — go to my work
-- `g i` — go to inbox
-- `g a` — go to analytics
-- `g g` — go to goals
+- `Ctrl/Cmd+K` — toggle command palette
+- `Ctrl/Cmd+.` — toggle sidebar collapse
+- `?` — shortcut overlay
+- `r` — open permissions manager (consumed by `MembersPage`)
+- `u` — open profile menu
+- `,` — open account settings
+- `g m` — go to members, `g s` — go to settings, `g i` — toggle notifications
 
-KanbanPage listens for `jcn:create-task` to open CreateTaskModal.
+**`useProjectsShortcuts.js`** (`src/apps/project-management/hooks/`) — mounted by `ProjectsAppShell`, only while a Projects route is active:
+
+- `c` — create task (fires `jcn:create-task`, KanbanPage listens to open CreateTaskModal)
+- `Shift+F` — open/close board filter panel (fires `jcn:open-filters`)
+- `/` — focus board search (fires `jcn:focus-search`, `FilterBar` listens)
+- `g b/d/w/a/g` — go to boards / dashboards / my-work / analytics / goals
+
+**`usePeopleShortcuts.js`** (`src/apps/people/hooks/`) — implements the `"org"` shortcut group. Deliberately **not** one global hook mounted for the whole People app (arrows/Enter would hijack normal form/list navigation on pages that don't want them) — instead two small hooks, each mounted only by the component that needs it:
+
+- `useCreateShortcut(onCreate, { disabled })` — `n` opens the create modal; used by `DepartmentsPage` and `TeamsPage` (previously each hand-rolled an identical `window.addEventListener("keydown", …)`).
+- `useProfileReviewShortcuts({ hasPrev, hasNext, isApproving, onPrev, onNext, onApprove })` — `←`/`→` navigate pending profiles, `Enter` approves; used by `PendingProfileModal` only while it's open.
 
 ---
 

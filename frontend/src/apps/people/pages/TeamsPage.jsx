@@ -14,6 +14,7 @@ import Modal from "@/shared/components/ui/Modal";
 import { ShortcutTooltip } from "@/shared/components/ui/ShortcutTooltip";
 import { cn } from "@/shared/lib/utils";
 import { useMembers } from "@/shared/hooks/useMembers";
+import { useCreateShortcut } from "@/apps/people/hooks/usePeopleShortcuts";
 import {
   useTeams,
   useTeamMembers,
@@ -495,15 +496,7 @@ export default function TeamsPage() {
     setModal({ mode: "edit", team });
   };
 
-  useEffect(() => {
-    const handleKey = (e) => {
-      if (modal) return;
-      if (e.target.matches("input,textarea,[contenteditable]")) return;
-      if (e.key === "n") { e.preventDefault(); openCreate(); }
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [modal]);
+  useCreateShortcut(openCreate, { disabled: !!modal });
   const closeModal = () => setModal(null);
 
   const handleDelete = async () => {

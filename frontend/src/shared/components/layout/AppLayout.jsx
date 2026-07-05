@@ -5,7 +5,7 @@ import { useThemeStore } from "@/store/themeStore";
 import { useWorkspace } from "@/shared/hooks/useWorkspace";
 import { PermissionsProvider } from "@/contexts/PermissionsContext";
 import { useWorkspaceSocket } from "@/shared/hooks/useWorkspaceSocket";
-import { useKeyboardShortcuts } from "@/shared/hooks/useKeyboardShortcuts";
+import { useWorkspaceShortcuts } from "@/shared/hooks/useWorkspaceShortcuts";
 import Sidebar from "@/shared/components/layout/Sidebar";
 const CommandPalette = lazy(() => import("@/shared/components/CommandPalette"));
 const ShortcutOverlay = lazy(
@@ -60,21 +60,12 @@ export default function AppLayout() {
     localStorage.removeItem("jcn_focus_until");
   };
 
-  useKeyboardShortcuts({
+  useWorkspaceShortcuts({
     onOpenPalette: () => setPaletteOpen((o) => !o),
     onOpenShortcuts: () => setShortcutsOpen((o) => !o),
     onToggleSidebar: () => setSidebarCollapsed((v) => !v),
-    onCreateTask: () => {
-      window.dispatchEvent(new CustomEvent("jcn:create-task"));
-    },
     onOpenPermissions: () => {
       window.dispatchEvent(new CustomEvent("jcn:open-permissions"));
-    },
-    onOpenFilters: () => {
-      window.dispatchEvent(new CustomEvent("jcn:open-filters"));
-    },
-    onFocusSearch: () => {
-      window.dispatchEvent(new CustomEvent("jcn:focus-search"));
     },
     onOpenProfile: () => {
       window.dispatchEvent(new CustomEvent("jcn:open-profile"));
@@ -84,6 +75,15 @@ export default function AppLayout() {
       setSettingsOpen(true);
     },
   });
+
+  // Per-app headers (e.g. ProjectsHeader) trigger the shared command palette
+  // via this event instead of a prop, since they render below Sidebar/Outlet
+  // and have no direct handle on AppLayout's palette state.
+  useEffect(() => {
+    const handler = () => setPaletteOpen(true);
+    window.addEventListener("jcn:open-palette", handler);
+    return () => window.removeEventListener("jcn:open-palette", handler);
+  }, []);
 
   return (
     <PermissionsProvider workspaceId={workspaceId}>
@@ -95,7 +95,6 @@ export default function AppLayout() {
           isFocusMode={isFocusMode}
           collapsed={sidebarCollapsed}
           onToggleCollapse={() => setSidebarCollapsed((v) => !v)}
-          onOpenPalette={() => setPaletteOpen(true)}
           onOpenSettings={(tab) => {
             setSettingsTab(tab);
             setSettingsOpen(true);

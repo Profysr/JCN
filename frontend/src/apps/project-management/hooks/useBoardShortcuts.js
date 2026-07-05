@@ -1,35 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useShortcutBindings } from "@/shared/hooks/useShortcutBindings";
 import { getShortcutsByGroup } from "@/shared/lib/shortcutsRegistry";
-
-function isTypingTarget(e) {
-  const tag = e.target.tagName;
-  return (
-    tag === "INPUT" ||
-    tag === "TEXTAREA" ||
-    tag === "SELECT" ||
-    e.target.isContentEditable
-  );
-}
-
-/**
- * Returns true when the keyboard event matches a binding definition.
- * Supports plain keys ("ArrowDown") and modifier combos ("Shift+F").
- * Chord shortcuts (["z", "then", "t"]) are excluded — handled by the chord
- * state machine in useBoardShortcuts.
- */
-function matchesBinding(e, keys) {
-  if (!keys?.length || keys.includes("then")) return false;
-  const key = keys[0];
-  if (key.includes("+")) {
-    const [modifier, k] = key.split("+");
-    if (modifier === "Shift") return e.shiftKey && !e.ctrlKey && !e.metaKey && e.key === k;
-    if (modifier === "Ctrl") return (e.ctrlKey || e.metaKey) && e.key === k;
-    return false;
-  }
-  // Plain key — must have no modifiers active
-  return !e.shiftKey && e.key === key;
-}
+import { isTypingTarget, matchesBinding } from "@/shared/lib/shortcutMatch";
 
 /**
  * Shortcuts that fire (as `jcn:task-action` events) when the task panel is open.
@@ -45,9 +17,9 @@ const PANEL_OPEN_SHORTCUTS = getShortcutsByGroup("task_actions", "task_panel");
 /**
  * Board-local keyboard shortcuts for KanbanPage.
  *
- * Global shortcuts (c, ?, /, Ctrl+K, g-chords, Shift+F) are handled by
- * useKeyboardShortcuts in AppLayout. This hook owns shortcuts scoped to a
- * board context:
+ * Global shortcuts (?, Ctrl+K) are handled by useWorkspaceShortcuts in
+ * AppLayout; Projects-wide ones (c, /, Shift+F, g-chords) by
+ * useProjectsShortcuts. This hook owns shortcuts scoped to a board context:
  *
  *   board:focus-up / board:focus-down — move keyboard focus through the task list
  *   board:open-task                   — open the focused task in the detail panel
