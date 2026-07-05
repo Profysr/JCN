@@ -9,8 +9,7 @@ import {
 } from "lucide-react";
 
 import { PM_NAV_ITEMS, PM_NAV_GROUPS } from "@/apps/project-management/nav";
-import { ORG_NAV_ITEMS, ORG_NAV_GROUPS } from "@/apps/org-structure/nav";
-import { HR_NAV_ITEMS, HR_NAV_GROUPS } from "@/apps/hr-management/nav";
+import { NAV_ITEMS as PEOPLE_NAV_ITEMS, NAV_GROUPS as PEOPLE_NAV_GROUPS } from "@/apps/people/nav";
 
 // ── App definitions ─────────────────────────────────────────────────────────
 // Single source of truth for every product app in the workspace.
@@ -21,9 +20,10 @@ import { HR_NAV_ITEMS, HR_NAV_GROUPS } from "@/apps/hr-management/nav";
 //   landing    → route suffix after /w/:id/ when switching to this app
 //   colors     → icon bubble bg / icon text / active dot / accent bar
 //
-// Org Structure and HR Management are one backend app ("people" — see
-// workspaces/constants.py APP_REGISTRY) since HR's data model is built
-// entirely on org data (employment profile, departments, job titles).
+// People (Org Structure + HR) is one frontend app and one backend app
+// ("people" — see workspaces/constants.py APP_REGISTRY) since HR's data
+// model is built entirely on org data (employment profile, departments,
+// job titles).
 
 export const APP_DEFS = [
   {
@@ -122,15 +122,13 @@ export const WORKSPACE_NAV_GROUPS = [
 // ── Aggregated nav registry ───────────────────────────────────────────────────
 export const NAV_ITEMS = [
   ...PM_NAV_ITEMS,
-  ...ORG_NAV_ITEMS,
-  ...HR_NAV_ITEMS,
+  ...PEOPLE_NAV_ITEMS,
   ...WORKSPACE_NAV_ITEMS,
 ];
 
 export const NAV_GROUPS = [
   ...PM_NAV_GROUPS.map((g) => ({ ...g, app: "projects" })),
-  ...ORG_NAV_GROUPS.map((g) => ({ ...g, app: "people" })),
-  ...HR_NAV_GROUPS.map((g) => ({ ...g, app: "people" })),
+  ...PEOPLE_NAV_GROUPS.map((g) => ({ ...g, app: "people" })),
   ...WORKSPACE_NAV_GROUPS.map((g) => ({ ...g, app: "workspace" })),
 ];
 

@@ -26,7 +26,7 @@ function useRelPath() {
  *
  * Usage in App.jsx:
  *   <Route element={<AppGuard app="projects" />}>   // app-level access check
- *   <Route element={<AppGuard app="hr" />}>
+ *   <Route element={<AppGuard app="people" />}>
  *   <Route element={<AppGuard />}>                   // permission-only (from ROUTE_PERM_MAP)
  *
  * Per-page permissions are driven entirely from NAV_ITEMS — any nav item with

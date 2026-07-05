@@ -161,7 +161,7 @@ grouping merged.
 | POST | `/api/workspaces/{ws}/members/bulk-assign-role/` | Assign a single role to multiple members. Body: `{ role, member_ids: [] }`. Max 200 members. |
 
 **Two-level permission model:**
-- `app_access` — `{"projects": true, "hr": false, ...}` controls whether a user can enter a product area
+- `app_access` — `{"projects": true, "people": false, ...}` controls whether a user can enter a product area
 - `permissions` — nested by app key; controls fine-grained actions within apps a user has access to
 
 **System roles** (auto-created per workspace via `create_system_roles()`, `is_system=True`, non-deletable):
@@ -622,8 +622,8 @@ Four dedicated views replace the old `AnalyticsMetricView` dynamic router. All f
 | `Webhook` | `workspace` (FK), `name`, `url`, `events` (JSON), `secret`, `is_active` | HMAC-SHA256 signing. `create_with_secret()` classmethod |
 | `WebhookDelivery` | `webhook` (FK), `event`, `request_body`, `response_code`, `response_body`, `duration_ms`, `success`, `attempt` | indexes: webhook+created_at, webhook+success |
 | `ImportJob` | `workspace` (FK), `source`, `status`, `file_name`, `parsed_rows`, `field_mapping`, `preview_rows`, `progress_pct`, `total_count`, `imported_count`, `skipped_count`, `error_log`, `imported_task_ids`, `created_by`, `completed_at` | index: workspace+status. Sources: jira, clickup, monday, notion, github, asana, csv |
-| `OnboardingState` | `workspace` (O2O), `wizard_completed`, `team_type`, `module_dismissed_by_users` (JSONField `{"projects": ["uuid1"], "org": [], "hr": []}`) | Per-module per-user dismissal. Checklist items computed on-the-fly from `workspaces/checklist.py` registry — add new modules there, no model change needed. |
-| `CustomRole` | `workspace` (FK), `name`, `description`, `is_system` (bool), `app_access` (JSONField `{"projects": true, "hr": false, ...}`), `permissions` (JSONField `{"workspace": {"settings.manage": true}, "projects": {"task.create": true}, ...}`) | unique: workspace+name; ordering: -is_system, name; index: `crole_workspace_system_idx`. `is_system=True` protects built-in Admin/Member/Viewer roles. Auto-created per workspace via `create_system_roles()`. |
+| `OnboardingState` | `workspace` (O2O), `wizard_completed`, `team_type`, `module_dismissed_by_users` (JSONField `{"projects": ["uuid1"], "people": []}`) | Per-module per-user dismissal. Checklist items computed on-the-fly from `workspaces/checklist.py` registry — add new modules there, no model change needed. |
+| `CustomRole` | `workspace` (FK), `name`, `description`, `is_system` (bool), `app_access` (JSONField `{"projects": true, "people": false, ...}`), `permissions` (JSONField `{"workspace": {"settings.manage": true}, "projects": {"task.create": true}, ...}`) | unique: workspace+name; ordering: -is_system, name; index: `crole_workspace_system_idx`. `is_system=True` protects built-in Admin/Member/Viewer roles. Auto-created per workspace via `create_system_roles()`. |
 | `RoleAssignment` | `workspace_member` (O2O→WorkspaceMember), `role` (FK→CustomRole, PROTECT), `assigned_by` (FK→User, nullable) | One per member; `update_or_create` on reassign; index: `rla_role_idx`. Auto-created for workspace owner (Admin) on workspace creation and for invited members on invite acceptance. |
 | `AuditEvent` | `workspace` (FK), `actor` (FK), `action`, `resource_type`, `resource_id`, `before` (JSON), `after` (JSON) | indexes: workspace+created_at, workspace+resource_type. Moved here from `projects/models.py` — it's workspace-wide infra, not project-specific. Write helpers `log_audit()`/`bulk_log_audit()` live in `workspaces/audit.py` (moved from `projects/permissions.py`); any app can call them. Still write-only — no audit-log viewer endpoint exists yet. **Requires `makemigrations projects workspaces` — see Pending migrations.** |
 
@@ -743,7 +743,7 @@ More bug fixes (later pass): removing the `DepartmentMember`/`TeamMember` row th
 
 Access via `workspaces/access.py`: reads require `org.view` (+ onboarding), structural mutations require `org.manage`, profile approval requires `org.approve_profiles`. All enforced with `access.authorize(...)`. See the "organization — Permission model" section above and `ACCESS.md`.
 
-Departments, teams, and reporting lines are paginated (`core.pagination.OrgListPagination`: page-based, `size` query param, default 50/max 100). The frontend hooks (`useDepartments`, `useTeams`) follow `next` until exhausted so dropdowns/grids still see the full set — see `frontend/src/apps/org-structure/hooks/useOrg.js::fetchAllPages`. The reporting-lines list isn't consumed by the frontend (kept for API completeness) so it wasn't given the same client-side unrolling.
+Departments, teams, and reporting lines are paginated (`core.pagination.OrgListPagination`: page-based, `size` query param, default 50/max 100). The frontend hooks (`useDepartments`, `useTeams`) follow `next` until exhausted so dropdowns/grids still see the full set — see `frontend/src/apps/people/hooks/useOrg.js::fetchAllPages`. The reporting-lines list isn't consumed by the frontend (kept for API completeness) so it wasn't given the same client-side unrolling.
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -789,20 +789,20 @@ Departments, teams, and reporting lines are paginated (`core.pagination.OrgListP
 **Models** — `JobTitle` (a named rank/level; fills the job-title dropdown and the
 label under a name on the chart). `Department` (top-level unit with a `head`,
 optional `parent` for sub-departments, color/identifier for UI chips) → frontend
-[DepartmentsPage.jsx](../frontend/src/apps/org-structure/pages/DepartmentsPage.jsx).
+[DepartmentsPage.jsx](../frontend/src/apps/people/pages/DepartmentsPage.jsx).
 `DepartmentMember` (join row; `is_head` is **computed** from `Department.head`, not
 stored, so promoting a head never rewrites membership rows). `Team` (smaller group,
 optionally under a `Department`, with its own `lead`) →
-[TeamsPage.jsx](../frontend/src/apps/org-structure/pages/TeamsPage.jsx). `TeamMember`
+[TeamsPage.jsx](../frontend/src/apps/people/pages/TeamsPage.jsx). `TeamMember`
 (mirrors `DepartmentMember`; `is_lead` derived from `Team.lead`). `OrgProfile`
 (extends a member with org fields + onboarding `status` draft→submitted→approved;
 non-admins are walled off until approved) → the wall is
-[OrgOnboardingGate.jsx](../frontend/src/apps/org-structure/components/OrgOnboardingGate.jsx),
+[OrgOnboardingGate.jsx](../frontend/src/apps/people/components/OrgOnboardingGate.jsx),
 the card is
-[MemberProfilePage.jsx](../frontend/src/apps/org-structure/pages/MemberProfilePage.jsx).
+[MemberProfilePage.jsx](../frontend/src/apps/people/pages/MemberProfilePage.jsx).
 `ReportingLine` (manager→report edge; `unique_together=[workspace, report]` = one
 manager per person) drawn as the connectors in
-[OrgChartPage.jsx](../frontend/src/apps/org-structure/pages/OrgChartPage.jsx).
+[OrgChartPage.jsx](../frontend/src/apps/people/pages/OrgChartPage.jsx).
 
 **Serializers** — Mini serializers (`MiniMemberSerializer`, `MiniDepartmentSerializer`,
 `MiniTeamSerializer`, `MiniJobTitleSerializer`) are the *nested* shape so a
@@ -968,7 +968,7 @@ User created → post_save → UserProfile auto-created
 ### Workspace-level (vD.1 — Custom RBAC)
 
 Every `WorkspaceMember` has a `RoleAssignment` → `CustomRole` with two JSONFields:
-- `app_access` — `{"projects": true, "hr": false, ...}` — coarse app-level gate
+- `app_access` — `{"projects": true, "people": false, ...}` — coarse app-level gate
 - `permissions` — `{"workspace": {"settings.manage": true}, "projects": {"task.create": true}, ...}` — nested fine-grained permissions
 
 Permission resolution:
@@ -1134,18 +1134,11 @@ All paginated responses follow DRF's standard envelope: `{count, next, previous,
 ```
 
 ### `workspaces/constants.py` — `WEBHOOK_EVENTS`
-```python
-["task.created", "task.updated", "task.deleted", "task.assigned",
- "task.commented", "task.completed", "sprint.started", "sprint.completed",
- "member.added", "member.removed",
- "org.profile.submitted", "org.profile.approved", "org.profile.updated",
- "org.department.created", "org.department.updated", "org.department.deleted",
- "org.department_member.added", "org.department_member.removed",
- "org.team.created", "org.team.updated", "org.team.deleted",
- "org.team_member.added", "org.team_member.removed",
- "org.job_title.created", "org.job_title.updated", "org.job_title.deleted",
- "org.reporting_line.created", "org.reporting_line.deleted"]
-```
+No longer hand-maintained — derived at import time from every `core.events.EVENTS`
+entry that has a `"webhook"` key: `list(dict.fromkeys(m["webhook"] for m in EVENTS.values() if "webhook" in m))`.
+To add a public webhook event, add the `"webhook"` key to its `EVENTS` entry in
+`core/events.py`; `WEBHOOK_EVENTS` picks it up automatically. See `core/events.py::EVENTS`
+for the current list.
 
 ---
 

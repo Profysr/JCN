@@ -21,9 +21,9 @@ import {
   useDepartmentMembers,
   useAddDepartmentMember,
   useRemoveDepartmentMember,
-} from "@/apps/org-structure/hooks/useOrg";
-import GettingStartedChecklist from "@/apps/org-structure/components/GettingStartedChecklist";
-import { ORG_COLORS, generateIdentifier } from "@/apps/org-structure/constants";
+} from "@/apps/people/hooks/useOrg";
+import GettingStartedChecklist from "@/apps/people/components/GettingStartedChecklist";
+import { ORG_COLORS, generateIdentifier } from "@/apps/people/constants";
 
 function buildTree(depts) {
   const map = {};

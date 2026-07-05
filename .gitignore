@@ -46,6 +46,7 @@ pnpm-debug.log*
 # ── Editor / OS ───────────────────────────────────────────
 .vscode/
 .fallow/
+.claude/
 .idea/
 *.swp
 *.swo
@@ -59,6 +60,4 @@ Desktop.ini
 *.bak
 *.tmp
 *.orig
-my-shift-sync-ui-main
-.claude
 .mcp.json

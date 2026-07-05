@@ -23,7 +23,7 @@ import {
   PROFILE_STATUS_CONFIG,
   getEmploymentLabel,
   formatDate,
-} from "@/apps/org-structure/constants";
+} from "@/apps/people/constants";
 
 // ── Small presentational atoms ────────────────────────────────────────────────
 function SectionCard({ title, icon: Icon, children }) {

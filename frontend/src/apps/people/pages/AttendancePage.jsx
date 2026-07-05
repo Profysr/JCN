@@ -1,9 +1,22 @@
 import { useState, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import {
-  LogIn, LogOut, Clock, CheckCircle2, XCircle, AlertCircle,
-  ChevronLeft, ChevronRight, Users, Download,
-  Timer, Calendar, BarChart3, Settings2, MapPin, MapPinOff,
+  LogIn,
+  LogOut,
+  Clock,
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
+  ChevronLeft,
+  ChevronRight,
+  Users,
+  Download,
+  Timer,
+  Calendar,
+  BarChart3,
+  Settings2,
+  MapPin,
+  MapPinOff,
 } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { Loader } from "@/shared/components/ui/Loader";
@@ -20,15 +33,25 @@ import {
   useMyAttendance,
   useAttendanceList,
   getGeolocation,
-} from "@/apps/hr-management/hooks/useAttendance";
+} from "@/apps/people/hooks/useAttendance";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const MONTH_NAMES = [
-  "January","February","March","April","May","June",
-  "July","August","September","October","November","December",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
-const DAY_NAMES = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 function toIso(d) {
   return d.toISOString().slice(0, 10);
@@ -59,7 +82,7 @@ function weekRange(offsetWeeks = 0) {
 
 function monthRange(year, month) {
   const from = toIso(new Date(year, month, 1));
-  const to   = toIso(new Date(year, month + 1, 0));
+  const to = toIso(new Date(year, month + 1, 0));
   return { from, to };
 }
 
@@ -115,11 +138,14 @@ function StatusChip({ s, small }) {
   const cfg = STATUS_CONFIG[s] ?? STATUS_CONFIG.future;
   const Icon = cfg.icon;
   return (
-    <span className={cn(
-      "inline-flex items-center gap-1 rounded-full font-medium",
-      small ? "px-2 py-0.5 text-xs" : "px-2.5 py-1 text-xs",
-      cfg.bg, cfg.text,
-    )}>
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full font-medium",
+        small ? "px-2 py-0.5 text-xs" : "px-2.5 py-1 text-xs",
+        cfg.bg,
+        cfg.text,
+      )}
+    >
       {Icon && <Icon className="h-3 w-3" />}
       {cfg.label}
     </span>
@@ -130,12 +156,14 @@ function StatusChip({ s, small }) {
 
 function AttendanceCalendar({ records }) {
   const today = new Date();
-  const [year, setYear]   = useState(today.getFullYear());
+  const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
 
   const recordMap = useMemo(() => {
     const m = {};
-    (records ?? []).forEach((r) => { m[r.date] = r; });
+    (records ?? []).forEach((r) => {
+      m[r.date] = r;
+    });
     return m;
   }, [records]);
 
@@ -156,12 +184,16 @@ function AttendanceCalendar({ records }) {
   }
 
   function prevMonth() {
-    if (month === 0) { setYear(y => y - 1); setMonth(11); }
-    else setMonth(m => m - 1);
+    if (month === 0) {
+      setYear((y) => y - 1);
+      setMonth(11);
+    } else setMonth((m) => m - 1);
   }
   function nextMonth() {
-    if (month === 11) { setYear(y => y + 1); setMonth(0); }
-    else setMonth(m => m + 1);
+    if (month === 11) {
+      setYear((y) => y + 1);
+      setMonth(0);
+    } else setMonth((m) => m + 1);
   }
 
   const cells = [];
@@ -175,7 +207,9 @@ function AttendanceCalendar({ records }) {
         <button onClick={prevMonth} className="p-1 rounded hover:bg-muted">
           <ChevronLeft className="h-4 w-4" />
         </button>
-        <span className="font-medium text-sm">{MONTH_NAMES[month]} {year}</span>
+        <span className="font-medium text-sm">
+          {MONTH_NAMES[month]} {year}
+        </span>
         <button onClick={nextMonth} className="p-1 rounded hover:bg-muted">
           <ChevronRight className="h-4 w-4" />
         </button>
@@ -183,7 +217,10 @@ function AttendanceCalendar({ records }) {
 
       <div className="grid grid-cols-7 gap-1 mb-1">
         {DAY_NAMES.map((d) => (
-          <div key={d} className="text-center text-xs text-muted-foreground font-medium py-1">
+          <div
+            key={d}
+            className="text-center text-xs text-muted-foreground font-medium py-1"
+          >
             {d}
           </div>
         ))}
@@ -198,10 +235,15 @@ function AttendanceCalendar({ records }) {
           return (
             <div
               key={iso}
-              title={rec ? `${fmt12(rec.clock_in)} → ${fmt12(rec.clock_out)}${rec.total_hours ? ` (${rec.total_hours}h)` : ""}` : cfg.label}
+              title={
+                rec
+                  ? `${fmt12(rec.clock_in)} → ${fmt12(rec.clock_out)}${rec.total_hours ? ` (${rec.total_hours}h)` : ""}`
+                  : cfg.label
+              }
               className={cn(
                 "relative flex items-center justify-center rounded text-xs font-medium h-8 cursor-default",
-                cfg.bg, cfg.text,
+                cfg.bg,
+                cfg.text,
                 isToday && "ring-2 ring-primary ring-offset-1",
               )}
             >
@@ -215,9 +257,14 @@ function AttendanceCalendar({ records }) {
       </div>
 
       <div className="flex flex-wrap gap-3 mt-3 text-xs text-muted-foreground">
-        {["on_time","late","absent","weekend"].map((s) => (
+        {["on_time", "late", "absent", "weekend"].map((s) => (
           <span key={s} className="flex items-center gap-1">
-            <span className={cn("h-3 w-3 rounded-sm inline-block", STATUS_CONFIG[s].cell)} />
+            <span
+              className={cn(
+                "h-3 w-3 rounded-sm inline-block",
+                STATUS_CONFIG[s].cell,
+              )}
+            />
             {STATUS_CONFIG[s].label}
           </span>
         ))}
@@ -238,7 +285,9 @@ function WeeklyChart({ records, expectedHours, weekOffset, setWeekOffset }) {
 
   const recordMap = useMemo(() => {
     const m = {};
-    (records ?? []).forEach((r) => { m[r.date] = r; });
+    (records ?? []).forEach((r) => {
+      m[r.date] = r;
+    });
     return m;
   }, [records]);
 
@@ -248,16 +297,24 @@ function WeeklyChart({ records, expectedHours, weekOffset, setWeekOffset }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
-        <button onClick={() => setWeekOffset(w => w - 1)} className="p-1 rounded hover:bg-muted">
+        <button
+          onClick={() => setWeekOffset((w) => w - 1)}
+          className="p-1 rounded hover:bg-muted"
+        >
           <ChevronLeft className="h-4 w-4" />
         </button>
         <span className="text-sm font-medium">
-          {MONTH_NAMES[mon.getMonth()].slice(0,3)} {mon.getDate()} — {(() => {
-            const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
-            return `${MONTH_NAMES[sun.getMonth()].slice(0,3)} ${sun.getDate()}`;
+          {MONTH_NAMES[mon.getMonth()].slice(0, 3)} {mon.getDate()} —{" "}
+          {(() => {
+            const sun = new Date(mon);
+            sun.setDate(mon.getDate() + 6);
+            return `${MONTH_NAMES[sun.getMonth()].slice(0, 3)} ${sun.getDate()}`;
           })()}
         </span>
-        <button onClick={() => setWeekOffset(w => w + 1)} className="p-1 rounded hover:bg-muted">
+        <button
+          onClick={() => setWeekOffset((w) => w + 1)}
+          className="p-1 rounded hover:bg-muted"
+        >
           <ChevronRight className="h-4 w-4" />
         </button>
       </div>
@@ -289,16 +346,22 @@ function WeeklyChart({ records, expectedHours, weekOffset, setWeekOffset }) {
                 <div
                   className={cn(
                     "w-full rounded-t transition-all",
-                    isWeekend  ? "bg-zinc-100 dark:bg-zinc-800" :
-                    status === "on_time" ? "bg-emerald-400 dark:bg-emerald-500" :
-                    status === "late"    ? "bg-amber-400 dark:bg-amber-500" :
-                    isPast && !isWeekend ? "bg-rose-200 dark:bg-rose-900/30" :
-                    "bg-zinc-100 dark:bg-zinc-800",
+                    isWeekend
+                      ? "bg-zinc-100 dark:bg-zinc-800"
+                      : status === "on_time"
+                        ? "bg-emerald-400 dark:bg-emerald-500"
+                        : status === "late"
+                          ? "bg-amber-400 dark:bg-amber-500"
+                          : isPast && !isWeekend
+                            ? "bg-rose-200 dark:bg-rose-900/30"
+                            : "bg-zinc-100 dark:bg-zinc-800",
                   )}
                   style={{ height: isWeekend || !hours ? "4px" : `${barPct}%` }}
                 />
               </div>
-              <span className="text-[10px] text-muted-foreground">{DAY_NAMES[i]}</span>
+              <span className="text-[10px] text-muted-foreground">
+                {DAY_NAMES[i]}
+              </span>
             </div>
           );
         })}
@@ -343,7 +406,9 @@ function AdminGrid({ workspaceId }) {
   }, [records]);
 
   function exportCSV() {
-    const header = ["Employee", ...days.map((d) => d.iso), "Total Hours"].join(",");
+    const header = ["Employee", ...days.map((d) => d.iso), "Total Hours"].join(
+      ",",
+    );
     const rows = employees.map(({ employee, byDate }) => {
       const name = employee.user.full_name;
       const cols = days.map(({ iso }) => {
@@ -351,7 +416,10 @@ function AdminGrid({ workspaceId }) {
         if (!r) return "";
         return r.total_hours ?? (r.clock_in ? `${r.clock_in}–` : "");
       });
-      const total = days.reduce((sum, { iso }) => sum + (byDate[iso]?.total_hours ?? 0), 0);
+      const total = days.reduce(
+        (sum, { iso }) => sum + (byDate[iso]?.total_hours ?? 0),
+        0,
+      );
       return [name, ...cols, total.toFixed(1)].join(",");
     });
     const csv = [header, ...rows].join("\n");
@@ -368,16 +436,24 @@ function AdminGrid({ workspaceId }) {
     <div>
       <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
         <div className="flex items-center gap-2">
-          <button onClick={() => setWeekOffset(w => w - 1)} className="p-1.5 rounded hover:bg-muted border">
+          <button
+            onClick={() => setWeekOffset((w) => w - 1)}
+            className="p-1.5 rounded hover:bg-muted border"
+          >
             <ChevronLeft className="h-4 w-4" />
           </button>
           <span className="text-sm font-medium min-w-[160px] text-center">
-            {MONTH_NAMES[mon.getMonth()].slice(0,3)} {mon.getDate()} — {(() => {
-              const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
-              return `${MONTH_NAMES[sun.getMonth()].slice(0,3)} ${sun.getDate()}, ${sun.getFullYear()}`;
+            {MONTH_NAMES[mon.getMonth()].slice(0, 3)} {mon.getDate()} —{" "}
+            {(() => {
+              const sun = new Date(mon);
+              sun.setDate(mon.getDate() + 6);
+              return `${MONTH_NAMES[sun.getMonth()].slice(0, 3)} ${sun.getDate()}, ${sun.getFullYear()}`;
             })()}
           </span>
-          <button onClick={() => setWeekOffset(w => w + 1)} className="p-1.5 rounded hover:bg-muted border">
+          <button
+            onClick={() => setWeekOffset((w) => w + 1)}
+            className="p-1.5 rounded hover:bg-muted border"
+          >
             <ChevronRight className="h-4 w-4" />
           </button>
           <Button size="sm" variant="ghost" onClick={() => setWeekOffset(0)}>
@@ -405,10 +481,15 @@ function AdminGrid({ workspaceId }) {
                   Employee
                 </th>
                 {days.map(({ iso, label, d }) => (
-                  <th key={iso} className={cn(
-                    "py-2 px-2 text-center font-medium text-xs min-w-[72px]",
-                    isoWeekday(d) >= 5 ? "text-zinc-400" : "text-muted-foreground",
-                  )}>
+                  <th
+                    key={iso}
+                    className={cn(
+                      "py-2 px-2 text-center font-medium text-xs min-w-[72px]",
+                      isoWeekday(d) >= 5
+                        ? "text-zinc-400"
+                        : "text-muted-foreground",
+                    )}
+                  >
                     <div>{label}</div>
                     <div className="font-normal text-[10px]">{d.getDate()}</div>
                   </th>
@@ -421,10 +502,14 @@ function AdminGrid({ workspaceId }) {
             <tbody>
               {employees.map(({ employee, byDate }) => {
                 const weekTotal = days.reduce(
-                  (sum, { iso }) => sum + (byDate[iso]?.total_hours ?? 0), 0
+                  (sum, { iso }) => sum + (byDate[iso]?.total_hours ?? 0),
+                  0,
                 );
                 return (
-                  <tr key={employee.id} className="border-b last:border-0 hover:bg-muted/30">
+                  <tr
+                    key={employee.id}
+                    className="border-b last:border-0 hover:bg-muted/30"
+                  >
                     <td className="py-2.5 px-3">
                       <Link
                         to={`/w/${workspaceId}/members/${employee.id}`}
@@ -447,7 +532,11 @@ function AdminGrid({ workspaceId }) {
                       return (
                         <td
                           key={iso}
-                          title={rec ? `In: ${fmt12(rec.clock_in)} · Out: ${fmt12(rec.clock_out)}` : undefined}
+                          title={
+                            rec
+                              ? `In: ${fmt12(rec.clock_in)} · Out: ${fmt12(rec.clock_out)}`
+                              : undefined
+                          }
                           className={cn(
                             "py-2 px-2 text-center",
                             isWeekend && "bg-zinc-50 dark:bg-zinc-900/20",
@@ -459,7 +548,8 @@ function AdminGrid({ workspaceId }) {
                             <div className="flex flex-col items-center gap-0.5">
                               <div className="flex items-center gap-1">
                                 <StatusChip s={rec.status} small />
-                                {(rec.clock_in_outside_geofence || rec.clock_out_outside_geofence) && (
+                                {(rec.clock_in_outside_geofence ||
+                                  rec.clock_out_outside_geofence) && (
                                   <MapPinOff className="h-3 w-3 text-amber-500" />
                                 )}
                               </div>
@@ -496,9 +586,9 @@ function AdminGrid({ workspaceId }) {
 function PolicyModal({ policy, workspaceId, onClose }) {
   const [form, setForm] = useState({
     work_start_time: policy?.work_start_time ?? "09:00",
-    work_end_time:   policy?.work_end_time   ?? "17:00",
+    work_end_time: policy?.work_end_time ?? "17:00",
     grace_period_minutes: policy?.grace_period_minutes ?? 15,
-    weekly_hours:    policy?.weekly_hours    ?? 40,
+    weekly_hours: policy?.weekly_hours ?? 40,
     geofence_enabled: policy?.geofence_enabled ?? false,
     geofence_radius_meters: policy?.geofence_radius_meters ?? 500,
   });
@@ -510,47 +600,71 @@ function PolicyModal({ policy, workspaceId, onClose }) {
   }
 
   return (
-    <Modal isOpen title="Attendance Policy" onClose={onClose} showFooter={false}>
+    <Modal
+      isOpen
+      title="Attendance Policy"
+      onClose={onClose}
+      showFooter={false}
+    >
       <div className="flex flex-col gap-4 p-1">
         <div className="grid grid-cols-2 gap-3">
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-muted-foreground">Work Start</span>
+            <span className="text-xs font-medium text-muted-foreground">
+              Work Start
+            </span>
             <input
               type="time"
               className="input border rounded px-3 py-1.5 text-sm bg-background"
               value={form.work_start_time}
-              onChange={(e) => setForm(f => ({ ...f, work_start_time: e.target.value }))}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, work_start_time: e.target.value }))
+              }
             />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-muted-foreground">Work End</span>
+            <span className="text-xs font-medium text-muted-foreground">
+              Work End
+            </span>
             <input
               type="time"
               className="input border rounded px-3 py-1.5 text-sm bg-background"
               value={form.work_end_time}
-              onChange={(e) => setForm(f => ({ ...f, work_end_time: e.target.value }))}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, work_end_time: e.target.value }))
+              }
             />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-muted-foreground">Grace Period (minutes)</span>
+            <span className="text-xs font-medium text-muted-foreground">
+              Grace Period (minutes)
+            </span>
             <input
               type="number"
               min="0"
               max="120"
               className="input border rounded px-3 py-1.5 text-sm bg-background"
               value={form.grace_period_minutes}
-              onChange={(e) => setForm(f => ({ ...f, grace_period_minutes: Number(e.target.value) }))}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  grace_period_minutes: Number(e.target.value),
+                }))
+              }
             />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-muted-foreground">Weekly Hours</span>
+            <span className="text-xs font-medium text-muted-foreground">
+              Weekly Hours
+            </span>
             <input
               type="number"
               min="1"
               max="80"
               className="input border rounded px-3 py-1.5 text-sm bg-background"
               value={form.weekly_hours}
-              onChange={(e) => setForm(f => ({ ...f, weekly_hours: Number(e.target.value) }))}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, weekly_hours: Number(e.target.value) }))
+              }
             />
           </label>
         </div>
@@ -560,31 +674,45 @@ function PolicyModal({ policy, workspaceId, onClose }) {
             <input
               type="checkbox"
               checked={!!form.geofence_enabled}
-              onChange={(e) => setForm(f => ({ ...f, geofence_enabled: e.target.checked }))}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, geofence_enabled: e.target.checked }))
+              }
               className="h-4 w-4 rounded border-input"
             />
-            <span className="text-sm text-foreground">Flag clock-ins outside expected work location</span>
+            <span className="text-sm text-foreground">
+              Flag clock-ins outside expected work location
+            </span>
           </label>
           <p className="text-xs text-muted-foreground -mt-2">
-            Compares clock-in/out coordinates against each employee&apos;s profile location. Never blocks — HR is notified, that&apos;s all.
+            Compares clock-in/out coordinates against each employee&apos;s
+            profile location. Never blocks — HR is notified, that&apos;s all.
           </p>
           {form.geofence_enabled && (
             <label className="flex flex-col gap-1 max-w-[220px]">
-              <span className="text-xs font-medium text-muted-foreground">Radius (meters)</span>
+              <span className="text-xs font-medium text-muted-foreground">
+                Radius (meters)
+              </span>
               <input
                 type="number"
                 min="10"
                 max="50000"
                 className="input border rounded px-3 py-1.5 text-sm bg-background"
                 value={form.geofence_radius_meters}
-                onChange={(e) => setForm(f => ({ ...f, geofence_radius_meters: Number(e.target.value) }))}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    geofence_radius_meters: Number(e.target.value),
+                  }))
+                }
               />
             </label>
           )}
         </div>
 
         <div className="flex justify-end gap-2 pt-1">
-          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
           <Button size="sm" onClick={handleSave} disabled={update.isPending}>
             {update.isPending ? "Saving…" : "Save"}
           </Button>
@@ -597,8 +725,8 @@ function PolicyModal({ policy, workspaceId, onClose }) {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { key: "my",    label: "My Attendance", icon: Clock },
-  { key: "grid",  label: "Team Grid",     icon: Users },
+  { key: "my", label: "My Attendance", icon: Clock },
+  { key: "grid", label: "Team Grid", icon: Users },
 ];
 
 export default function AttendancePage() {
@@ -622,7 +750,9 @@ export default function AttendancePage() {
     [],
   );
   const { data: myRecords = [], isLoading: myLoading } = useMyAttendance(
-    workspaceId, calFrom, calTo,
+    workspaceId,
+    calFrom,
+    calTo,
   );
 
   // Chart data — selected week
@@ -630,16 +760,20 @@ export default function AttendancePage() {
     () => weekRange(chartWeekOffset),
     [chartWeekOffset],
   );
-  const { data: chartRecords = [] } = useMyAttendance(workspaceId, chartFrom, chartTo);
+  const { data: chartRecords = [] } = useMyAttendance(
+    workspaceId,
+    chartFrom,
+    chartTo,
+  );
 
   // Today's record
   const todayIso = toIso(today);
   const todayRecord = myRecords.find((r) => r.date === todayIso);
 
-  const clockIn  = useClockIn(workspaceId);
+  const clockIn = useClockIn(workspaceId);
   const clockOut = useClockOut(workspaceId);
 
-  if (!isOwner && !hasAppAccess("hr")) {
+  if (!isOwner && !hasAppAccess("people")) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4 text-center p-8">
         <Timer className="h-12 w-12 text-muted-foreground/40" />
@@ -653,7 +787,7 @@ export default function AttendancePage() {
     );
   }
 
-  const isClockedIn  = !!todayRecord?.clock_in;
+  const isClockedIn = !!todayRecord?.clock_in;
   const isClockedOut = !!todayRecord?.clock_out;
 
   async function handleClockIn() {
@@ -744,25 +878,59 @@ export default function AttendancePage() {
                   ) : (
                     <div className="h-16 w-40 rounded-xl bg-muted flex flex-col items-center justify-center gap-1">
                       <CheckCircle2 className="h-6 w-6 text-emerald-500" />
-                      <span className="text-sm font-medium">Done for today</span>
+                      <span className="text-sm font-medium">
+                        Done for today
+                      </span>
                     </div>
                   )}
                   <span className="text-xs text-muted-foreground">
-                    {new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
+                    {new Date().toLocaleDateString("en-US", {
+                      weekday: "long",
+                      month: "short",
+                      day: "numeric",
+                    })}
                   </span>
                 </div>
 
                 {/* Daily status strip */}
                 <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-4 w-full">
                   {[
-                    { label: "Clock In",    value: fmt12(todayRecord?.clock_in),  icon: LogIn },
-                    { label: "Clock Out",   value: fmt12(todayRecord?.clock_out), icon: LogOut },
-                    { label: "Total Hours", value: todayRecord?.total_hours != null ? `${todayRecord.total_hours}h` : "—", icon: Timer },
-                    { label: "Status",      value: <StatusChip s={todayRecord?.status ?? (isClockedIn && !isClockedOut ? "in_progress" : "—")} small />, icon: BarChart3 },
+                    {
+                      label: "Clock In",
+                      value: fmt12(todayRecord?.clock_in),
+                      icon: LogIn,
+                    },
+                    {
+                      label: "Clock Out",
+                      value: fmt12(todayRecord?.clock_out),
+                      icon: LogOut,
+                    },
+                    {
+                      label: "Total Hours",
+                      value:
+                        todayRecord?.total_hours != null
+                          ? `${todayRecord.total_hours}h`
+                          : "—",
+                      icon: Timer,
+                    },
+                    {
+                      label: "Status",
+                      value: (
+                        <StatusChip
+                          s={
+                            todayRecord?.status ??
+                            (isClockedIn && !isClockedOut ? "in_progress" : "—")
+                          }
+                          small
+                        />
+                      ),
+                      icon: BarChart3,
+                    },
                   ].map(({ label, value, icon: Icon }) => (
                     <div key={label} className="flex flex-col gap-1">
                       <span className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Icon className="h-3 w-3" />{label}
+                        <Icon className="h-3 w-3" />
+                        {label}
                       </span>
                       <span className="text-sm font-semibold">{value}</span>
                     </div>
@@ -770,14 +938,16 @@ export default function AttendancePage() {
                 </div>
               </div>
 
-              {(todayRecord?.clock_in_outside_geofence || todayRecord?.clock_out_outside_geofence) && (
+              {(todayRecord?.clock_in_outside_geofence ||
+                todayRecord?.clock_out_outside_geofence) && (
                 <p className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 mt-3">
                   <MapPinOff className="h-3.5 w-3.5" />
-                  {todayRecord?.clock_in_outside_geofence && todayRecord?.clock_out_outside_geofence
+                  {todayRecord?.clock_in_outside_geofence &&
+                  todayRecord?.clock_out_outside_geofence
                     ? "Clock in and out were both outside the expected work location."
                     : todayRecord?.clock_in_outside_geofence
-                    ? "Clock in was outside the expected work location."
-                    : "Clock out was outside the expected work location."}
+                      ? "Clock in was outside the expected work location."
+                      : "Clock out was outside the expected work location."}
                 </p>
               )}
 

@@ -9,7 +9,7 @@ import ProtectedRoute from "@/shared/components/layout/ProtectedRoute";
 import AppLayout from "@/shared/components/layout/AppLayout";
 import AppGuard from "@/shared/components/layout/PermissionRoute";
 import WorkspaceRedirect from "@/pages/workspace/WorkspaceRedirect";
-import OrgOnboardingGate from "@/apps/org-structure/components/OrgOnboardingGate";
+import OrgOnboardingGate from "@/apps/people/components/OrgOnboardingGate";
 
 // ── Public pages ──────────────────────────────────────────────────────────────
 const LoginPage = lazy(() => import("@/pages/auth/LoginPage"));
@@ -45,34 +45,32 @@ const FormsPage = lazy(
   () => import("@/apps/project-management/pages/FormsPage"),
 );
 
-// ── Org Structure pages ───────────────────────────────────────────────────────
+// ── People & HR pages ──────────────────────────────────────────────────────────
 const DepartmentsPage = lazy(
-  () => import("@/apps/org-structure/pages/DepartmentsPage"),
+  () => import("@/apps/people/pages/DepartmentsPage"),
 );
-const TeamsPage = lazy(() => import("@/apps/org-structure/pages/TeamsPage"));
+const TeamsPage = lazy(() => import("@/apps/people/pages/TeamsPage"));
 const OrgChartPage = lazy(
-  () => import("@/apps/org-structure/pages/OrgChartPage"),
+  () => import("@/apps/people/pages/OrgChartPage"),
 );
 const PeopleDirectoryPage = lazy(
-  () => import("@/apps/org-structure/pages/PeopleDirectoryPage"),
+  () => import("@/apps/people/pages/PeopleDirectoryPage"),
 );
 const PendingProfilesPage = lazy(
-  () => import("@/apps/org-structure/pages/PendingProfilesPage"),
+  () => import("@/apps/people/pages/PendingProfilesPage"),
 );
 const JobTitlesPage = lazy(
-  () => import("@/apps/org-structure/pages/JobTitlesPage"),
+  () => import("@/apps/people/pages/JobTitlesPage"),
 );
-
-// ── HR Management pages ───────────────────────────────────────────────────────
 const HRDashboardPage = lazy(
-  () => import("@/apps/hr-management/pages/HRDashboardPage"),
+  () => import("@/apps/people/pages/HRDashboardPage"),
 );
-const LeavePage = lazy(() => import("@/apps/hr-management/pages/LeavePage"));
+const LeavePage = lazy(() => import("@/apps/people/pages/LeavePage"));
 const AttendancePage = lazy(
-  () => import("@/apps/hr-management/pages/AttendancePage"),
+  () => import("@/apps/people/pages/AttendancePage"),
 );
 const MemberDetailPage = lazy(
-  () => import("@/apps/hr-management/pages/MemberDetailPage"),
+  () => import("@/apps/people/pages/MemberDetailPage"),
 );
 
 // ── Project Management — workspace-level pages ────────────────────────────────

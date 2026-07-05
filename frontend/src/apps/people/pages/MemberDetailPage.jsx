@@ -1,45 +1,69 @@
 import { useState, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
-  ArrowLeft, User, FileText, CalendarDays, MessageSquare,
-  Upload, Trash2, Download, Plus, Pencil, Check, X,
-  AlertTriangle, Clock, CheckCircle2, XCircle, FileIcon,
-  Briefcase, Building2, Users2, MapPin, Calendar, Hash,
-  ChevronRight, Users,
+  ArrowLeft,
+  User,
+  FileText,
+  CalendarDays,
+  MessageSquare,
+  Upload,
+  Trash2,
+  Download,
+  Plus,
+  Pencil,
+  Check,
+  X,
+  AlertTriangle,
+  Clock,
+  CheckCircle2,
+  XCircle,
+  FileIcon,
+  Briefcase,
+  Building2,
+  Users2,
+  MapPin,
+  Calendar,
+  Hash,
+  ChevronRight,
+  Users,
 } from "lucide-react";
 import { Avatar } from "@/shared/components/ui/avatar";
 import { Button } from "@/shared/components/ui/button";
 import { Loader } from "@/shared/components/ui/Loader";
 import Select from "@/shared/components/ui/Select";
 import { EmptyState } from "@/shared/components/ui/empty-state";
-import { SectionCard, DetailRow, Chip } from "@/shared/components/ui/SectionCard";
+import {
+  SectionCard,
+  DetailRow,
+  Chip,
+} from "@/shared/components/ui/SectionCard";
 import { cn } from "@/shared/lib/utils";
 import { EMPLOYMENT_TYPES } from "@/shared/lib/constants";
 import { useMembers } from "@/shared/hooks/useMembers";
 import { usePermission } from "@/contexts/PermissionsContext";
-import { useLeaveRequests } from "@/apps/hr-management/hooks/useLeave";
+import { useLeaveRequests } from "@/apps/people/hooks/useLeave";
 import {
   useEmployeeDocs,
   useUploadEmployeeDoc,
   useDeleteEmployeeDoc,
-} from "@/apps/hr-management/hooks/useEmployeeDocs";
+} from "@/apps/people/hooks/useEmployeeDocs";
 import {
   useEmployeeNotes,
   useCreateEmployeeNote,
   useUpdateEmployeeNote,
   useDeleteEmployeeNote,
-} from "@/apps/hr-management/hooks/useEmployeeNotes";
+} from "@/apps/people/hooks/useEmployeeNotes";
 import {
   useOrgProfile,
   useUpdateOrgProfile,
   useJobTitles,
-} from "@/apps/org-structure/hooks/useOrg";
+} from "@/apps/people/hooks/useOrg";
 import {
   ONBOARDING_STATUS,
   PROFILE_STATUS_CONFIG,
   getEmploymentLabel,
   formatDate,
-} from "@/apps/org-structure/constants";
+} from "@/apps/people/constants";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const DOC_TYPES = [
@@ -70,14 +94,31 @@ function Tab({ active, onClick, icon: Icon, label }) {
 
 function StatusChip({ status }) {
   const map = {
-    pending:   { icon: Clock,        cls: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300" },
-    approved:  { icon: CheckCircle2, cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" },
-    rejected:  { icon: XCircle,      cls: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300" },
-    cancelled: { icon: XCircle,      cls: "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400" },
+    pending: {
+      icon: Clock,
+      cls: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",
+    },
+    approved: {
+      icon: CheckCircle2,
+      cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300",
+    },
+    rejected: {
+      icon: XCircle,
+      cls: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300",
+    },
+    cancelled: {
+      icon: XCircle,
+      cls: "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400",
+    },
   };
   const { icon: Icon, cls } = map[status] ?? map.pending;
   return (
-    <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium capitalize", cls)}>
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium capitalize",
+        cls,
+      )}
+    >
       <Icon className="w-3 h-3" />
       {status}
     </span>
@@ -95,12 +136,23 @@ function ExpiryBadge({ daysUntilExpiry }) {
         {daysUntilExpiry}d left
       </span>
     );
-  return <span className="text-xs text-muted-foreground">{daysUntilExpiry}d left</span>;
+  return (
+    <span className="text-xs text-muted-foreground">
+      {daysUntilExpiry}d left
+    </span>
+  );
 }
 
 // ── Profile Tab ───────────────────────────────────────────────────────────────
 
-function ProfileEditForm({ form, setForm, jobTitles, onSave, onCancel, isPending }) {
+function ProfileEditForm({
+  form,
+  setForm,
+  jobTitles,
+  onSave,
+  onCancel,
+  isPending,
+}) {
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   return (
     <div className="space-y-4">
@@ -154,7 +206,9 @@ function ProfileEditForm({ form, setForm, jobTitles, onSave, onCancel, isPending
         </label>
       </div>
       <label className="block text-sm">
-        <span className="text-muted-foreground">Work location (Google Maps link)</span>
+        <span className="text-muted-foreground">
+          Work location (Google Maps link)
+        </span>
         <input
           type="url"
           placeholder="https://maps.google.com/…"
@@ -163,7 +217,8 @@ function ProfileEditForm({ form, setForm, jobTitles, onSave, onCancel, isPending
           onChange={(e) => set("work_location_url", e.target.value)}
         />
         <span className="text-xs text-muted-foreground">
-          Paste a Maps share link — coordinates are derived automatically and used for attendance geofencing.
+          Paste a Maps share link — coordinates are derived automatically and
+          used for attendance geofencing.
         </span>
       </label>
       <label className="block text-sm">
@@ -221,7 +276,9 @@ function ProfileTab({ workspaceId, memberId, isAdmin }) {
   if (!profile) return null;
 
   const user = profile.member?.user;
-  const statusCfg = PROFILE_STATUS_CONFIG[profile.status] ?? PROFILE_STATUS_CONFIG[ONBOARDING_STATUS.DRAFT];
+  const statusCfg =
+    PROFILE_STATUS_CONFIG[profile.status] ??
+    PROFILE_STATUS_CONFIG[ONBOARDING_STATUS.DRAFT];
 
   return (
     <div className="space-y-6">
@@ -237,7 +294,12 @@ function ProfileTab({ workspaceId, memberId, isAdmin }) {
               className="ring-4 ring-background rounded-full"
             />
             <div className="flex items-center gap-2">
-              <span className={cn("px-3 py-1 rounded-full text-xs font-semibold", statusCfg.className)}>
+              <span
+                className={cn(
+                  "px-3 py-1 rounded-full text-xs font-semibold",
+                  statusCfg.className,
+                )}
+              >
                 {statusCfg.label}
               </span>
               {isAdmin && !editing && (
@@ -249,7 +311,9 @@ function ProfileTab({ workspaceId, memberId, isAdmin }) {
             </div>
           </div>
 
-          <h1 className="text-xl font-bold tracking-tight">{user?.full_name || user?.email}</h1>
+          <h1 className="text-xl font-bold tracking-tight">
+            {user?.full_name || user?.email}
+          </h1>
           {profile.job_title && (
             <p className="text-sm text-muted-foreground mt-0.5">
               {profile.job_title.name}
@@ -265,7 +329,10 @@ function ProfileTab({ workspaceId, memberId, isAdmin }) {
           {!editing && (
             <div className="flex flex-wrap gap-2 mt-4">
               {profile.employment_type && (
-                <Chip label={getEmploymentLabel(profile.employment_type)} className="bg-muted text-muted-foreground" />
+                <Chip
+                  label={getEmploymentLabel(profile.employment_type)}
+                  className="bg-muted text-muted-foreground"
+                />
               )}
               {profile.location && (
                 <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
@@ -314,7 +381,10 @@ function ProfileTab({ workspaceId, memberId, isAdmin }) {
                   className="flex items-center gap-3 group"
                 >
                   <Avatar
-                    user={{ full_name: profile.manager.name, email: profile.manager.email }}
+                    user={{
+                      full_name: profile.manager.name,
+                      email: profile.manager.email,
+                    }}
                     name={profile.manager.name || profile.manager.email}
                     size="sm"
                     className="flex-shrink-0"
@@ -323,30 +393,46 @@ function ProfileTab({ workspaceId, memberId, isAdmin }) {
                     <p className="text-sm font-medium group-hover:text-primary transition-colors truncate">
                       {profile.manager.name || profile.manager.email}
                     </p>
-                    <p className="text-xs text-muted-foreground truncate">{profile.manager.email}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {profile.manager.email}
+                    </p>
                   </div>
                   <ChevronRight className="w-4 h-4 text-muted-foreground/40 flex-shrink-0 group-hover:text-primary transition-colors" />
                 </Link>
               ) : (
-                <p className="text-sm text-muted-foreground italic">No manager set</p>
+                <p className="text-sm text-muted-foreground italic">
+                  No manager set
+                </p>
               )}
             </SectionCard>
 
             {profile.direct_reports_count > 0 && (
               <SectionCard title="Direct Reports" icon={Users}>
                 <div className="flex items-center gap-2">
-                  <span className="text-3xl font-bold">{profile.direct_reports_count}</span>
+                  <span className="text-3xl font-bold">
+                    {profile.direct_reports_count}
+                  </span>
                   <span className="text-sm text-muted-foreground">
-                    {profile.direct_reports_count === 1 ? "person" : "people"} reporting to them
+                    {profile.direct_reports_count === 1 ? "person" : "people"}{" "}
+                    reporting to them
                   </span>
                 </div>
               </SectionCard>
             )}
 
             <SectionCard title="Employment" icon={Briefcase}>
-              <DetailRow label="Type" value={getEmploymentLabel(profile.employment_type)} />
-              <DetailRow label="Employee ID" value={profile.employee_id || null} />
-              <DetailRow label="Start date" value={formatDate(profile.start_date)} />
+              <DetailRow
+                label="Type"
+                value={getEmploymentLabel(profile.employment_type)}
+              />
+              <DetailRow
+                label="Employee ID"
+                value={profile.employee_id || null}
+              />
+              <DetailRow
+                label="Start date"
+                value={formatDate(profile.start_date)}
+              />
               <DetailRow label="Location" value={profile.location || null} />
               {profile.work_location_url && (
                 <DetailRow
@@ -359,7 +445,8 @@ function ProfileTab({ workspaceId, memberId, isAdmin }) {
                       className="text-primary hover:underline inline-flex items-center gap-1"
                     >
                       <MapPin className="w-3 h-3" />
-                      {profile.work_latitude != null && profile.work_longitude != null
+                      {profile.work_latitude != null &&
+                      profile.work_longitude != null
                         ? `${Number(profile.work_latitude).toFixed(4)}, ${Number(profile.work_longitude).toFixed(4)}`
                         : "View on map"}
                     </a>
@@ -379,7 +466,9 @@ function ProfileTab({ workspaceId, memberId, isAdmin }) {
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground italic">Not in any department</p>
+                <p className="text-sm text-muted-foreground italic">
+                  Not in any department
+                </p>
               )}
             </SectionCard>
 
@@ -391,16 +480,27 @@ function ProfileTab({ workspaceId, memberId, isAdmin }) {
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground italic">Not in any team</p>
+                <p className="text-sm text-muted-foreground italic">
+                  Not in any team
+                </p>
               )}
             </SectionCard>
 
             <SectionCard title="Profile Details" icon={Hash}>
               <DetailRow label="Status" value={statusCfg.label} />
-              <DetailRow label="Submitted" value={formatDate(profile.submitted_at)} />
-              <DetailRow label="Approved" value={formatDate(profile.approved_at)} />
+              <DetailRow
+                label="Submitted"
+                value={formatDate(profile.submitted_at)}
+              />
+              <DetailRow
+                label="Approved"
+                value={formatDate(profile.approved_at)}
+              />
               {profile.approved_by && (
-                <DetailRow label="Approved by" value={profile.approved_by?.user?.full_name || "—"} />
+                <DetailRow
+                  label="Approved by"
+                  value={profile.approved_by?.user?.full_name || "—"}
+                />
               )}
             </SectionCard>
           </div>
@@ -473,7 +573,12 @@ function DocumentsTab({ workspaceId, memberId }) {
               <Upload className="w-4 h-4 mr-1.5" />
               {upload.isPending ? "Uploading…" : "Choose file"}
             </Button>
-            <input ref={fileRef} type="file" className="hidden" onChange={handleFileChange} />
+            <input
+              ref={fileRef}
+              type="file"
+              className="hidden"
+              onChange={handleFileChange}
+            />
           </div>
         </div>
 
@@ -489,10 +594,13 @@ function DocumentsTab({ workspaceId, memberId }) {
               <div key={doc.id} className="flex items-center gap-3 px-4 py-3">
                 <FileIcon className="w-5 h-5 text-muted-foreground flex-shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{doc.original_name}</p>
+                  <p className="text-sm font-medium truncate">
+                    {doc.original_name}
+                  </p>
                   <p className="text-xs text-muted-foreground capitalize">
                     {doc.doc_type}
-                    {doc.expiry_date && ` · expires ${new Date(doc.expiry_date).toLocaleDateString()}`}
+                    {doc.expiry_date &&
+                      ` · expires ${new Date(doc.expiry_date).toLocaleDateString()}`}
                   </p>
                 </div>
                 <ExpiryBadge daysUntilExpiry={doc.days_until_expiry} />
@@ -554,7 +662,9 @@ function LeaveHistoryTab({ workspaceId, memberId }) {
                   {new Date(req.end_date).toLocaleDateString()}
                 </p>
                 {req.reason && (
-                  <p className="text-xs text-muted-foreground mt-1 truncate">{req.reason}</p>
+                  <p className="text-xs text-muted-foreground mt-1 truncate">
+                    {req.reason}
+                  </p>
                 )}
               </div>
               <p className="text-xs text-muted-foreground whitespace-nowrap">
@@ -571,7 +681,10 @@ function LeaveHistoryTab({ workspaceId, memberId }) {
 // ── Notes Tab ─────────────────────────────────────────────────────────────────
 
 function NotesTab({ workspaceId, memberId }) {
-  const { data: notes = [], isLoading } = useEmployeeNotes(workspaceId, memberId);
+  const { data: notes = [], isLoading } = useEmployeeNotes(
+    workspaceId,
+    memberId,
+  );
   const create = useCreateEmployeeNote(workspaceId, memberId);
   const update = useUpdateEmployeeNote(workspaceId, memberId);
   const remove = useDeleteEmployeeNote(workspaceId, memberId);
@@ -582,9 +695,12 @@ function NotesTab({ workspaceId, memberId }) {
 
   function submitNote() {
     if (!newContent.trim()) return;
-    create.mutate({ content: newContent, is_private: true }, {
-      onSuccess: () => setNewContent(""),
-    });
+    create.mutate(
+      { content: newContent, is_private: true },
+      {
+        onSuccess: () => setNewContent(""),
+      },
+    );
   }
 
   function startEdit(note) {
@@ -593,9 +709,15 @@ function NotesTab({ workspaceId, memberId }) {
   }
 
   function saveEdit() {
-    update.mutate({ noteId: editingId, content: editContent }, {
-      onSuccess: () => { setEditingId(null); setEditContent(""); },
-    });
+    update.mutate(
+      { noteId: editingId, content: editContent },
+      {
+        onSuccess: () => {
+          setEditingId(null);
+          setEditContent("");
+        },
+      },
+    );
   }
 
   if (isLoading) return <Loader className="h-40" />;
@@ -613,7 +735,11 @@ function NotesTab({ workspaceId, memberId }) {
             onChange={(e) => setNewContent(e.target.value)}
           />
           <div className="flex justify-end">
-            <Button size="sm" onClick={submitNote} disabled={!newContent.trim() || create.isPending}>
+            <Button
+              size="sm"
+              onClick={submitNote}
+              disabled={!newContent.trim() || create.isPending}
+            >
               <Plus className="w-4 h-4 mr-1" />
               Add note
             </Button>
@@ -639,11 +765,19 @@ function NotesTab({ workspaceId, memberId }) {
                       onChange={(e) => setEditContent(e.target.value)}
                     />
                     <div className="flex gap-2">
-                      <Button size="sm" onClick={saveEdit} disabled={update.isPending}>
+                      <Button
+                        size="sm"
+                        onClick={saveEdit}
+                        disabled={update.isPending}
+                      >
                         <Check className="w-4 h-4 mr-1" />
                         Save
                       </Button>
-                      <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setEditingId(null)}
+                      >
                         <X className="w-4 h-4 mr-1" />
                         Cancel
                       </Button>
@@ -652,7 +786,9 @@ function NotesTab({ workspaceId, memberId }) {
                 ) : (
                   <div className="flex gap-2">
                     <div className="flex-1">
-                      <p className="text-sm whitespace-pre-wrap">{note.content}</p>
+                      <p className="text-sm whitespace-pre-wrap">
+                        {note.content}
+                      </p>
                       <p className="text-xs text-muted-foreground mt-2">
                         {note.author?.full_name} ·{" "}
                         {new Date(note.created_at).toLocaleDateString()}
@@ -686,10 +822,10 @@ function NotesTab({ workspaceId, memberId }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { key: "profile",   label: "Profile",       icon: User },
-  { key: "documents", label: "Documents",      icon: FileText },
-  { key: "leave",     label: "Leave history",  icon: CalendarDays },
-  { key: "notes",     label: "Notes",          icon: MessageSquare },
+  { key: "profile", label: "Profile", icon: User },
+  { key: "documents", label: "Documents", icon: FileText },
+  { key: "leave", label: "Leave history", icon: CalendarDays },
+  { key: "notes", label: "Notes", icon: MessageSquare },
 ];
 
 export default function MemberDetailPage() {
@@ -704,12 +840,15 @@ export default function MemberDetailPage() {
   const member = members.find((m) => m.id === memberId);
   if (!member)
     return (
-      <div className="p-8 text-center text-muted-foreground">Member not found.</div>
+      <div className="p-8 text-center text-muted-foreground">
+        Member not found.
+      </div>
     );
 
   const isDocsAdmin = isOwner || can("hr.manage_documents");
   const isNotesAdmin = isOwner || can("hr.manage_notes");
-  const isProfileAdmin = isOwner || can("member.view_profile") || can("org.manage");
+  const isProfileAdmin =
+    isOwner || can("member.view_profile") || can("org.manage");
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
@@ -742,7 +881,11 @@ export default function MemberDetailPage() {
       {/* Tab content */}
       <div>
         {activeTab === "profile" && (
-          <ProfileTab workspaceId={workspaceId} memberId={memberId} isAdmin={isProfileAdmin} />
+          <ProfileTab
+            workspaceId={workspaceId}
+            memberId={memberId}
+            isAdmin={isProfileAdmin}
+          />
         )}
         {activeTab === "documents" && isDocsAdmin && (
           <DocumentsTab workspaceId={workspaceId} memberId={memberId} />

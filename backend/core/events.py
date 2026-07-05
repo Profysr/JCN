@@ -17,7 +17,7 @@ EXTERNAL events
     is declared in ONE place — the EVENTS registry below:
       - "webhook" → translated to its public name and queued via
         workspaces.tasks.deliver_webhook (Celery, signed, retried).
-        Public names must stay a subset of workspaces.constants.WEBHOOK_EVENTS.
+        workspaces.constants.WEBHOOK_EVENTS is derived from this registry — add the "webhook" key here and it's automatically a valid public name.
       - "chat"    → queued via integrations.tasks.send_chat_notification
         (Celery) and posted to every mapped Teams / Google Chat channel.
 
@@ -75,8 +75,14 @@ EVENTS = {
     "objective.updated": {"webhook": "objective.updated"},
     "objective.deleted": {"webhook": "objective.deleted"},
     # organization (webhook name == internal name)
-    "org.profile.submitted": {"webhook": "org.profile.submitted", "chat": "org_profile_submitted"},
-    "org.profile.approved": {"webhook": "org.profile.approved", "chat": "org_profile_approved"},
+    "org.profile.submitted": {
+        "webhook": "org.profile.submitted",
+        "chat": "org_profile_submitted",
+    },
+    "org.profile.approved": {
+        "webhook": "org.profile.approved",
+        "chat": "org_profile_approved",
+    },
     "org.profile.updated": {"webhook": "org.profile.updated"},
     "org.department.created": {"webhook": "org.department.created"},
     "org.department.updated": {"webhook": "org.department.updated"},
@@ -103,24 +109,27 @@ EVENTS = {
 # ── Notification verb registry ────────────────────────────────────────────────
 NOTIFICATION_VERBS = {
     # projects
-    "task_created":       {"event_type": "assigned",  "label": "📋 Task Created"},
-    "task_assigned":      {"event_type": "assigned",  "label": "👤 Task Assigned"},
-    "task_commented":     {"event_type": "commented", "label": "💬 New Comment"},
-    "task_mentioned":     {"event_type": "mentioned", "label": "💬 You Were Mentioned"},
-    "task_completed":     {"event_type": "assigned",  "label": "✅ Task Completed"},
-    "sprint_started":     {"event_type": "automated", "label": "🚀 Sprint Started"},
-    "sprint_completed":   {"event_type": "automated", "label": "🏁 Sprint Completed"},
-    "approval_requested": {"event_type": "approved",  "label": "✋ Approval Requested"},
+    "task_created": {"event_type": "assigned", "label": "📋 Task Created"},
+    "task_assigned": {"event_type": "assigned", "label": "👤 Task Assigned"},
+    "task_commented": {"event_type": "commented", "label": "💬 New Comment"},
+    "task_mentioned": {"event_type": "mentioned", "label": "💬 You Were Mentioned"},
+    "task_completed": {"event_type": "assigned", "label": "✅ Task Completed"},
+    "sprint_started": {"event_type": "automated", "label": "🚀 Sprint Started"},
+    "sprint_completed": {"event_type": "automated", "label": "🏁 Sprint Completed"},
+    "approval_requested": {"event_type": "approved", "label": "✋ Approval Requested"},
     # organization
     "org_profile_submitted": {"event_type": "org", "label": "📄 Profile Submitted"},
-    "org_profile_approved":  {"event_type": "org", "label": "✅ Profile Approved"},
+    "org_profile_approved": {"event_type": "org", "label": "✅ Profile Approved"},
     # hr
     "leave.requested": {"event_type": "assigned", "label": "🌴 Leave Requested"},
-    "leave.approved":  {"event_type": "assigned", "label": "✅ Leave Approved"},
-    "leave.rejected":  {"event_type": "assigned", "label": "❌ Leave Rejected"},
+    "leave.approved": {"event_type": "assigned", "label": "✅ Leave Approved"},
+    "leave.rejected": {"event_type": "assigned", "label": "❌ Leave Rejected"},
     "leave.carried_over": {"event_type": "hr", "label": "🔁 Leave Carried Over"},
     "document_expiring": {"event_type": "hr", "label": "📄 Document Expiring"},
-    "attendance.geofence_flagged": {"event_type": "hr", "label": "📍 Clock-in Outside Geofence"},
+    "attendance.geofence_flagged": {
+        "event_type": "hr",
+        "label": "📍 Clock-in Outside Geofence",
+    },
     "attendance.missed_clock_out": {"event_type": "hr", "label": "⏰ Missed Clock-out"},
 }
 
@@ -137,14 +146,14 @@ def verb_label(verb):
 
 
 def _json_safe(data):
-    """The channel layer can't serialize UUID/datetime/Decimal — round-trip
-    through DjangoJSONEncoder so payloads are plain strings/numbers."""
+    """The channel layer can't serialize UUID/datetime/Decimal — round-trip through DjangoJSONEncoder so payloads are plain strings/numbers."""
     return json.loads(json.dumps(data, cls=DjangoJSONEncoder))
 
 
 # ── Broadcast primitives ──────────────────────────────────────────────────────
-
-def broadcast(workspace_id, event_type, data, *, task_id=None, actor_id=None, chat=None):
+def broadcast(
+    workspace_id, event_type, data, *, task_id=None, actor_id=None, chat=None
+):
     """THE one fan-out call after a mutation. Reads EVENTS and pushes to every
     surface the event is registered for:
 
@@ -165,16 +174,26 @@ def broadcast(workspace_id, event_type, data, *, task_id=None, actor_id=None, ch
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
             f"workspace_{workspace_id}",
-            {"type": "workspace.event", "data": {"type": event_type, "payload": _json_safe(data)}},
+            {
+                "type": "workspace.event",
+                "data": {"type": event_type, "payload": _json_safe(data)},
+            },
         )
     except Exception as exc:
-        logger.warning("broadcast WS push failed event=%s workspace=%s: %s", event_type, workspace_id, exc)
+        logger.warning(
+            "broadcast WS push failed event=%s workspace=%s: %s",
+            event_type,
+            workspace_id,
+            exc,
+        )
 
     _fire_webhooks(workspace_id, event_type, data)
 
     chat_verb = EVENTS.get(event_type, {}).get("chat")
     if chat_verb and actor_id and (task_id or chat):
-        _queue_chat_notification(workspace_id, chat_verb, actor_id, task_id=task_id, resource=chat)
+        _queue_chat_notification(
+            workspace_id, chat_verb, actor_id, task_id=task_id, resource=chat
+        )
 
 
 def broadcast_to_user(user_id, event_type, data):
@@ -183,10 +202,18 @@ def broadcast_to_user(user_id, event_type, data):
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
             f"user_{user_id}",
-            {"type": "user.notification", "data": {"type": event_type, "payload": _json_safe(data)}},
+            {
+                "type": "user.notification",
+                "data": {"type": event_type, "payload": _json_safe(data)},
+            },
         )
     except Exception as exc:
-        logger.warning("broadcast_to_user push failed user=%s event=%s: %s", user_id, event_type, exc)
+        logger.warning(
+            "broadcast_to_user push failed user=%s event=%s: %s",
+            user_id,
+            event_type,
+            exc,
+        )
 
 
 def _fire_webhooks(workspace_id, event_type, data):
@@ -210,20 +237,22 @@ def _fire_webhooks(workspace_id, event_type, data):
                 deliver_webhook.delay(str(hook.id), webhook_event, payload)
     except Exception as exc:
         logger.exception(
-            "webhook fan-out failed event=%s workspace=%s: %s", event_type, workspace_id, exc
+            "webhook fan-out failed event=%s workspace=%s: %s",
+            event_type,
+            workspace_id,
+            exc,
         )
 
 
 # ── Inbox notifications (InboxItem row + user-scoped WS push) ────────────────
 
+
 def push_inbox_items(rows):
     """Bulk-create InboxItem rows and push "notification.created" to each recipient.
 
-    rows: list of InboxItem constructor kwargs (user or user_id, workspace,
-    actor_id, actor_name, verb, resource_name, board_id, board_name, meta).
+    rows: list of InboxItem constructor kwargs (user or user_id, workspace, actor_id, actor_name, verb, resource_name, board_id, board_name, meta).
     event_type is derived from the verb via NOTIFICATION_VERBS — don't pass it.
-    One INSERT for all rows; the WS payload is derived entirely from the
-    created items so callers never hand-build payloads.
+    One INSERT for all rows; the WS payload is derived entirely from the created items so callers never hand-build payloads.
     Returns the created items ([] on failure).
     """
     from workspaces.models import InboxItem
@@ -272,26 +301,32 @@ def notify(recipient, actor, verb, workspace, task=None):
     board_id = ""
     board_name = ""
     if task is not None:
-        meta.update({
-            "task_id": str(task.id),
-            "task_title": task.title,
-            "board_id": str(task.board_id),
-        })
+        meta.update(
+            {
+                "task_id": str(task.id),
+                "task_title": task.title,
+                "board_id": str(task.board_id),
+            }
+        )
         resource_name = task.title
         board_id = str(task.board_id)
         board_name = task.board.name if task.board_id else ""
 
-    push_inbox_items([{
-        "user": recipient,
-        "workspace": workspace,
-        "actor_id": str(actor.id),
-        "actor_name": actor.full_name or actor.email,
-        "verb": verb,
-        "resource_name": resource_name,
-        "board_id": board_id,
-        "board_name": board_name,
-        "meta": meta,
-    }])
+    push_inbox_items(
+        [
+            {
+                "user": recipient,
+                "workspace": workspace,
+                "actor_id": str(actor.id),
+                "actor_name": actor.full_name or actor.email,
+                "verb": verb,
+                "resource_name": resource_name,
+                "board_id": board_id,
+                "board_name": board_name,
+                "meta": meta,
+            }
+        ]
+    )
 
 
 def _queue_chat_notification(workspace_id, verb, actor_id, task_id=None, resource=None):

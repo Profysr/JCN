@@ -28,14 +28,14 @@ src/apps/project-management/   — PM: boards, tasks, sprints, kanban, gantt, wi
    ├── pages/        KanbanPage, BoardsPage, WikiPage, FormsPage, …
    ├── components/   tasks/*, projects/*, GettingStartedChecklist
    └── hooks/        useTasks, useBoards, useSprints, useBoardMembers, useBoardPermissions, useBulkActions, useBoardShortcuts, … (see Hooks reference)
-src/apps/org-structure/        — Org: departments, teams, org chart, job titles, profiles
-   ├── pages/        DepartmentsPage, TeamsPage, OrgChartPage
-   ├── components/   GettingStartedChecklist
-   └── hooks/        useOrg.js (all org data hooks)
-src/apps/hr-management/        — HR: leave, attendance, HR dashboard, employee docs/notes
-   ├── pages/        HRDashboardPage, LeavePage, AttendancePage, MemberDetailPage
-   ├── components/   GettingStartedChecklist
-   └── hooks/        useLeave, useAttendance, useHRDashboard, useEmployeeDocs, useEmployeeNotes
+src/apps/people/                — People & HR: departments, teams, org chart, job titles,
+                                   profiles, leave, attendance, HR dashboard, employee docs/notes
+   ├── pages/        DepartmentsPage, TeamsPage, OrgChartPage, PeopleDirectoryPage,
+                      PendingProfilesPage, JobTitlesPage, HRDashboardPage, LeavePage,
+                      AttendancePage, MemberDetailPage
+   ├── components/   GettingStartedChecklist (single, covers both org + HR items)
+   └── hooks/        useOrg, useLeave, useAttendance, useHRDashboard, useEmployeeDocs,
+                      useEmployeeNotes, usePeopleSocket
 src/shared/                    — cross-app primitives
    ├── components/   layout/ (AppLayout, Sidebar), CommandPalette, ui/*
    ├── hooks/        useWorkspace, useMembers, useModules, useWorkspaceSocket, usePresence, …
@@ -49,7 +49,7 @@ src/store/                     — Zustand stores (authStore, themeStore) — NO
 
 This is what makes a module extractable: cut the `apps/<module>` folder + its `src/shared` dependencies and it stands alone.
 
-**Known exception (downward dependency):** `hr-management/pages/MemberDetailPage.jsx` imports `useOrgProfile` from `@/apps/org-structure/hooks/useOrg`. This mirrors the backend `hr_management → org_structure` `depends_on` edge — HR genuinely builds on org profiles. It is the **only** cross-app import in the tree. If HR is ever extracted standalone, this hook must be promoted into `src/shared/hooks/` (or the org-profile read endpoint re-exposed). Treat any _new_ cross-app import as a violation; route it through `src/shared/` instead.
+`people/pages/MemberDetailPage.jsx` imports `useOrgProfile` from `people/hooks/useOrg` — a same-module import now that org structure and HR live in one `apps/people/` folder (they used to be separate `org-structure`/`hr-management` modules; HR genuinely builds on org profiles, mirroring the backend's single `people` app). Treat any import from a sibling app (`project-management`) as a violation; route it through `src/shared/` instead.
 
 ---
 
@@ -269,7 +269,7 @@ The master index of every React Query key used in the codebase. Prefix-match inv
 ["org-my-profile",   workspaceId]
 ["org-pending-profiles", workspaceId]
 
-# HR — Leave (src/apps/hr-management/hooks/useLeave.js)
+# HR — Leave (src/apps/people/hooks/useLeave.js)
 ["hr-leave-policies",  workspaceId]
 ["hr-leave-requests",  workspaceId, statusFilter|"all"]
 ["hr-leave-balances",  workspaceId]
@@ -343,7 +343,7 @@ WebSocket URL (both): `ws(s)://BACKEND/ws/workspaces/{workspaceId}/?token={acces
 | `useBoardSocket(ws)`     | **`KanbanPage`**       | only while a board is open | board events: `task.*`, `comment.*`, `approval.*`, `typing.update`, `reaction.updated` |
 | `usePeopleSocket()`      | **`OrgOnboardingGate`** (wraps every people/HR route) | while any people/HR page is open | `org.*` events — departments, teams, job titles, memberships, reporting lines, onboarding profiles |
 
-`usePeopleSocket` lives in its own file, `src/apps/org-structure/hooks/usePeopleSocket.js` (not `useWorkspaceSocket.js`), but registers on the same shared connection via the exported `registerSocketHandler()` — the same mechanism `useBoardSocket` uses internally, just callable from another file. It does not open a second socket.
+`usePeopleSocket` lives in its own file, `src/apps/people/hooks/usePeopleSocket.js` (not `useWorkspaceSocket.js`), but registers on the same shared connection via the exported `registerSocketHandler()` — the same mechanism `useBoardSocket` uses internally, just callable from another file. It does not open a second socket.
 
 > **Why two connections (vB.x):** workspace-wide events (the inbox badge especially) must stay live on _every_ page, but task/board events only matter while a board is open. Previously the single socket lived only in `KanbanPage`, so the inbox badge fell back to 30s-stale + focus refetch everywhere else. Splitting lets the badge be event-driven app-wide while board traffic stays scoped to the board. The second connection is cheap (same endpoint, scoped handler).
 
@@ -369,7 +369,7 @@ WebSocket URL (both): `ws(s)://BACKEND/ws/workspaces/{workspaceId}/?token={acces
 | `approval.created/updated` | `setQueryData` (patch in place)            | `["approvals", ws, board_id, task_id]` patched directly; `["tasks", ws, board_id]` approval counts recomputed from the patched list — **zero network requests** |
 | `typing.update`            | DOM custom event                           | `window → "jcn:typing"`                                                                                  |
 
-#### People & HR scope — `handlePeopleEvent` _(`src/apps/org-structure/hooks/usePeopleSocket.js`)_
+#### People & HR scope — `handlePeopleEvent` _(`src/apps/people/hooks/usePeopleSocket.js`)_
 
 | Event                                         | Cache action                                                       | Keys affected                                                                 |
 | ---------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
@@ -835,7 +835,7 @@ Create/revoke both invalidate this key.
 
 ---
 
-### `useOrg.js` _(src/apps/org-structure/hooks/useOrg.js)_
+### `useOrg.js` _(src/apps/people/hooks/useOrg.js)_
 
 All data hooks for the Org Structure module. Follows the same key-factory pattern as `useTasks.js`, with all key factories **exported** (`deptsKey`, `deptMemKey`, `teamsKey`, `teamMemKey`, `jobsKey`, `chartKey`, `profileKey`, `myProfileKey`, `pendingProfilesKey`) so `usePeopleSocket.js` can target the same cache entries from its own file. `org-profile` (`2 * 60_000`) and `org-pending-profiles` (default `30_000`) are the only two NOT socket-backed — see the WebSocket section above for why.
 
@@ -940,7 +940,7 @@ The chart is **lazy-loaded**, not "fetch everyone and render a tree" — `GET /o
 
 ---
 
-### HR Management hooks _(src/apps/hr-management/hooks/)_
+### HR hooks _(src/apps/people/hooks/)_
 
 All HR endpoints sit under `/api/workspaces/{ws}/hr/…` and are backend-gated by `require_module(ws, "hr_management")`.
 

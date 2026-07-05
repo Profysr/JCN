@@ -186,9 +186,9 @@ function handlePeopleEvent(type, payload, qc, workspaceId) {
  * open a new socket — reuses the single connection opened by
  * useWorkspaceSocket in AppLayout.
  *
- * Mount once at the top of the people/HR route subtree (OrgOnboardingGate,
- * which wraps every org-structure + hr-management route) — same pattern as
- * useBoardSocket in KanbanPage.
+ * Mount once at the top of the people route subtree (OrgOnboardingGate,
+ * which wraps every people route) — same pattern as useBoardSocket in
+ * KanbanPage.
  */
 export function usePeopleSocket() {
   useEffect(() => registerSocketHandler(handlePeopleEvent), []);

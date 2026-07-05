@@ -16,7 +16,7 @@ import {
   fetchDepartmentChartMembers,
   unassignedChartKey,
   fetchUnassignedChartMembers,
-} from "@/apps/org-structure/hooks/useOrg";
+} from "@/apps/people/hooks/useOrg";
 import { useMembers } from "@/shared/hooks/useMembers";
 import { usePermission } from "@/contexts/PermissionsContext";
 import api from "@/shared/lib/api";
@@ -25,14 +25,14 @@ import {
   layoutTree,
   buildLazyDeptLayout,
   computeChartBounds,
-} from "@/apps/org-structure/components/orgChartLayout";
+} from "@/apps/people/components/orgChartLayout";
 import {
   OrgNode,
   Edge,
   DeptHeader,
   NodePopover,
   DragOverlay,
-} from "@/apps/org-structure/components/OrgChartNodes";
+} from "@/apps/people/components/OrgChartNodes";
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function OrgChartPage() {

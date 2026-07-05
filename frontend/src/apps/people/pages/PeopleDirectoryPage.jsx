@@ -6,8 +6,8 @@ import { Loader } from "@/shared/components/ui/Loader";
 import { EmptyState } from "@/shared/components/ui/empty-state";
 import { Avatar } from "@/shared/components/ui/avatar";
 import { cn } from "@/shared/lib/utils";
-import { useOrgChart } from "@/apps/org-structure/hooks/useOrg";
-import { ONBOARDING_STATUS, PROFILE_STATUS_CONFIG } from "@/apps/org-structure/constants";
+import { useOrgChart } from "@/apps/people/hooks/useOrg";
+import { ONBOARDING_STATUS, PROFILE_STATUS_CONFIG } from "@/apps/people/constants";
 
 function StatusBadge({ status }) {
   const cfg = PROFILE_STATUS_CONFIG[status] ?? { label: "Unknown", className: "bg-muted text-muted-foreground" };

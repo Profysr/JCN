@@ -23,8 +23,8 @@ import {
   useAddTeamMember,
   useRemoveTeamMember,
   useDepartments,
-} from "@/apps/org-structure/hooks/useOrg";
-import { ORG_COLORS, generateIdentifier } from "@/apps/org-structure/constants";
+} from "@/apps/people/hooks/useOrg";
+import { ORG_COLORS, generateIdentifier } from "@/apps/people/constants";
 
 // ── Team card ─────────────────────────────────────────────────────────────────
 function TeamCard({ team, isSelected, onClick }) {

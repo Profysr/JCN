@@ -1,15 +1,24 @@
 import { useParams, Link } from "react-router-dom";
 import {
-  Users, UserPlus, CalendarDays, Timer, AlertTriangle, Gift, Star,
-  Clock, UserCheck, PieChart, Plane,
+  Users,
+  UserPlus,
+  CalendarDays,
+  Timer,
+  AlertTriangle,
+  Gift,
+  Star,
+  Clock,
+  UserCheck,
+  PieChart,
+  Plane,
 } from "lucide-react";
 import { Loader } from "@/shared/components/ui/Loader";
 import { SectionCard } from "@/shared/components/ui/SectionCard";
 import { Avatar } from "@/shared/components/ui/avatar";
 import { cn } from "@/shared/lib/utils";
-import { useHRDashboard } from "@/apps/hr-management/hooks/useHRDashboard";
-import { useWhosOff } from "@/apps/hr-management/hooks/useLeave";
-import GettingStartedChecklist from "@/apps/hr-management/components/GettingStartedChecklist";
+import { useHRDashboard } from "@/apps/people/hooks/useHRDashboard";
+import { useWhosOff } from "@/apps/people/hooks/useLeave";
+import GettingStartedChecklist from "@/apps/people/components/GettingStartedChecklist";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -21,11 +30,11 @@ const EMP_TYPE_LABELS = {
 };
 
 const LEAVE_TYPE_COLORS = {
-  annual:        "bg-indigo-500",
-  sick:          "bg-rose-500",
-  unpaid:        "bg-zinc-400",
-  paternity:     "bg-sky-500",
-  maternity:     "bg-pink-500",
+  annual: "bg-indigo-500",
+  sick: "bg-rose-500",
+  unpaid: "bg-zinc-400",
+  paternity: "bg-sky-500",
+  maternity: "bg-pink-500",
   compassionate: "bg-amber-500",
 };
 
@@ -36,7 +45,9 @@ function StatCard({ icon: Icon, label, value, sub, iconCls }) {
         <Icon className="w-5 h-5" />
       </div>
       <div className="min-w-0">
-        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">{label}</p>
+        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
+          {label}
+        </p>
         <p className="text-2xl font-bold leading-tight mt-0.5">{value}</p>
         {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
       </div>
@@ -45,8 +56,10 @@ function StatCard({ icon: Icon, label, value, sub, iconCls }) {
 }
 
 function EventIcon({ type }) {
-  if (type === "anniversary") return <Star className="w-4 h-4 text-amber-500" />;
-  if (type === "contract_expiry") return <AlertTriangle className="w-4 h-4 text-rose-500" />;
+  if (type === "anniversary")
+    return <Star className="w-4 h-4 text-amber-500" />;
+  if (type === "contract_expiry")
+    return <AlertTriangle className="w-4 h-4 text-rose-500" />;
   return <Gift className="w-4 h-4 text-indigo-500" />;
 }
 
@@ -71,9 +84,13 @@ export default function HRDashboardPage() {
     );
   }
 
-  const { headcount, leave_overview, attendance_overview, upcoming_events } = data;
+  const { headcount, leave_overview, attendance_overview, upcoming_events } =
+    data;
 
-  const totalEmpTypes = Object.values(headcount.employment_split || {}).reduce((a, b) => a + b, 0);
+  const totalEmpTypes = Object.values(headcount.employment_split || {}).reduce(
+    (a, b) => a + b,
+    0,
+  );
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
@@ -81,7 +98,9 @@ export default function HRDashboardPage() {
 
       <div>
         <h1 className="text-2xl font-bold">HR Dashboard</h1>
-        <p className="text-sm text-muted-foreground mt-1">Workspace people overview</p>
+        <p className="text-sm text-muted-foreground mt-1">
+          Workspace people overview
+        </p>
       </div>
 
       {/* ── Headcount ── */}
@@ -98,25 +117,33 @@ export default function HRDashboardPage() {
           value={headcount.joiners_this_month}
           iconCls="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
         />
-        <SectionCard title="Employment Split" icon={PieChart} className="col-span-2 md:col-span-1">
+        <SectionCard
+          title="Employment Split"
+          icon={PieChart}
+          className="col-span-2 md:col-span-1"
+        >
           {totalEmpTypes === 0 ? (
-            <p className="text-sm text-muted-foreground">No profiles configured</p>
+            <p className="text-sm text-muted-foreground">
+              No profiles configured
+            </p>
           ) : (
             <div className="space-y-2">
-              {Object.entries(headcount.employment_split).map(([type, count]) => (
-                <div key={type} className="flex items-center gap-2 text-sm">
-                  <span className="w-28 text-muted-foreground capitalize">
-                    {EMP_TYPE_LABELS[type] ?? type}
-                  </span>
-                  <div className="flex-1 bg-muted rounded-full h-1.5">
-                    <div
-                      className="bg-indigo-500 h-1.5 rounded-full"
-                      style={{ width: `${(count / totalEmpTypes) * 100}%` }}
-                    />
+              {Object.entries(headcount.employment_split).map(
+                ([type, count]) => (
+                  <div key={type} className="flex items-center gap-2 text-sm">
+                    <span className="w-28 text-muted-foreground capitalize">
+                      {EMP_TYPE_LABELS[type] ?? type}
+                    </span>
+                    <div className="flex-1 bg-muted rounded-full h-1.5">
+                      <div
+                        className="bg-indigo-500 h-1.5 rounded-full"
+                        style={{ width: `${(count / totalEmpTypes) * 100}%` }}
+                      />
+                    </div>
+                    <span className="w-6 text-right font-medium">{count}</span>
                   </div>
-                  <span className="w-6 text-right font-medium">{count}</span>
-                </div>
-              ))}
+                ),
+              )}
             </div>
           )}
         </SectionCard>
@@ -125,16 +152,27 @@ export default function HRDashboardPage() {
       {/* ── Leave & Attendance ── */}
       <div className="grid md:grid-cols-2 gap-4">
         <SectionCard title="Leave Overview — This Month" icon={CalendarDays}>
-          <p className="text-3xl font-bold">{leave_overview.total_days_taken}</p>
+          <p className="text-3xl font-bold">
+            {leave_overview.total_days_taken}
+          </p>
           <p className="text-xs text-muted-foreground mb-4">total days taken</p>
           {Object.keys(leave_overview.by_type).length === 0 ? (
-            <p className="text-xs text-muted-foreground">No approved leave this month</p>
+            <p className="text-xs text-muted-foreground">
+              No approved leave this month
+            </p>
           ) : (
             <div className="space-y-1.5">
               {Object.entries(leave_overview.by_type).map(([type, days]) => (
                 <div key={type} className="flex items-center gap-2 text-sm">
-                  <div className={cn("w-2 h-2 rounded-full", LEAVE_TYPE_COLORS[type] ?? "bg-muted-foreground")} />
-                  <span className="text-muted-foreground capitalize flex-1">{type.replace("_", " ")}</span>
+                  <div
+                    className={cn(
+                      "w-2 h-2 rounded-full",
+                      LEAVE_TYPE_COLORS[type] ?? "bg-muted-foreground",
+                    )}
+                  />
+                  <span className="text-muted-foreground capitalize flex-1">
+                    {type.replace("_", " ")}
+                  </span>
                   <span className="font-medium">{days}d</span>
                 </div>
               ))}
@@ -149,18 +187,26 @@ export default function HRDashboardPage() {
         </SectionCard>
 
         <SectionCard title="Attendance — Rolling Week" icon={Timer}>
-          <p className="text-3xl font-bold">{attendance_overview.on_time_pct}%</p>
+          <p className="text-3xl font-bold">
+            {attendance_overview.on_time_pct}%
+          </p>
           <p className="text-xs text-muted-foreground mb-4">on-time rate</p>
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-sm">
               <Clock className="w-4 h-4 text-amber-500" />
-              <span className="text-muted-foreground flex-1">Late arrivals</span>
-              <span className="font-medium">{attendance_overview.late_count}</span>
+              <span className="text-muted-foreground flex-1">
+                Late arrivals
+              </span>
+              <span className="font-medium">
+                {attendance_overview.late_count}
+              </span>
             </div>
             <div className="flex items-center gap-2 text-sm">
               <UserCheck className="w-4 h-4 text-rose-500" />
               <span className="text-muted-foreground flex-1">Absences</span>
-              <span className="font-medium">{attendance_overview.absent_count}</span>
+              <span className="font-medium">
+                {attendance_overview.absent_count}
+              </span>
             </div>
           </div>
           <p className="mt-4 text-xs text-muted-foreground">
@@ -178,14 +224,18 @@ export default function HRDashboardPage() {
       {/* ── Who's Off ── */}
       <SectionCard title="Who's Off (today + next 7 days)" icon={Plane}>
         {!whosOff || whosOff.length === 0 ? (
-          <p className="text-center text-sm text-muted-foreground py-6">No one is off this week</p>
+          <p className="text-center text-sm text-muted-foreground py-6">
+            No one is off this week
+          </p>
         ) : (
           <div className="divide-y -m-5">
             {whosOff.map((off) => (
               <div key={off.id} className="flex items-center gap-3 px-5 py-3">
                 <Avatar user={off.employee.user} size="sm" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{off.employee.user.full_name}</p>
+                  <p className="text-sm font-medium truncate">
+                    {off.employee.user.full_name}
+                  </p>
                   <p className="text-xs text-muted-foreground capitalize">
                     {off.policy_name} · {off.leave_type.replace("_", " ")}
                   </p>
@@ -207,7 +257,9 @@ export default function HRDashboardPage() {
       {/* ── Upcoming Events ── */}
       <SectionCard title="Upcoming Events (next 30 days)" icon={Gift}>
         {upcoming_events.length === 0 ? (
-          <p className="text-center text-sm text-muted-foreground py-6">No upcoming events</p>
+          <p className="text-center text-sm text-muted-foreground py-6">
+            No upcoming events
+          </p>
         ) : (
           <div className="divide-y -m-5">
             {upcoming_events.map((ev, i) => (
@@ -219,8 +271,8 @@ export default function HRDashboardPage() {
                     {ev.type === "anniversary"
                       ? `${ev.years}-year work anniversary`
                       : ev.type === "contract_expiry"
-                      ? "Contract expiring"
-                      : "Birthday"}
+                        ? "Contract expiring"
+                        : "Birthday"}
                   </p>
                 </div>
                 <span className="text-xs text-muted-foreground whitespace-nowrap">

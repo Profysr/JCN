@@ -356,8 +356,6 @@ class OnboardingState(models.Model):
     )
     wizard_completed = models.BooleanField(default=False)
     team_type = models.CharField(max_length=50, blank=True)
-    # Per-module, per-user dismissal.
-    # Shape: {"projects": ["uuid1", "uuid2"], "org": ["uuid1"], "hr": []}
     module_dismissed_by_users = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

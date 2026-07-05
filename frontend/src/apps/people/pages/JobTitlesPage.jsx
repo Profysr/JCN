@@ -13,7 +13,7 @@ import {
   useCreateJobTitle,
   useUpdateJobTitle,
   useDeleteJobTitle,
-} from "@/apps/org-structure/hooks/useOrg";
+} from "@/apps/people/hooks/useOrg";
 
 const BLANK = { name: "", level: 0 };
 

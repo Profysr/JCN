@@ -1,10 +1,26 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import {
-  CalendarDays, CheckCircle2, Clock, XCircle, Plus,
-  ChevronLeft, ChevronRight, Users, AlertCircle,
-  Pencil, Trash2, ShieldCheck, Wallet, History, UserCheck, PartyPopper, Repeat,
-  Globe, Search, X,
+  CalendarDays,
+  CheckCircle2,
+  Clock,
+  XCircle,
+  Plus,
+  ChevronLeft,
+  ChevronRight,
+  Users,
+  AlertCircle,
+  Pencil,
+  Trash2,
+  ShieldCheck,
+  Wallet,
+  History,
+  UserCheck,
+  PartyPopper,
+  Repeat,
+  Globe,
+  Search,
+  X,
 } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { Loader } from "@/shared/components/ui/Loader";
@@ -31,37 +47,94 @@ import {
   useHolidayCountries,
   useHolidaySuggestions,
   useBulkCreateHolidays,
-} from "@/apps/hr-management/hooks/useLeave";
+} from "@/apps/people/hooks/useLeave";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const LEAVE_TYPE_COLORS = {
-  annual:       { bg: "bg-indigo-100 dark:bg-indigo-900/30", text: "text-indigo-700 dark:text-indigo-300", bar: "bg-indigo-500" },
-  sick:         { bg: "bg-rose-100 dark:bg-rose-900/30",     text: "text-rose-700 dark:text-rose-300",     bar: "bg-rose-500"    },
-  unpaid:       { bg: "bg-zinc-100 dark:bg-zinc-800",        text: "text-zinc-600 dark:text-zinc-400",     bar: "bg-zinc-400"    },
-  paternity:    { bg: "bg-sky-100 dark:bg-sky-900/30",       text: "text-sky-700 dark:text-sky-300",       bar: "bg-sky-500"     },
-  maternity:    { bg: "bg-pink-100 dark:bg-pink-900/30",     text: "text-pink-700 dark:text-pink-300",     bar: "bg-pink-500"    },
-  compassionate:{ bg: "bg-amber-100 dark:bg-amber-900/30",   text: "text-amber-700 dark:text-amber-300",   bar: "bg-amber-500"   },
+  annual: {
+    bg: "bg-indigo-100 dark:bg-indigo-900/30",
+    text: "text-indigo-700 dark:text-indigo-300",
+    bar: "bg-indigo-500",
+  },
+  sick: {
+    bg: "bg-rose-100 dark:bg-rose-900/30",
+    text: "text-rose-700 dark:text-rose-300",
+    bar: "bg-rose-500",
+  },
+  unpaid: {
+    bg: "bg-zinc-100 dark:bg-zinc-800",
+    text: "text-zinc-600 dark:text-zinc-400",
+    bar: "bg-zinc-400",
+  },
+  paternity: {
+    bg: "bg-sky-100 dark:bg-sky-900/30",
+    text: "text-sky-700 dark:text-sky-300",
+    bar: "bg-sky-500",
+  },
+  maternity: {
+    bg: "bg-pink-100 dark:bg-pink-900/30",
+    text: "text-pink-700 dark:text-pink-300",
+    bar: "bg-pink-500",
+  },
+  compassionate: {
+    bg: "bg-amber-100 dark:bg-amber-900/30",
+    text: "text-amber-700 dark:text-amber-300",
+    bar: "bg-amber-500",
+  },
 };
 
 const MONTH_NAMES = [
-  "January","February","March","April","May","June",
-  "July","August","September","October","November","December",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 
 function leaveTypeColor(type) {
-  return LEAVE_TYPE_COLORS[type] ?? { bg: "bg-muted", text: "text-muted-foreground", bar: "bg-muted-foreground" };
+  return (
+    LEAVE_TYPE_COLORS[type] ?? {
+      bg: "bg-muted",
+      text: "text-muted-foreground",
+      bar: "bg-muted-foreground",
+    }
+  );
 }
 
 function StatusChip({ status }) {
   const map = {
-    pending:   { icon: Clock,         cls: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300" },
-    approved:  { icon: CheckCircle2,  cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" },
-    rejected:  { icon: XCircle,       cls: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300" },
-    cancelled: { icon: XCircle,       cls: "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400" },
+    pending: {
+      icon: Clock,
+      cls: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",
+    },
+    approved: {
+      icon: CheckCircle2,
+      cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300",
+    },
+    rejected: {
+      icon: XCircle,
+      cls: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300",
+    },
+    cancelled: {
+      icon: XCircle,
+      cls: "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400",
+    },
   };
   const { icon: Icon, cls } = map[status] ?? map.pending;
   return (
-    <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium capitalize", cls)}>
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium capitalize",
+        cls,
+      )}
+    >
       <Icon className="w-3 h-3" />
       {status}
     </span>
@@ -71,7 +144,11 @@ function StatusChip({ status }) {
 function formatDate(str) {
   if (!str) return "";
   const d = new Date(str + "T00:00:00");
-  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  return d.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 function dateBetween(dateStr, startStr, endStr) {
@@ -90,8 +167,8 @@ function daysInRange(start, end) {
 }
 
 const DAY_PARTS = [
-  { value: "full",        label: "Full day" },
-  { value: "first_half",  label: "First half" },
+  { value: "full", label: "Full day" },
+  { value: "first_half", label: "First half" },
   { value: "second_half", label: "Second half" },
 ];
 
@@ -99,40 +176,71 @@ const DAY_PARTS = [
 function daysInRangeWithParts(start, end, startPart, endPart) {
   let count = daysInRange(start, end);
   if (count === 0) return count;
-  if (startPart !== "full" && new Date(start).getDay() !== 0 && new Date(start).getDay() !== 6) count -= 0.5;
-  if (start !== end && endPart !== "full" && new Date(end).getDay() !== 0 && new Date(end).getDay() !== 6) count -= 0.5;
+  if (
+    startPart !== "full" &&
+    new Date(start).getDay() !== 0 &&
+    new Date(start).getDay() !== 6
+  )
+    count -= 0.5;
+  if (
+    start !== end &&
+    endPart !== "full" &&
+    new Date(end).getDay() !== 0 &&
+    new Date(end).getDay() !== 6
+  )
+    count -= 0.5;
   return count;
 }
 
 // ── Balance Card ──────────────────────────────────────────────────────────────
 function BalanceCard({ balance }) {
   const colors = leaveTypeColor(balance.policy.leave_type);
-  const pct = balance.total_days > 0
-    ? Math.min(100, (parseFloat(balance.used_days) / parseFloat(balance.total_days)) * 100)
-    : 0;
+  const pct =
+    balance.total_days > 0
+      ? Math.min(
+          100,
+          (parseFloat(balance.used_days) / parseFloat(balance.total_days)) *
+            100,
+        )
+      : 0;
   return (
     <div className="rounded-lg border bg-card p-4 flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full", colors.bg, colors.text)}>
+        <span
+          className={cn(
+            "text-xs font-semibold px-2 py-0.5 rounded-full",
+            colors.bg,
+            colors.text,
+          )}
+        >
           {balance.policy.name}
         </span>
-        <span className="text-xs text-muted-foreground">{new Date().getFullYear()}</span>
+        <span className="text-xs text-muted-foreground">
+          {new Date().getFullYear()}
+        </span>
       </div>
       <div className="flex items-end justify-between">
         <div>
-          <p className="text-2xl font-bold text-foreground">{balance.remaining_days}</p>
+          <p className="text-2xl font-bold text-foreground">
+            {balance.remaining_days}
+          </p>
           <p className="text-xs text-muted-foreground">days remaining</p>
         </div>
         <div className="text-right text-xs text-muted-foreground">
           <p>{parseFloat(balance.used_days)} used</p>
           {parseFloat(balance.pending_days) > 0 && (
-            <p className="text-amber-600">{parseFloat(balance.pending_days)} pending</p>
+            <p className="text-amber-600">
+              {parseFloat(balance.pending_days)} pending
+            </p>
           )}
           <p>of {parseFloat(balance.total_days)} total</p>
         </div>
       </div>
       <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-        <div className={cn("h-full rounded-full transition-all", colors.bar)} style={{ width: `${pct}%` }} />
+        <div
+          className={cn("h-full rounded-full transition-all", colors.bar)}
+          style={{ width: `${pct}%` }}
+        />
       </div>
     </div>
   );
@@ -140,18 +248,28 @@ function BalanceCard({ balance }) {
 
 // ── Request Row ───────────────────────────────────────────────────────────────
 function dayPartLabel(part) {
-  return part === "first_half" ? "First half" : part === "second_half" ? "Second half" : null;
+  return part === "first_half"
+    ? "First half"
+    : part === "second_half"
+      ? "Second half"
+      : null;
 }
 
 function RequestRow({ req, isAdmin, workspaceId, onApprove, onReject }) {
   const colors = leaveTypeColor(req.policy.leave_type);
-  const days = req.days_requested != null ? parseFloat(req.days_requested) : daysInRange(req.start_date, req.end_date);
+  const days =
+    req.days_requested != null
+      ? parseFloat(req.days_requested)
+      : daysInRange(req.start_date, req.end_date);
   const startTag = dayPartLabel(req.start_day_part);
   const endTag = dayPartLabel(req.end_day_part);
   return (
     <div className="flex items-center gap-3 rounded-lg border bg-card px-4 py-3">
       {isAdmin && (
-        <Link to={`/w/${workspaceId}/members/${req.employee.id}`} className="shrink-0">
+        <Link
+          to={`/w/${workspaceId}/members/${req.employee.id}`}
+          className="shrink-0"
+        >
           <Avatar user={req.employee.user} size="sm" />
         </Link>
       )}
@@ -165,26 +283,45 @@ function RequestRow({ req, isAdmin, workspaceId, onApprove, onReject }) {
           </Link>
         )}
         <div className="flex items-center gap-2 flex-wrap">
-          <span className={cn("text-xs px-1.5 py-0.5 rounded font-medium", colors.bg, colors.text)}>
+          <span
+            className={cn(
+              "text-xs px-1.5 py-0.5 rounded font-medium",
+              colors.bg,
+              colors.text,
+            )}
+          >
             {req.policy.name}
           </span>
           <span className="text-xs text-muted-foreground">
-            {formatDate(req.start_date)}{startTag && ` (${startTag})`} → {formatDate(req.end_date)}{endTag && req.end_date !== req.start_date && ` (${endTag})`} · {days}d
+            {formatDate(req.start_date)}
+            {startTag && ` (${startTag})`} → {formatDate(req.end_date)}
+            {endTag && req.end_date !== req.start_date && ` (${endTag})`} ·{" "}
+            {days}d
           </span>
         </div>
-        {req.reason && <p className="text-xs text-muted-foreground mt-0.5 truncate">{req.reason}</p>}
+        {req.reason && (
+          <p className="text-xs text-muted-foreground mt-0.5 truncate">
+            {req.reason}
+          </p>
+        )}
       </div>
       <StatusChip status={req.status} />
       {isAdmin && req.status === "pending" && (
         <div className="flex gap-1.5 ml-2 shrink-0">
-          <Button size="xs" variant="outline"
+          <Button
+            size="xs"
+            variant="outline"
             className="text-emerald-600 border-emerald-200 hover:bg-emerald-50"
-            onClick={() => onApprove(req.id)}>
+            onClick={() => onApprove(req.id)}
+          >
             Approve
           </Button>
-          <Button size="xs" variant="outline"
+          <Button
+            size="xs"
+            variant="outline"
             className="text-rose-600 border-rose-200 hover:bg-rose-50"
-            onClick={() => onReject(req.id)}>
+            onClick={() => onReject(req.id)}
+          >
             Reject
           </Button>
         </div>
@@ -209,9 +346,15 @@ function RequestFormModal({ workspaceId, open, onClose }) {
 
   const isSingleDay = !!startDate && startDate === endDate;
   const selectedBalance = balances.find((b) => b.policy.id === policyId);
-  const days = startDate && endDate
-    ? daysInRangeWithParts(startDate, endDate, startDayPart, isSingleDay ? startDayPart : endDayPart)
-    : 0;
+  const days =
+    startDate && endDate
+      ? daysInRangeWithParts(
+          startDate,
+          endDate,
+          startDayPart,
+          isSingleDay ? startDayPart : endDayPart,
+        )
+      : 0;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -226,18 +369,29 @@ function RequestFormModal({ workspaceId, open, onClose }) {
         reason,
       });
       onClose();
-      setPolicyId(""); setStartDate(""); setEndDate("");
-      setStartDayPart("full"); setEndDayPart("full"); setReason("");
+      setPolicyId("");
+      setStartDate("");
+      setEndDate("");
+      setStartDayPart("full");
+      setEndDayPart("full");
+      setReason("");
     } catch (err) {
       setError(err.message);
     }
   };
 
   return (
-    <Modal isOpen={open} onClose={onClose} title="Request Leave" showFooter={false}>
+    <Modal
+      isOpen={open}
+      onClose={onClose}
+      title="Request Leave"
+      showFooter={false}
+    >
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-muted-foreground">Leave type</label>
+          <label className="text-xs font-medium text-muted-foreground">
+            Leave type
+          </label>
           <Select
             placeholder="Select policy…"
             value={policyId}
@@ -246,21 +400,39 @@ function RequestFormModal({ workspaceId, open, onClose }) {
           />
           {selectedBalance && (
             <p className="text-xs text-muted-foreground">
-              Available: <span className="font-medium text-foreground">{selectedBalance.remaining_days} days</span>
+              Available:{" "}
+              <span className="font-medium text-foreground">
+                {selectedBalance.remaining_days} days
+              </span>
             </p>
           )}
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-muted-foreground">Start date</label>
-            <input type="date" required value={startDate} onChange={(e) => setStartDate(e.target.value)}
-              className="h-9 rounded-md border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+            <label className="text-xs font-medium text-muted-foreground">
+              Start date
+            </label>
+            <input
+              type="date"
+              required
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="h-9 rounded-md border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-muted-foreground">End date</label>
-            <input type="date" required value={endDate} min={startDate} onChange={(e) => setEndDate(e.target.value)}
-              className="h-9 rounded-md border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+            <label className="text-xs font-medium text-muted-foreground">
+              End date
+            </label>
+            <input
+              type="date"
+              required
+              value={endDate}
+              min={startDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="h-9 rounded-md border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            />
           </div>
         </div>
 
@@ -270,12 +442,22 @@ function RequestFormModal({ workspaceId, open, onClose }) {
               <label className="text-xs font-medium text-muted-foreground">
                 {isSingleDay ? "Portion of day" : "Start day"}
               </label>
-              <Select value={startDayPart} onChange={setStartDayPart} options={DAY_PARTS} />
+              <Select
+                value={startDayPart}
+                onChange={setStartDayPart}
+                options={DAY_PARTS}
+              />
             </div>
             {!isSingleDay && (
               <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-muted-foreground">End day</label>
-                <Select value={endDayPart} onChange={setEndDayPart} options={DAY_PARTS} />
+                <label className="text-xs font-medium text-muted-foreground">
+                  End day
+                </label>
+                <Select
+                  value={endDayPart}
+                  onChange={setEndDayPart}
+                  options={DAY_PARTS}
+                />
               </div>
             )}
           </div>
@@ -283,15 +465,24 @@ function RequestFormModal({ workspaceId, open, onClose }) {
 
         {days > 0 && (
           <p className="text-xs text-muted-foreground -mt-1">
-            That&apos;s <span className="font-medium text-foreground">{days} working day{days !== 1 ? "s" : ""}</span>
+            That&apos;s{" "}
+            <span className="font-medium text-foreground">
+              {days} working day{days !== 1 ? "s" : ""}
+            </span>
           </p>
         )}
 
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-muted-foreground">Reason (optional)</label>
-          <textarea rows={3} value={reason} onChange={(e) => setReason(e.target.value)}
+          <label className="text-xs font-medium text-muted-foreground">
+            Reason (optional)
+          </label>
+          <textarea
+            rows={3}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
             placeholder="Add a note for your manager…"
-            className="rounded-md border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring" />
+            className="rounded-md border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+          />
         </div>
 
         {error && (
@@ -302,7 +493,9 @@ function RequestFormModal({ workspaceId, open, onClose }) {
         )}
 
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="outline" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
           <Button type="submit" size="sm" disabled={createRequest.isPending}>
             {createRequest.isPending ? "Submitting…" : "Submit request"}
           </Button>
@@ -318,19 +511,32 @@ function TeamCalendar({ workspaceId }) {
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
 
-  const { data: requests = [], isLoading } = useLeaveRequests(workspaceId, "approved");
+  const { data: requests = [], isLoading } = useLeaveRequests(
+    workspaceId,
+    "approved",
+  );
 
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDow = new Date(year, month, 1).getDay();
 
-  const prev = () => { if (month === 0) { setMonth(11); setYear((y) => y - 1); } else setMonth((m) => m - 1); };
-  const next = () => { if (month === 11) { setMonth(0);  setYear((y) => y + 1); } else setMonth((m) => m + 1); };
+  const prev = () => {
+    if (month === 0) {
+      setMonth(11);
+      setYear((y) => y - 1);
+    } else setMonth((m) => m - 1);
+  };
+  const next = () => {
+    if (month === 11) {
+      setMonth(0);
+      setYear((y) => y + 1);
+    } else setMonth((m) => m + 1);
+  };
 
   const monthRequests = requests.filter((r) => {
     const s = new Date(r.start_date);
     const e = new Date(r.end_date);
     const mStart = new Date(year, month, 1);
-    const mEnd   = new Date(year, month, daysInMonth);
+    const mEnd = new Date(year, month, daysInMonth);
     return s <= mEnd && e >= mStart;
   });
 
@@ -344,10 +550,22 @@ function TeamCalendar({ workspaceId }) {
           {MONTH_NAMES[month]} {year}
         </h3>
         <div className="flex gap-1">
-          <Button variant="outline" size="icon" className="h-7 w-7" onClick={prev} aria-label="Previous month">
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-7 w-7"
+            onClick={prev}
+            aria-label="Previous month"
+          >
             <ChevronLeft className="w-3.5 h-3.5" />
           </Button>
-          <Button variant="outline" size="icon" className="h-7 w-7" onClick={next} aria-label="Next month">
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-7 w-7"
+            onClick={next}
+            aria-label="Next month"
+          >
             <ChevronRight className="w-3.5 h-3.5" />
           </Button>
         </div>
@@ -355,8 +573,13 @@ function TeamCalendar({ workspaceId }) {
 
       {/* Day labels */}
       <div className="grid grid-cols-7 text-center">
-        {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((d) => (
-          <div key={d} className="text-xs font-medium text-muted-foreground py-1">{d}</div>
+        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+          <div
+            key={d}
+            className="text-xs font-medium text-muted-foreground py-1"
+          >
+            {d}
+          </div>
         ))}
       </div>
 
@@ -367,25 +590,43 @@ function TeamCalendar({ workspaceId }) {
         ))}
         {Array.from({ length: daysInMonth }).map((_, i) => {
           const dayNum = i + 1;
-          const dateStr = `${year}-${String(month + 1).padStart(2,"0")}-${String(dayNum).padStart(2,"0")}`;
-          const todayStr = today.toISOString().slice(0,10);
+          const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(dayNum).padStart(2, "0")}`;
+          const todayStr = today.toISOString().slice(0, 10);
           const isToday = dateStr === todayStr;
-          const dayRequests = monthRequests.filter((r) => dateBetween(dateStr, r.start_date, r.end_date));
-          const isWeekend = new Date(dateStr).getDay() === 0 || new Date(dateStr).getDay() === 6;
+          const dayRequests = monthRequests.filter((r) =>
+            dateBetween(dateStr, r.start_date, r.end_date),
+          );
+          const isWeekend =
+            new Date(dateStr).getDay() === 0 ||
+            new Date(dateStr).getDay() === 6;
 
           return (
-            <div key={dayNum} className={cn("bg-background h-10 px-1 pt-0.5 flex flex-col", isWeekend && "bg-muted/30")}>
-              <span className={cn(
-                "text-xs w-5 h-5 flex items-center justify-center rounded-full",
-                isToday ? "bg-primary text-primary-foreground font-semibold" : "text-foreground",
-              )}>
+            <div
+              key={dayNum}
+              className={cn(
+                "bg-background h-10 px-1 pt-0.5 flex flex-col",
+                isWeekend && "bg-muted/30",
+              )}
+            >
+              <span
+                className={cn(
+                  "text-xs w-5 h-5 flex items-center justify-center rounded-full",
+                  isToday
+                    ? "bg-primary text-primary-foreground font-semibold"
+                    : "text-foreground",
+                )}
+              >
                 {dayNum}
               </span>
               <div className="flex flex-col gap-px mt-0.5">
                 {dayRequests.slice(0, 2).map((r) => {
                   const colors = leaveTypeColor(r.policy?.leave_type);
                   return (
-                    <div key={r.id} className={cn("h-1 rounded-full", colors.bar)} title={r.employee.user.full_name} />
+                    <div
+                      key={r.id}
+                      className={cn("h-1 rounded-full", colors.bar)}
+                      title={r.employee.user.full_name}
+                    />
                   );
                 })}
               </div>
@@ -397,14 +638,24 @@ function TeamCalendar({ workspaceId }) {
       {/* Legend — people off this month */}
       {monthRequests.length > 0 && (
         <div className="flex flex-col gap-2 pt-1">
-          <p className="text-xs font-medium text-muted-foreground">People off this month</p>
+          <p className="text-xs font-medium text-muted-foreground">
+            People off this month
+          </p>
           {monthRequests.map((r) => {
             const colors = leaveTypeColor(r.policy?.leave_type);
             return (
               <div key={r.id} className="flex items-center gap-2">
                 <Avatar user={r.employee.user} size="xs" />
-                <span className="text-sm text-foreground flex-1 truncate">{r.employee.user.full_name}</span>
-                <span className={cn("text-xs px-1.5 py-0.5 rounded font-medium", colors.bg, colors.text)}>
+                <span className="text-sm text-foreground flex-1 truncate">
+                  {r.employee.user.full_name}
+                </span>
+                <span
+                  className={cn(
+                    "text-xs px-1.5 py-0.5 rounded font-medium",
+                    colors.bg,
+                    colors.text,
+                  )}
+                >
                   {r.policy.name}
                 </span>
                 <span className="text-xs text-muted-foreground whitespace-nowrap">
@@ -417,7 +668,9 @@ function TeamCalendar({ workspaceId }) {
       )}
 
       {monthRequests.length === 0 && (
-        <p className="text-sm text-muted-foreground text-center py-4">No approved leaves this month</p>
+        <p className="text-sm text-muted-foreground text-center py-4">
+          No approved leaves this month
+        </p>
       )}
     </div>
   );
@@ -425,7 +678,10 @@ function TeamCalendar({ workspaceId }) {
 
 // ── Manager Queue Tab ─────────────────────────────────────────────────────────
 function ManagerQueue({ workspaceId }) {
-  const { data: pending = [], isLoading } = useLeaveRequests(workspaceId, "pending");
+  const { data: pending = [], isLoading } = useLeaveRequests(
+    workspaceId,
+    "pending",
+  );
   const reviewRequest = useReviewLeaveRequest(workspaceId);
 
   const handleReview = async (requestId, status) => {
@@ -445,7 +701,9 @@ function ManagerQueue({ workspaceId }) {
 
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-xs text-muted-foreground">{pending.length} pending request{pending.length !== 1 ? "s" : ""}</p>
+      <p className="text-xs text-muted-foreground">
+        {pending.length} pending request{pending.length !== 1 ? "s" : ""}
+      </p>
       {pending.map((req) => (
         <RequestRow
           key={req.id}
@@ -462,15 +720,22 @@ function ManagerQueue({ workspaceId }) {
 
 // ── Policy Form Modal ─────────────────────────────────────────────────────────
 const LEAVE_TYPES = [
-  { value: "annual",        label: "Annual" },
-  { value: "sick",          label: "Sick" },
-  { value: "unpaid",        label: "Unpaid" },
-  { value: "paternity",     label: "Paternity" },
-  { value: "maternity",     label: "Maternity" },
+  { value: "annual", label: "Annual" },
+  { value: "sick", label: "Sick" },
+  { value: "unpaid", label: "Unpaid" },
+  { value: "paternity", label: "Paternity" },
+  { value: "maternity", label: "Maternity" },
   { value: "compassionate", label: "Compassionate" },
 ];
 
-const EMPTY_POLICY = { name: "", leave_type: "annual", days_per_year: 20, carry_over_days: 0, carry_over_enabled: false, accrual_type: "upfront" };
+const EMPTY_POLICY = {
+  name: "",
+  leave_type: "annual",
+  days_per_year: 20,
+  carry_over_days: 0,
+  carry_over_enabled: false,
+  accrual_type: "upfront",
+};
 
 function PolicyFormModal({ workspaceId, open, onClose, existing }) {
   const createPolicy = useCreateLeavePolicy(workspaceId);
@@ -496,10 +761,17 @@ function PolicyFormModal({ workspaceId, open, onClose, existing }) {
   const isPending = createPolicy.isPending || updatePolicy.isPending;
 
   return (
-    <Modal isOpen={open} onClose={onClose} title={isEdit ? "Edit policy" : "New leave policy"} showFooter={false}>
+    <Modal
+      isOpen={open}
+      onClose={onClose}
+      title={isEdit ? "Edit policy" : "New leave policy"}
+      showFooter={false}
+    >
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-muted-foreground">Policy name</label>
+          <label className="text-xs font-medium text-muted-foreground">
+            Policy name
+          </label>
           <input
             required
             className="h-9 rounded-md border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
@@ -510,7 +782,9 @@ function PolicyFormModal({ workspaceId, open, onClose, existing }) {
         </div>
 
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-muted-foreground">Leave type</label>
+          <label className="text-xs font-medium text-muted-foreground">
+            Leave type
+          </label>
           <Select
             value={form.leave_type}
             onChange={(v) => set("leave_type", v)}
@@ -520,22 +794,35 @@ function PolicyFormModal({ workspaceId, open, onClose, existing }) {
 
         <div className="grid grid-cols-2 gap-3">
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-muted-foreground">Days per year</label>
+            <label className="text-xs font-medium text-muted-foreground">
+              Days per year
+            </label>
             <input
-              type="number" min="0" max="365" required
+              type="number"
+              min="0"
+              max="365"
+              required
               className="h-9 rounded-md border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               value={form.days_per_year}
-              onChange={(e) => set("days_per_year", parseInt(e.target.value, 10))}
+              onChange={(e) =>
+                set("days_per_year", parseInt(e.target.value, 10))
+              }
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-muted-foreground">Carry-over days</label>
+            <label className="text-xs font-medium text-muted-foreground">
+              Carry-over days
+            </label>
             <input
-              type="number" min="0" max="365"
+              type="number"
+              min="0"
+              max="365"
               disabled={!form.carry_over_enabled}
               className="h-9 rounded-md border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
               value={form.carry_over_days}
-              onChange={(e) => set("carry_over_days", parseInt(e.target.value, 10))}
+              onChange={(e) =>
+                set("carry_over_days", parseInt(e.target.value, 10))
+              }
             />
           </div>
         </div>
@@ -547,7 +834,9 @@ function PolicyFormModal({ workspaceId, open, onClose, existing }) {
             onChange={(e) => set("carry_over_enabled", e.target.checked)}
             className="h-4 w-4 rounded border-input"
           />
-          <span className="text-sm text-foreground">Carry unused days into next year</span>
+          <span className="text-sm text-foreground">
+            Carry unused days into next year
+          </span>
         </label>
         <p className="text-xs text-muted-foreground -mt-3">
           {form.carry_over_enabled
@@ -556,7 +845,9 @@ function PolicyFormModal({ workspaceId, open, onClose, existing }) {
         </p>
 
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-muted-foreground">Accrual type</label>
+          <label className="text-xs font-medium text-muted-foreground">
+            Accrual type
+          </label>
           <div className="flex gap-2">
             {["upfront", "monthly"].map((v) => (
               <button
@@ -582,7 +873,9 @@ function PolicyFormModal({ workspaceId, open, onClose, existing }) {
         </div>
 
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="outline" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
           <Button type="submit" size="sm" disabled={isPending}>
             {isPending ? "Saving…" : isEdit ? "Save changes" : "Create policy"}
           </Button>
@@ -595,7 +888,10 @@ function PolicyFormModal({ workspaceId, open, onClose, existing }) {
 // ── Import Holidays Modal ─────────────────────────────────────────────────────
 function yearOptions() {
   const y = new Date().getFullYear();
-  return [y - 1, y, y + 1, y + 2].map((v) => ({ value: String(v), label: String(v) }));
+  return [y - 1, y, y + 1, y + 2].map((v) => ({
+    value: String(v),
+    label: String(v),
+  }));
 }
 
 let _manualRowId = 0;
@@ -611,7 +907,9 @@ function ImportHolidaysModal({ workspaceId, open, onClose, existingHolidays }) {
   const [results, setResults] = useState(null); // [{name, date, is_recurring, checked}]
   const [manualRows, setManualRows] = useState([]);
 
-  const existingKeys = new Set(existingHolidays.map((h) => `${h.name}::${h.date}`));
+  const existingKeys = new Set(
+    existingHolidays.map((h) => `${h.name}::${h.date}`),
+  );
 
   async function handleFetch() {
     const data = await suggestions.mutateAsync({ country, year });
@@ -625,7 +923,9 @@ function ImportHolidaysModal({ workspaceId, open, onClose, existingHolidays }) {
   }
 
   function toggleResult(i) {
-    setResults((rs) => rs.map((r, idx) => (idx === i ? { ...r, checked: !r.checked } : r)));
+    setResults((rs) =>
+      rs.map((r, idx) => (idx === i ? { ...r, checked: !r.checked } : r)),
+    );
   }
 
   function toggleAll(checked) {
@@ -633,11 +933,16 @@ function ImportHolidaysModal({ workspaceId, open, onClose, existingHolidays }) {
   }
 
   function addManualRow() {
-    setManualRows((rows) => [...rows, { _id: ++_manualRowId, name: "", date: "", is_recurring: false }]);
+    setManualRows((rows) => [
+      ...rows,
+      { _id: ++_manualRowId, name: "", date: "", is_recurring: false },
+    ]);
   }
 
   function updateManualRow(id, patch) {
-    setManualRows((rows) => rows.map((r) => (r._id === id ? { ...r, ...patch } : r)));
+    setManualRows((rows) =>
+      rows.map((r) => (r._id === id ? { ...r, ...patch } : r)),
+    );
   }
 
   function removeManualRow(id) {
@@ -650,8 +955,16 @@ function ImportHolidaysModal({ workspaceId, open, onClose, existingHolidays }) {
 
   async function handleImport() {
     const holidays = [
-      ...selectedSuggestions.map((r) => ({ name: r.name, date: r.date, is_recurring: r.is_recurring })),
-      ...validManualRows.map((r) => ({ name: r.name.trim(), date: r.date, is_recurring: r.is_recurring })),
+      ...selectedSuggestions.map((r) => ({
+        name: r.name,
+        date: r.date,
+        is_recurring: r.is_recurring,
+      })),
+      ...validManualRows.map((r) => ({
+        name: r.name.trim(),
+        date: r.date,
+        is_recurring: r.is_recurring,
+      })),
     ];
     try {
       const res = await bulkCreate.mutateAsync(holidays);
@@ -668,12 +981,20 @@ function ImportHolidaysModal({ workspaceId, open, onClose, existingHolidays }) {
   }
 
   return (
-    <Modal isOpen={open} onClose={onClose} title="Import holidays" maxWidth="560px" showFooter={false}>
+    <Modal
+      isOpen={open}
+      onClose={onClose}
+      title="Import holidays"
+      maxWidth="560px"
+      showFooter={false}
+    >
       <div className="flex flex-col gap-5">
         {/* Country / year lookup */}
         <div className="flex items-end gap-2">
           <div className="flex-1 flex flex-col gap-1">
-            <label className="text-xs font-medium text-muted-foreground">Country</label>
+            <label className="text-xs font-medium text-muted-foreground">
+              Country
+            </label>
             <Select
               value={country}
               onChange={setCountry}
@@ -681,17 +1002,27 @@ function ImportHolidaysModal({ workspaceId, open, onClose, existingHolidays }) {
             />
           </div>
           <div className="w-28 flex flex-col gap-1">
-            <label className="text-xs font-medium text-muted-foreground">Year</label>
+            <label className="text-xs font-medium text-muted-foreground">
+              Year
+            </label>
             <Select value={year} onChange={setYear} options={yearOptions()} />
           </div>
-          <Button type="button" size="sm" onClick={handleFetch} disabled={suggestions.isPending}>
+          <Button
+            type="button"
+            size="sm"
+            onClick={handleFetch}
+            disabled={suggestions.isPending}
+          >
             <Search className="w-3.5 h-3.5 mr-1" />
             {suggestions.isPending ? "Looking up…" : "Look up"}
           </Button>
         </div>
 
         {suggestions.isError && (
-          <p className="text-xs text-rose-500">Couldn&apos;t reach the holiday lookup service. Try again, or add holidays manually below.</p>
+          <p className="text-xs text-rose-500">
+            Couldn&apos;t reach the holiday lookup service. Try again, or add
+            holidays manually below.
+          </p>
         )}
 
         {/* Suggestion checklist */}
@@ -699,12 +1030,26 @@ function ImportHolidaysModal({ workspaceId, open, onClose, existingHolidays }) {
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <p className="text-xs font-medium text-muted-foreground">
-                {results.length === 0 ? "No public holidays found." : `${results.length} public holidays found`}
+                {results.length === 0
+                  ? "No public holidays found."
+                  : `${results.length} public holidays found`}
               </p>
               {results.length > 0 && (
                 <div className="flex gap-2">
-                  <button type="button" className="text-xs text-primary hover:underline" onClick={() => toggleAll(true)}>Select all</button>
-                  <button type="button" className="text-xs text-muted-foreground hover:underline" onClick={() => toggleAll(false)}>Clear</button>
+                  <button
+                    type="button"
+                    className="text-xs text-primary hover:underline"
+                    onClick={() => toggleAll(true)}
+                  >
+                    Select all
+                  </button>
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground hover:underline"
+                    onClick={() => toggleAll(false)}
+                  >
+                    Clear
+                  </button>
                 </div>
               )}
             </div>
@@ -714,7 +1059,9 @@ function ImportHolidaysModal({ workspaceId, open, onClose, existingHolidays }) {
                   key={`${r.name}-${r.date}`}
                   className={cn(
                     "flex items-center gap-2.5 px-3 py-2 text-sm",
-                    r.alreadyAdded ? "opacity-50" : "cursor-pointer hover:bg-muted/40",
+                    r.alreadyAdded
+                      ? "opacity-50"
+                      : "cursor-pointer hover:bg-muted/40",
                   )}
                 >
                   <input
@@ -725,11 +1072,20 @@ function ImportHolidaysModal({ workspaceId, open, onClose, existingHolidays }) {
                     className="h-4 w-4 rounded border-input shrink-0"
                   />
                   <span className="flex-1 truncate">{r.name}</span>
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">{formatDate(r.date)}</span>
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">
+                    {formatDate(r.date)}
+                  </span>
                   {r.is_recurring && (
-                    <Repeat className="w-3 h-3 text-indigo-500 shrink-0" title="Recurs yearly" />
+                    <Repeat
+                      className="w-3 h-3 text-indigo-500 shrink-0"
+                      title="Recurs yearly"
+                    />
                   )}
-                  {r.alreadyAdded && <span className="text-xs text-muted-foreground shrink-0">Added</span>}
+                  {r.alreadyAdded && (
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      Added
+                    </span>
+                  )}
                 </label>
               ))}
             </div>
@@ -739,8 +1095,14 @@ function ImportHolidaysModal({ workspaceId, open, onClose, existingHolidays }) {
         {/* Manual one-off rows */}
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-muted-foreground">Manual days off</p>
-            <button type="button" onClick={addManualRow} className="text-xs text-primary hover:underline flex items-center gap-1">
+            <p className="text-xs font-medium text-muted-foreground">
+              Manual days off
+            </p>
+            <button
+              type="button"
+              onClick={addManualRow}
+              className="text-xs text-primary hover:underline flex items-center gap-1"
+            >
               <Plus className="w-3 h-3" /> Add a day off
             </button>
           </div>
@@ -751,25 +1113,40 @@ function ImportHolidaysModal({ workspaceId, open, onClose, existingHolidays }) {
                   <input
                     placeholder="Name"
                     value={row.name}
-                    onChange={(e) => updateManualRow(row._id, { name: e.target.value })}
+                    onChange={(e) =>
+                      updateManualRow(row._id, { name: e.target.value })
+                    }
                     className="flex-1 h-8 rounded-md border bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                   <input
                     type="date"
                     value={row.date}
-                    onChange={(e) => updateManualRow(row._id, { date: e.target.value })}
+                    onChange={(e) =>
+                      updateManualRow(row._id, { date: e.target.value })
+                    }
                     className="h-8 rounded-md border bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                   />
-                  <label className="flex items-center gap-1 text-xs text-muted-foreground shrink-0" title="Recurs every year">
+                  <label
+                    className="flex items-center gap-1 text-xs text-muted-foreground shrink-0"
+                    title="Recurs every year"
+                  >
                     <input
                       type="checkbox"
                       checked={row.is_recurring}
-                      onChange={(e) => updateManualRow(row._id, { is_recurring: e.target.checked })}
+                      onChange={(e) =>
+                        updateManualRow(row._id, {
+                          is_recurring: e.target.checked,
+                        })
+                      }
                       className="h-3.5 w-3.5 rounded border-input"
                     />
                     Yearly
                   </label>
-                  <button type="button" onClick={() => removeManualRow(row._id)} className="p-1 text-muted-foreground hover:text-destructive">
+                  <button
+                    type="button"
+                    onClick={() => removeManualRow(row._id)}
+                    className="p-1 text-muted-foreground hover:text-destructive"
+                  >
                     <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -779,14 +1156,18 @@ function ImportHolidaysModal({ workspaceId, open, onClose, existingHolidays }) {
         </div>
 
         <div className="flex justify-end gap-2 pt-1 border-t">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="outline" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
           <Button
             type="button"
             size="sm"
             onClick={handleImport}
             disabled={totalToImport === 0 || bulkCreate.isPending}
           >
-            {bulkCreate.isPending ? "Importing…" : `Import ${totalToImport || ""} holiday${totalToImport === 1 ? "" : "s"}`}
+            {bulkCreate.isPending
+              ? "Importing…"
+              : `Import ${totalToImport || ""} holiday${totalToImport === 1 ? "" : "s"}`}
           </Button>
         </div>
       </div>
@@ -818,10 +1199,17 @@ function HolidayFormModal({ workspaceId, open, onClose, existing }) {
   const isPending = createHoliday.isPending || updateHoliday.isPending;
 
   return (
-    <Modal isOpen={open} onClose={onClose} title={isEdit ? "Edit holiday" : "New holiday"} showFooter={false}>
+    <Modal
+      isOpen={open}
+      onClose={onClose}
+      title={isEdit ? "Edit holiday" : "New holiday"}
+      showFooter={false}
+    >
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-muted-foreground">Name</label>
+          <label className="text-xs font-medium text-muted-foreground">
+            Name
+          </label>
           <input
             required
             className="h-9 rounded-md border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
@@ -832,9 +1220,12 @@ function HolidayFormModal({ workspaceId, open, onClose, existing }) {
         </div>
 
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-muted-foreground">Date</label>
+          <label className="text-xs font-medium text-muted-foreground">
+            Date
+          </label>
           <input
-            type="date" required
+            type="date"
+            required
             className="h-9 rounded-md border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             value={form.date}
             onChange={(e) => set("date", e.target.value)}
@@ -857,7 +1248,9 @@ function HolidayFormModal({ workspaceId, open, onClose, existing }) {
         </p>
 
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="outline" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
           <Button type="submit" size="sm" disabled={isPending}>
             {isPending ? "Saving…" : isEdit ? "Save changes" : "Add holiday"}
           </Button>
@@ -894,14 +1287,25 @@ function HolidaysTab({ workspaceId }) {
     <div className="flex flex-col gap-4 max-w-2xl">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          {holidays.length} holiday{holidays.length === 1 ? "" : "s"} configured — excluded from leave day-counting
+          {holidays.length} holiday{holidays.length === 1 ? "" : "s"} configured
+          — excluded from leave day-counting
         </p>
         <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setImportOpen(true)}
+          >
             <Globe className="w-3.5 h-3.5 mr-1" />
             Import holidays
           </Button>
-          <Button size="sm" onClick={() => { setEditing(null); setFormOpen(true); }}>
+          <Button
+            size="sm"
+            onClick={() => {
+              setEditing(null);
+              setFormOpen(true);
+            }}
+          >
             <Plus className="w-3.5 h-3.5 mr-1" />
             Add holiday
           </Button>
@@ -912,7 +1316,14 @@ function HolidaysTab({ workspaceId }) {
         <div className="flex flex-col items-center py-14 gap-2 text-muted-foreground rounded-lg border border-dashed">
           <PartyPopper className="w-8 h-8" />
           <p className="text-sm">No holidays yet</p>
-          <Button variant="outline" size="sm" onClick={() => { setEditing(null); setFormOpen(true); }}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setEditing(null);
+              setFormOpen(true);
+            }}
+          >
             Add first holiday
           </Button>
         </div>
@@ -921,38 +1332,61 @@ function HolidaysTab({ workspaceId }) {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/40">
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground">Name</th>
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground">Date</th>
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground">Recurs</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground">
+                  Name
+                </th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground">
+                  Date
+                </th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground">
+                  Recurs
+                </th>
                 <th className="px-4 py-2.5" />
               </tr>
             </thead>
             <tbody>
               {sorted.map((holiday, i) => (
-                <tr key={holiday.id} className={cn("border-b last:border-0", i % 2 === 0 ? "bg-background" : "bg-muted/20")}>
-                  <td className="px-4 py-3 font-medium text-foreground">{holiday.name}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{formatDate(holiday.date)}</td>
+                <tr
+                  key={holiday.id}
+                  className={cn(
+                    "border-b last:border-0",
+                    i % 2 === 0 ? "bg-background" : "bg-muted/20",
+                  )}
+                >
+                  <td className="px-4 py-3 font-medium text-foreground">
+                    {holiday.name}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {formatDate(holiday.date)}
+                  </td>
                   <td className="px-4 py-3">
                     {holiday.is_recurring ? (
                       <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300">
                         <Repeat className="w-3 h-3" /> Yearly
                       </span>
                     ) : (
-                      <span className="text-xs text-muted-foreground">One-off</span>
+                      <span className="text-xs text-muted-foreground">
+                        One-off
+                      </span>
                     )}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
                       <Button
-                        variant="ghost" size="icon"
+                        variant="ghost"
+                        size="icon"
                         className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                        onClick={() => { setEditing(holiday); setFormOpen(true); }}
+                        onClick={() => {
+                          setEditing(holiday);
+                          setFormOpen(true);
+                        }}
                         aria-label="Edit holiday"
                       >
                         <Pencil className="w-3.5 h-3.5" />
                       </Button>
                       <Button
-                        variant="ghost" size="icon"
+                        variant="ghost"
+                        size="icon"
                         className="h-7 w-7 text-muted-foreground hover:text-destructive"
                         onClick={() => handleDelete(holiday.id)}
                         disabled={deleteHoliday.isPending}
@@ -995,15 +1429,17 @@ function PoliciesTab({ workspaceId }) {
   const [editing, setEditing] = useState(null);
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Delete this policy? Employees with this policy assigned will lose their balances.")) return;
+    if (
+      !window.confirm(
+        "Delete this policy? Employees with this policy assigned will lose their balances.",
+      )
+    )
+      return;
     try {
       await deletePolicy.mutateAsync(id);
       toast.success("Leave policy deleted");
     } catch (err) {
-      toast.error(
-        "Couldn't delete policy",
-        err.message,
-      );
+      toast.error("Couldn't delete policy", err.message);
     }
   };
 
@@ -1014,10 +1450,17 @@ function PoliciesTab({ workspaceId }) {
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm text-muted-foreground">
-            {policies.length} polic{policies.length === 1 ? "y" : "ies"} configured
+            {policies.length} polic{policies.length === 1 ? "y" : "ies"}{" "}
+            configured
           </p>
         </div>
-        <Button size="sm" onClick={() => { setEditing(null); setFormOpen(true); }}>
+        <Button
+          size="sm"
+          onClick={() => {
+            setEditing(null);
+            setFormOpen(true);
+          }}
+        >
           <Plus className="w-3.5 h-3.5 mr-1" />
           New policy
         </Button>
@@ -1027,7 +1470,14 @@ function PoliciesTab({ workspaceId }) {
         <div className="flex flex-col items-center py-14 gap-2 text-muted-foreground rounded-lg border border-dashed">
           <ShieldCheck className="w-8 h-8" />
           <p className="text-sm">No policies yet</p>
-          <Button variant="outline" size="sm" onClick={() => { setEditing(null); setFormOpen(true); }}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setEditing(null);
+              setFormOpen(true);
+            }}
+          >
             Create first policy
           </Button>
         </div>
@@ -1036,11 +1486,21 @@ function PoliciesTab({ workspaceId }) {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/40">
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground">Name</th>
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground">Type</th>
-                <th className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground">Days/yr</th>
-                <th className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground">Carry-over</th>
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground">Accrual</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground">
+                  Name
+                </th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground">
+                  Type
+                </th>
+                <th className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground">
+                  Days/yr
+                </th>
+                <th className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground">
+                  Carry-over
+                </th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground">
+                  Accrual
+                </th>
                 <th className="px-4 py-2.5" />
               </tr>
             </thead>
@@ -1048,30 +1508,57 @@ function PoliciesTab({ workspaceId }) {
               {policies.map((policy, i) => {
                 const colors = leaveTypeColor(policy.leave_type);
                 return (
-                  <tr key={policy.id} className={cn("border-b last:border-0", i % 2 === 0 ? "bg-background" : "bg-muted/20")}>
-                    <td className="px-4 py-3 font-medium text-foreground">{policy.name}</td>
+                  <tr
+                    key={policy.id}
+                    className={cn(
+                      "border-b last:border-0",
+                      i % 2 === 0 ? "bg-background" : "bg-muted/20",
+                    )}
+                  >
+                    <td className="px-4 py-3 font-medium text-foreground">
+                      {policy.name}
+                    </td>
                     <td className="px-4 py-3">
-                      <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium capitalize", colors.bg, colors.text)}>
+                      <span
+                        className={cn(
+                          "text-xs px-2 py-0.5 rounded-full font-medium capitalize",
+                          colors.bg,
+                          colors.text,
+                        )}
+                      >
                         {policy.leave_type}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums">{policy.days_per_year}</td>
                     <td className="px-4 py-3 text-right tabular-nums">
-                      {policy.carry_over_enabled ? policy.carry_over_days : <span className="text-muted-foreground">Off</span>}
+                      {policy.days_per_year}
                     </td>
-                    <td className="px-4 py-3 capitalize text-muted-foreground">{policy.accrual_type}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      {policy.carry_over_enabled ? (
+                        policy.carry_over_days
+                      ) : (
+                        <span className="text-muted-foreground">Off</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 capitalize text-muted-foreground">
+                      {policy.accrual_type}
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
                         <Button
-                          variant="ghost" size="icon"
+                          variant="ghost"
+                          size="icon"
                           className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                          onClick={() => { setEditing(policy); setFormOpen(true); }}
+                          onClick={() => {
+                            setEditing(policy);
+                            setFormOpen(true);
+                          }}
                           aria-label="Edit leave policy"
                         >
                           <Pencil className="w-3.5 h-3.5" />
                         </Button>
                         <Button
-                          variant="ghost" size="icon"
+                          variant="ghost"
+                          size="icon"
                           className="h-7 w-7 text-muted-foreground hover:text-destructive"
                           onClick={() => handleDelete(policy.id)}
                           disabled={deletePolicy.isPending}
@@ -1101,11 +1588,11 @@ function PoliciesTab({ workspaceId }) {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 const TABS = [
-  { key: "my-leave",   label: "My Leave" },
-  { key: "team",       label: "Team Calendar" },
-  { key: "queue",      label: "Manager Queue", adminOnly: true },
-  { key: "policies",   label: "Policies",      adminOnly: true },
-  { key: "holidays",   label: "Holidays",      adminOnly: true },
+  { key: "my-leave", label: "My Leave" },
+  { key: "team", label: "Team Calendar" },
+  { key: "queue", label: "Manager Queue", adminOnly: true },
+  { key: "policies", label: "Policies", adminOnly: true },
+  { key: "holidays", label: "Holidays", adminOnly: true },
 ];
 
 export default function LeavePage() {
@@ -1117,10 +1604,12 @@ export default function LeavePage() {
   const isAdmin = isOwner || can("hr.manage_leave");
   const visibleTabs = TABS.filter((t) => !t.adminOnly || isAdmin);
 
-  const { data: balances = [], isLoading: balancesLoading } = useLeaveBalances(workspaceId);
-  const { data: myRequests = [], isLoading: requestsLoading } = useLeaveRequests(workspaceId);
+  const { data: balances = [], isLoading: balancesLoading } =
+    useLeaveBalances(workspaceId);
+  const { data: myRequests = [], isLoading: requestsLoading } =
+    useLeaveRequests(workspaceId);
 
-  if (!isOwner && !hasAppAccess("hr")) {
+  if (!isOwner && !hasAppAccess("people")) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
         <Users className="w-10 h-10" />
@@ -1135,7 +1624,9 @@ export default function LeavePage() {
       <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
         <div>
           <h1 className="text-lg font-semibold text-foreground">Leave</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">Manage time off requests and balances</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Manage time off requests and balances
+          </p>
         </div>
         <Button size="sm" onClick={() => setRequestOpen(true)}>
           <Plus className="w-3.5 h-3.5 mr-1" />
@@ -1163,7 +1654,6 @@ export default function LeavePage() {
 
       {/* Tab body */}
       <div className="flex-1 overflow-y-auto px-6 py-5">
-
         {/* ── My Leave ── */}
         {tab === "my-leave" && (
           <div className="flex flex-col gap-5 max-w-3xl">
@@ -1171,10 +1661,14 @@ export default function LeavePage() {
               {balancesLoading ? (
                 <Loader className="h-24" />
               ) : balances.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No leave policies assigned yet.</p>
+                <p className="text-sm text-muted-foreground">
+                  No leave policies assigned yet.
+                </p>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {balances.map((b) => <BalanceCard key={b.id} balance={b} />)}
+                  {balances.map((b) => (
+                    <BalanceCard key={b.id} balance={b} />
+                  ))}
                 </div>
               )}
             </SectionCard>
@@ -1186,7 +1680,11 @@ export default function LeavePage() {
                 <div className="flex flex-col items-center py-10 gap-2 text-muted-foreground">
                   <CalendarDays className="w-8 h-8" />
                   <p className="text-sm">No requests yet</p>
-                  <Button variant="outline" size="sm" onClick={() => setRequestOpen(true)}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setRequestOpen(true)}
+                  >
                     Request your first leave
                   </Button>
                 </div>
@@ -1234,7 +1732,11 @@ export default function LeavePage() {
         )}
       </div>
 
-      <RequestFormModal workspaceId={workspaceId} open={requestOpen} onClose={() => setRequestOpen(false)} />
+      <RequestFormModal
+        workspaceId={workspaceId}
+        open={requestOpen}
+        onClose={() => setRequestOpen(false)}
+      />
     </div>
   );
 }

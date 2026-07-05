@@ -11,9 +11,9 @@ import {
   usePendingProfiles,
   useApproveProfile,
   useBulkApproveProfiles,
-} from "@/apps/org-structure/hooks/useOrg";
-import { getEmploymentLabel, formatDate } from "@/apps/org-structure/constants";
-import PendingProfileModal from "@/apps/org-structure/components/PendingProfileModal";
+} from "@/apps/people/hooks/useOrg";
+import { getEmploymentLabel, formatDate } from "@/apps/people/constants";
+import PendingProfileModal from "@/apps/people/components/PendingProfileModal";
 
 function ProfileCard({ profile, isSelected, onToggle, onApprove, isApproving, onReview }) {
   const member = profile.member;
