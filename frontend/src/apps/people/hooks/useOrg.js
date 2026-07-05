@@ -27,7 +27,6 @@ export const jobsKey = (ws) => ["org-job-titles", ws];
 export const chartKey = (ws) => ["org-chart", ws];
 export const profileKey = (ws, memberId) => ["org-profile", ws, memberId];
 export const myProfileKey = (ws) => ["org-my-profile", ws];
-export const pendingProfilesKey = (ws) => ["org-pending-profiles", ws];
 
 // ── Departments ───────────────────────────────────────────────────────────────
 // Realtime: org.department.created/updated/deleted and org.department_member.added/removed
@@ -384,7 +383,10 @@ export const useUpdateOrgProfile = (workspaceId, memberId) => {
   });
 };
 
-// ── My Profile (self-service onboarding) ─────────────────────────────────────
+// ── My Profile (self-service) ─────────────────────────────────────────────────
+// PATCH auto-locks the profile server-side once saved (see backend
+// organization/views.py _apply_profile_patch) — HR unlocks it again via
+// useUpdateOrgProfile(ws, memberId).mutate({ locked: false }).
 export const useMyOrgProfile = (workspaceId, { enabled = true } = {}) =>
   useQuery({
     queryKey: myProfileKey(workspaceId),
@@ -405,68 +407,6 @@ export const useUpdateMyOrgProfile = (workspaceId) => {
         .then((r) => r.data),
     onSuccess: (updated) => {
       qc.setQueryData(myProfileKey(workspaceId), updated);
-    },
-  });
-};
-
-export const useSubmitMyOrgProfile = (workspaceId) => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: () =>
-      api
-        .post(`/api/workspaces/${workspaceId}/org/me/profile/`)
-        .then((r) => r.data),
-    onSuccess: (updated) => {
-      qc.setQueryData(myProfileKey(workspaceId), updated);
-    },
-  });
-};
-
-// ── Pending Profiles (HR review queue) ───────────────────────────────────────
-// Realtime: org.profile.submitted appends to this list (small, targeted patch);
-// org.profile.approved is handled per-mutation below rather than via socket,
-// since BulkApproveProfilesView's response has no per-profile payload to patch with.
-export const usePendingProfiles = (workspaceId) =>
-  useQuery({
-    queryKey: pendingProfilesKey(workspaceId),
-    queryFn: () =>
-      api
-        .get(`/api/workspaces/${workspaceId}/org/profiles/pending/`)
-        .then((r) => r.data),
-    enabled: !!workspaceId,
-    staleTime: 60 * 1000,
-  });
-
-export const useApproveProfile = (workspaceId) => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (profileId) =>
-      api
-        .post(`/api/workspaces/${workspaceId}/org/profiles/${profileId}/approve/`)
-        .then((r) => r.data),
-    onSuccess: (updated) => {
-      qc.setQueryData(pendingProfilesKey(workspaceId), (old) =>
-        old?.filter((p) => p.id !== updated.id),
-      );
-      qc.invalidateQueries({ queryKey: chartKey(workspaceId) });
-    },
-  });
-};
-
-export const useBulkApproveProfiles = (workspaceId) => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (profileIds) =>
-      api
-        .post(`/api/workspaces/${workspaceId}/org/profiles/bulk-approve/`, {
-          profile_ids: profileIds,
-        })
-        .then((r) => r.data),
-    // Response is just { approved: N } — no per-profile payload to patch with,
-    // so this rarer bulk-admin action still pays for a refetch.
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: pendingProfilesKey(workspaceId) });
-      qc.invalidateQueries({ queryKey: chartKey(workspaceId) });
     },
   });
 };

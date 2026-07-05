@@ -542,9 +542,11 @@ export default function TeamsPage() {
           title="No teams yet"
           description="Create teams to group members by function or project."
           action={
-            <Button onClick={openCreate}>
-              <Plus className="w-4 h-4 mr-1.5" /> New Team
-            </Button>
+            <ShortcutTooltip label="New Team" shortcut="n" side="bottom">
+              <Button onClick={openCreate}>
+                <Plus className="w-4 h-4 mr-1.5" /> New Team
+              </Button>
+            </ShortcutTooltip>
           }
         />
       )}

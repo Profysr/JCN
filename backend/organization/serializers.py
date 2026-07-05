@@ -253,7 +253,6 @@ class OrgProfileSerializer(serializers.ModelSerializer):
     member = MiniMemberSerializer(read_only=True)
     job_title = MiniJobTitleSerializer(read_only=True)
     job_title_id = serializers.UUIDField(write_only=True, required=False, allow_null=True)
-    approved_by = MiniMemberSerializer(read_only=True)
     departments = serializers.SerializerMethodField()
     teams = serializers.SerializerMethodField()
     manager = serializers.SerializerMethodField()
@@ -266,12 +265,15 @@ class OrgProfileSerializer(serializers.ModelSerializer):
             "job_title", "job_title_id", "employment_type",
             "employee_id", "start_date", "location", "bio",
             "work_location_url", "work_latitude", "work_longitude",
-            "status", "submitted_at", "approved_at", "approved_by",
+            "locked",
             "departments", "teams", "manager", "direct_reports_count",
             "updated_at",
         ]
+        # "locked" is writable here — views.py strips it from the request body
+        # before building this serializer unless the caller is an org manager,
+        # so a member can never unlock their own profile.
         read_only_fields = [
-            "id", "member", "status", "submitted_at", "approved_at", "approved_by",
+            "id", "member",
             "updated_at", "departments", "teams", "manager", "direct_reports_count",
             "work_latitude", "work_longitude",
         ]

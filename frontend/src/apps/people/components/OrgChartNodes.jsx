@@ -74,11 +74,6 @@ export function OrgNode({ node, x, y, zoom, isSelected, onSelect, onDragStart, i
         </div>
       </foreignObject>
 
-      {/* Pending-review indicator */}
-      {node.onboarding_status === "submitted" && (
-        <circle cx={NODE_W - 10} cy={10} r={5} fill="#f59e0b" />
-      )}
-
       {/* Expand/collapse toggle — fetches this node's direct reports on first click */}
       {hasChildren && (
         <g transform={`translate(${NODE_W / 2 - 9}, ${NODE_H - 9})`} onClick={() => onToggle(node.id)} style={{ cursor: "pointer" }}>
@@ -144,13 +139,6 @@ export function DeptHeader({ dept, x, y, w, expanded, memberCount, loading, onTo
 
 // ── Profile popover ───────────────────────────────────────────────────────────
 export function NodePopover({ node, onClose, isAdmin, onRemoveManager }) {
-  const STATUS_BADGE = {
-    submitted: { label: "Pending review", className: "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-400" },
-    approved: null,
-    draft: { label: "Incomplete profile", className: "bg-muted text-muted-foreground" },
-  };
-  const statusBadge = STATUS_BADGE[node.onboarding_status] ?? null;
-
   return (
     <div
       className="absolute z-50 right-4 top-4 w-72 bg-card border rounded-xl shadow-lg overflow-hidden animate-scale-in"
@@ -176,11 +164,6 @@ export function NodePopover({ node, onClose, isAdmin, onRemoveManager }) {
           <span className={cn("text-[10px] px-2 py-0.5 rounded font-medium", node.role === "admin" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
             {node.role}
           </span>
-          {statusBadge && (
-            <span className={cn("text-[10px] px-2 py-0.5 rounded font-medium", statusBadge.className)}>
-              {statusBadge.label}
-            </span>
-          )}
         </div>
 
         {node.departments?.length > 0 && (

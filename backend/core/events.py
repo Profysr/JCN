@@ -75,14 +75,6 @@ EVENTS = {
     "objective.updated": {"webhook": "objective.updated"},
     "objective.deleted": {"webhook": "objective.deleted"},
     # organization (webhook name == internal name)
-    "org.profile.submitted": {
-        "webhook": "org.profile.submitted",
-        "chat": "org_profile_submitted",
-    },
-    "org.profile.approved": {
-        "webhook": "org.profile.approved",
-        "chat": "org_profile_approved",
-    },
     "org.profile.updated": {"webhook": "org.profile.updated"},
     "org.department.created": {"webhook": "org.department.created"},
     "org.department.updated": {"webhook": "org.department.updated"},
@@ -117,9 +109,6 @@ NOTIFICATION_VERBS = {
     "sprint_started": {"event_type": "automated", "label": "🚀 Sprint Started"},
     "sprint_completed": {"event_type": "automated", "label": "🏁 Sprint Completed"},
     "approval_requested": {"event_type": "approved", "label": "✋ Approval Requested"},
-    # organization
-    "org_profile_submitted": {"event_type": "org", "label": "📄 Profile Submitted"},
-    "org_profile_approved": {"event_type": "org", "label": "✅ Profile Approved"},
     # hr
     "leave.requested": {"event_type": "assigned", "label": "🌴 Leave Requested"},
     "leave.approved": {"event_type": "assigned", "label": "✅ Leave Approved"},

@@ -9,7 +9,6 @@ import {
   chartKey,
   profileKey,
   myProfileKey,
-  pendingProfilesKey,
 } from "./useOrg";
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -165,19 +164,12 @@ function handlePeopleEvent(type, payload, qc, workspaceId) {
     qc.invalidateQueries({ queryKey: chartKey(workspaceId) });
   }
 
-  if (
-    type === "org.profile.updated" ||
-    type === "org.profile.submitted" ||
-    type === "org.profile.approved"
-  ) {
+  if (type === "org.profile.updated") {
     if (payload.member_id) {
       qc.invalidateQueries({ queryKey: profileKey(workspaceId, payload.member_id) });
     }
     qc.invalidateQueries({ queryKey: myProfileKey(workspaceId) });
     qc.invalidateQueries({ queryKey: chartKey(workspaceId) });
-    if (type === "org.profile.submitted" || type === "org.profile.approved") {
-      qc.invalidateQueries({ queryKey: pendingProfilesKey(workspaceId) });
-    }
   }
 }
 
@@ -186,7 +178,7 @@ function handlePeopleEvent(type, payload, qc, workspaceId) {
  * open a new socket — reuses the single connection opened by
  * useWorkspaceSocket in AppLayout.
  *
- * Mount once at the top of the people route subtree (OrgOnboardingGate,
+ * Mount once at the top of the people route subtree (ProfileSetupGate,
  * which wraps every people route) — same pattern as useBoardSocket in
  * KanbanPage.
  */

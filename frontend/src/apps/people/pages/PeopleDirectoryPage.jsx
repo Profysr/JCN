@@ -5,18 +5,7 @@ import { Input } from "@/shared/components/ui/input";
 import { Loader } from "@/shared/components/ui/Loader";
 import { EmptyState } from "@/shared/components/ui/empty-state";
 import { Avatar } from "@/shared/components/ui/avatar";
-import { cn } from "@/shared/lib/utils";
 import { useOrgChart } from "@/apps/people/hooks/useOrg";
-import { ONBOARDING_STATUS, PROFILE_STATUS_CONFIG } from "@/apps/people/constants";
-
-function StatusBadge({ status }) {
-  const cfg = PROFILE_STATUS_CONFIG[status] ?? { label: "Unknown", className: "bg-muted text-muted-foreground" };
-  return (
-    <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-semibold", cfg.className)}>
-      {cfg.label}
-    </span>
-  );
-}
 
 export default function PeopleDirectoryPage() {
   const { workspaceId } = useParams();
@@ -26,7 +15,6 @@ export default function PeopleDirectoryPage() {
   const [search, setSearch] = useState("");
   const [deptFilter, setDeptFilter] = useState("");
   const [teamFilter, setTeamFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
 
   // Build unique dept/team lists for filters
   const { allDepts, allTeams } = useMemo(() => {
@@ -48,12 +36,11 @@ export default function PeopleDirectoryPage() {
       if (q && !n.name?.toLowerCase().includes(q) && !n.email?.toLowerCase().includes(q) && !n.job_title?.toLowerCase().includes(q)) return false;
       if (deptFilter && !n.departments?.some((d) => d.id === deptFilter)) return false;
       if (teamFilter && !n.teams?.some((t) => t.id === teamFilter)) return false;
-      if (statusFilter && n.onboarding_status !== statusFilter) return false;
       return true;
     });
-  }, [nodes, search, deptFilter, teamFilter, statusFilter]);
+  }, [nodes, search, deptFilter, teamFilter]);
 
-  const activeFilterCount = [deptFilter, teamFilter, statusFilter].filter(Boolean).length;
+  const activeFilterCount = [deptFilter, teamFilter].filter(Boolean).length;
 
   return (
     <div className="p-8">
@@ -99,20 +86,9 @@ export default function PeopleDirectoryPage() {
           ))}
         </select>
 
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring text-foreground"
-        >
-          <option value="">All Statuses</option>
-          <option value={ONBOARDING_STATUS.APPROVED}>Active</option>
-          <option value={ONBOARDING_STATUS.SUBMITTED}>Pending</option>
-          <option value={ONBOARDING_STATUS.DRAFT}>Incomplete</option>
-        </select>
-
         {activeFilterCount > 0 && (
           <button
-            onClick={() => { setDeptFilter(""); setTeamFilter(""); setStatusFilter(""); }}
+            onClick={() => { setDeptFilter(""); setTeamFilter(""); }}
             className="text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             Clear filters ({activeFilterCount})
@@ -133,18 +109,17 @@ export default function PeopleDirectoryPage() {
       {!isLoading && filtered.length > 0 && (
         <div className="rounded-md border border-border overflow-hidden">
           {/* Table header */}
-          <div className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-4 px-4 py-2.5 bg-muted/50 border-b border-border text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <div className="grid grid-cols-[2fr_1fr_1fr_1fr] gap-4 px-4 py-2.5 bg-muted/50 border-b border-border text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             <div>Name</div>
             <div>Job Title</div>
             <div>Departments</div>
             <div>Teams</div>
-            <div>Status</div>
           </div>
 
           {/* Rows */}
           <div className="divide-y divide-border/40">
             {filtered.map((node) => (
-              <div key={node.id} className="relative grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-4 px-4 py-3 items-center hover:bg-accent/30 transition-colors group/row">
+              <div key={node.id} className="relative grid grid-cols-[2fr_1fr_1fr_1fr] gap-4 px-4 py-3 items-center hover:bg-accent/30 transition-colors group/row">
                 {/* Cover link — fills the entire row */}
                 <Link
                   to={`/w/${workspaceId}/members/${node.id}`}
@@ -188,11 +163,6 @@ export default function PeopleDirectoryPage() {
                       ))
                     : <span className="text-muted-foreground/40 italic text-xs">—</span>
                   }
-                </div>
-
-                {/* Status */}
-                <div className="relative">
-                  <StatusBadge status={node.onboarding_status} />
                 </div>
               </div>
             ))}

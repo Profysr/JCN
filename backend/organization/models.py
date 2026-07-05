@@ -132,11 +132,6 @@ class OrgProfile(models.Model):
         CONTRACTOR = "contractor", "Contractor"
         INTERN = "intern", "Intern"
 
-    class OnboardingStatus(models.TextChoices):
-        DRAFT = "draft", "Draft"
-        SUBMITTED = "submitted", "Submitted"
-        APPROVED = "approved", "Approved"
-
     PREFIX = "ogp"
     id = UUIDv7Field()
     member = models.OneToOneField(WorkspaceMember, on_delete=models.CASCADE, related_name="org_profile")
@@ -156,21 +151,11 @@ class OrgProfile(models.Model):
     work_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     work_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     bio = models.TextField(blank=True)
-    status = models.CharField(
-        max_length=20,
-        choices=OnboardingStatus.choices,
-        default=OnboardingStatus.DRAFT,
-        db_index=True,
-    )
-    submitted_at = models.DateTimeField(null=True, blank=True)
-    approved_at = models.DateTimeField(null=True, blank=True)
-    approved_by = models.ForeignKey(
-        WorkspaceMember,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="approved_profiles",
-    )
+    # A member can edit their own profile until they save it once, at which
+    # point it auto-locks (locked=True) and becomes read-only to them. HR/org
+    # managers can always edit any profile and can flip this back to False to
+    # let the member update it again — see OrgProfileView/MyOrgProfileView.
+    locked = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):

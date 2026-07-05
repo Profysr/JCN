@@ -5,7 +5,8 @@
  *     "?", plus the workspace-level "g m"/"g s"/"g i" nav chords)
  *   - useProjectsShortcuts (Project Management app: "g b/d/w/a/g", c, Shift+F, /)
  *   - useBoardShortcuts (board-local handlers)
- *   - usePeopleShortcuts (People app: org:create, org:review-*)
+ *   - usePeopleShortcuts (People app: org:create) and usePeopleNavShortcuts
+ *     (People app: "g e/t/o/p/j/h/l/k" nav chords, people_nav group)
  *   - useShortcutBindings (returns effective bindings for all consumers)
  *   - ShortcutOverlay (? overlay)
  *   - PreferencesPage > Shortcuts tab (settings page)
@@ -90,6 +91,68 @@ export const SHORTCUT_GROUPS = [
         keys: ["Ctrl+."],
         display: ["Ctrl", "."],
         description: "Toggle sidebar",
+      },
+    ],
+  },
+  {
+    id: "people_nav",
+    label: "People & HR Navigation",
+    shortcuts: [
+      {
+        id: "nav:departments",
+        navKey: "departments",
+        keys: ["g", "then", "e"],
+        display: ["g", "e"],
+        description: "Go to Departments",
+      },
+      {
+        id: "nav:teams",
+        navKey: "teams",
+        keys: ["g", "then", "t"],
+        display: ["g", "t"],
+        description: "Go to Teams",
+      },
+      {
+        id: "nav:org-chart",
+        navKey: "org-chart",
+        keys: ["g", "then", "o"],
+        display: ["g", "o"],
+        description: "Go to Org Chart",
+      },
+      {
+        id: "nav:people",
+        navKey: "people",
+        keys: ["g", "then", "p"],
+        display: ["g", "p"],
+        description: "Go to People directory",
+      },
+      {
+        id: "nav:job-titles",
+        navKey: "job-titles",
+        keys: ["g", "then", "j"],
+        display: ["g", "j"],
+        description: "Go to Job Titles",
+      },
+      {
+        id: "nav:hr-dashboard",
+        navKey: "hr-dashboard",
+        keys: ["g", "then", "h"],
+        display: ["g", "h"],
+        description: "Go to HR Overview",
+      },
+      {
+        id: "nav:hr-leave",
+        navKey: "hr-leave",
+        keys: ["g", "then", "l"],
+        display: ["g", "l"],
+        description: "Go to Leave",
+      },
+      {
+        id: "nav:hr-attendance",
+        navKey: "hr-attendance",
+        keys: ["g", "then", "k"],
+        display: ["g", "k"],
+        description: "Go to Attendance",
       },
     ],
   },
@@ -283,24 +346,6 @@ export const SHORTCUT_GROUPS = [
         display: ["n"],
         description: "New department / team",
       },
-      {
-        id: "org:review-prev",
-        keys: ["ArrowLeft"],
-        display: ["←"],
-        description: "Previous pending profile",
-      },
-      {
-        id: "org:review-next",
-        keys: ["ArrowRight"],
-        display: ["→"],
-        description: "Next pending profile",
-      },
-      {
-        id: "org:review-approve",
-        keys: ["Enter"],
-        display: ["Enter"],
-        description: "Approve profile (HR review modal)",
-      },
     ],
   },
   {
@@ -374,13 +419,13 @@ export function getShortcutDisplay(id) {
 
 /**
  * Returns a map of nav item key → display string for use in the Sidebar.
- * e.g. { boards: "g b", dashboards: "g d", ... }
+ * e.g. { boards: "g b", departments: "g e", ... }
+ * Scans every group (not just "navigation") so any group — e.g. "people_nav"
+ * — can contribute nav hints just by tagging a shortcut with `navKey`.
  * Derived from the registry so Sidebar never maintains its own shortcut list.
  */
 export function getNavShortcutDisplayMap() {
   return Object.fromEntries(
-    SHORTCUT_GROUPS.find((g) => g.id === "navigation")
-      .shortcuts.filter((s) => s.navKey)
-      .map((s) => [s.navKey, s.display.join(" ")]),
+    ALL_SHORTCUTS.filter((s) => s.navKey).map((s) => [s.navKey, s.display.join(" ")]),
   );
 }

@@ -9,7 +9,7 @@ import ProtectedRoute from "@/shared/components/layout/ProtectedRoute";
 import AppLayout from "@/shared/components/layout/AppLayout";
 import AppGuard from "@/shared/components/layout/PermissionRoute";
 import WorkspaceRedirect from "@/pages/workspace/WorkspaceRedirect";
-import OrgOnboardingGate from "@/apps/people/components/OrgOnboardingGate";
+import ProfileSetupGate from "@/apps/people/components/ProfileSetupGate";
 import ProjectsAppShell from "@/apps/project-management/components/ProjectsAppShell";
 
 // ── Public pages ──────────────────────────────────────────────────────────────
@@ -56,9 +56,6 @@ const OrgChartPage = lazy(
 );
 const PeopleDirectoryPage = lazy(
   () => import("@/apps/people/pages/PeopleDirectoryPage"),
-);
-const PendingProfilesPage = lazy(
-  () => import("@/apps/people/pages/PendingProfilesPage"),
 );
 const JobTitlesPage = lazy(
   () => import("@/apps/people/pages/JobTitlesPage"),
@@ -187,12 +184,11 @@ export default function App() {
 
               {/* ── People & HR (Org Structure + HR Management) ─────────── */}
               <Route element={<AppGuard app="people" />}>
-                <Route element={<OrgOnboardingGate />}>
+                <Route element={<ProfileSetupGate />}>
                   <Route path="departments" element={<DepartmentsPage />} />
                   <Route path="teams" element={<TeamsPage />} />
                   <Route path="org-chart" element={<OrgChartPage />} />
                   <Route path="people" element={<PeopleDirectoryPage />} />
-                  <Route path="org/pending" element={<PendingProfilesPage />} />
                   <Route path="org/job-titles" element={<JobTitlesPage />} />
                   <Route path="hr" element={<HRDashboardPage />} />
                   <Route path="hr/leave" element={<LeavePage />} />

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Outlet, useParams } from "react-router-dom";
-import { Building2, CheckCircle2, Clock } from "lucide-react";
+import { Building2 } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
@@ -8,19 +8,14 @@ import { Textarea } from "@/shared/components/ui/textarea";
 import { Loader } from "@/shared/components/ui/Loader";
 import Select from "@/shared/components/ui/Select";
 import { usePermission } from "@/contexts/PermissionsContext";
-import {
-  useMyOrgProfile,
-  useUpdateMyOrgProfile,
-  useSubmitMyOrgProfile,
-  useJobTitles,
-} from "../hooks/useOrg";
-import { usePeopleSocket } from "../hooks/usePeopleSocket";
-import { EMPLOYMENT_TYPES, ONBOARDING_STATUS } from "../constants";
+import { useMyOrgProfile, useUpdateMyOrgProfile, useJobTitles } from "@/apps/people/hooks/useOrg";
+import { usePeopleSocket } from "@/apps/people/hooks/usePeopleSocket";
+import { usePeopleNavShortcuts } from "@/apps/people/hooks/usePeopleShortcuts";
+import { EMPLOYMENT_TYPES } from "@/apps/people/constants";
 
-function OnboardingWall({ workspaceId, profile }) {
+function ProfileSetupForm({ workspaceId, profile }) {
   const jobTitles = useJobTitles(workspaceId);
   const updateProfile = useUpdateMyOrgProfile(workspaceId);
-  const submitProfile = useSubmitMyOrgProfile(workspaceId);
 
   const [form, setForm] = useState({
     job_title_id: profile?.job_title?.id ?? "",
@@ -30,12 +25,11 @@ function OnboardingWall({ workspaceId, profile }) {
     start_date: profile?.start_date ?? "",
     employee_id: profile?.employee_id ?? "",
   });
-  const [step, setStep] = useState("form"); // "form" | "submitted"
   const [errors, setErrors] = useState({});
 
   const set = (key, val) => setForm((f) => ({ ...f, [key]: val }));
 
-  const handleSaveAndSubmit = async () => {
+  const handleSave = () => {
     const newErrors = {};
     if (!form.job_title_id) newErrors.job_title_id = "Please select a job title.";
     if (!form.employment_type) newErrors.employment_type = "Required.";
@@ -49,49 +43,26 @@ function OnboardingWall({ workspaceId, profile }) {
     if (!payload.start_date) delete payload.start_date;
     if (!payload.employee_id) delete payload.employee_id;
 
-    await updateProfile.mutateAsync(payload);
-    await submitProfile.mutateAsync();
-    setStep("submitted");
+    // On success, profile.job_title is set, so ProfileSetupGate stops
+    // rendering this wall on the next render — no separate submit step.
+    updateProfile.mutate(payload);
   };
-
-  if (step === "submitted") {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="flex max-w-md flex-col items-center gap-4 text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-500/10">
-            <CheckCircle2 className="h-8 w-8 text-green-500" />
-          </div>
-          <h2 className="text-xl font-semibold">Profile submitted!</h2>
-          <p className="text-sm text-muted-foreground">
-            Your profile is pending review by HR. You'll be notified once it's approved.
-            In the meantime you can start exploring the org.
-          </p>
-          <Button onClick={() => window.location.reload()}>Continue to Org</Button>
-        </div>
-      </div>
-    );
-  }
-
-  const isSaving = updateProfile.isPending || submitProfile.isPending;
 
   return (
     <div className="flex min-h-screen items-start justify-center bg-background px-4 py-16">
       <div className="w-full max-w-lg">
-        {/* Header */}
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
           <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-blue-500/10">
             <Building2 className="h-7 w-7 text-blue-500" />
           </div>
           <h1 className="text-2xl font-semibold">Set up your profile</h1>
           <p className="text-sm text-muted-foreground">
-            Before you can access the org app, let HR know a bit about your role.
+            Before you can access the workspace, let HR know a bit about your role.
             This only takes a minute.
           </p>
         </div>
 
-        {/* Form */}
         <div className="flex flex-col gap-5 rounded-xl border bg-card p-6 shadow-sm">
-          {/* Job Title */}
           <div className="flex flex-col gap-1.5">
             <Label>
               Job Title <span className="text-destructive">*</span>
@@ -109,7 +80,6 @@ function OnboardingWall({ workspaceId, profile }) {
             )}
           </div>
 
-          {/* Employment Type */}
           <div className="flex flex-col gap-1.5">
             <Label>
               Employment Type <span className="text-destructive">*</span>
@@ -121,7 +91,6 @@ function OnboardingWall({ workspaceId, profile }) {
             />
           </div>
 
-          {/* Start Date + Employee ID side by side */}
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
               <Label>Start Date</Label>
@@ -141,7 +110,6 @@ function OnboardingWall({ workspaceId, profile }) {
             </div>
           </div>
 
-          {/* Location */}
           <div className="flex flex-col gap-1.5">
             <Label>Location</Label>
             <Input
@@ -151,7 +119,6 @@ function OnboardingWall({ workspaceId, profile }) {
             />
           </div>
 
-          {/* Bio */}
           <div className="flex flex-col gap-1.5">
             <Label>Short Bio</Label>
             <Textarea
@@ -162,62 +129,48 @@ function OnboardingWall({ workspaceId, profile }) {
             />
           </div>
 
-          <Button
-            className="w-full"
-            onClick={handleSaveAndSubmit}
-            disabled={isSaving}
-          >
-            {isSaving && <Loader size="sm" className="mr-2" />}
-            Submit Profile
+          <Button className="w-full" onClick={handleSave} disabled={updateProfile.isPending}>
+            {updateProfile.isPending && <Loader size="sm" className="mr-2" />}
+            Save & Continue
           </Button>
         </div>
 
         <p className="mt-4 text-center text-xs text-muted-foreground">
-          HR will review your profile. You can update it anytime after submission.
+          You can update these details later — HR can also fill this in for you.
         </p>
       </div>
     </div>
   );
 }
 
-function SubmittedBanner() {
-  return (
-    <div className="flex items-center gap-3 px-4 py-2.5 bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-sm">
-      <Clock className="w-4 h-4 flex-shrink-0" />
-      <span>
-        <strong className="font-semibold">Profile pending review.</strong>{" "}
-        HR will approve your profile shortly. You'll receive an email when it's done.
-      </span>
-    </div>
-  );
-}
-
-export default function OrgOnboardingGate() {
+/**
+ * Wraps every People/HR route (see App.jsx). Blocks access to the People/HR
+ * app until the member has filled their job profile at least once — but
+ * unlike the old approval-based gate, there's no waiting once they save: the
+ * backend auto-locks the profile on save (read-only until HR unlocks it
+ * again), and that lock never blocks navigation, only this initial
+ * "not filled out yet" state does.
+ *
+ * Applies to everyone, including the workspace owner — no exemption.
+ */
+export default function ProfileSetupGate() {
   const { workspaceId } = useParams();
   usePeopleSocket();
-  const { isOwner, can, isLoading: permsLoading } = usePermission();
-  const isAdmin = isOwner || can("settings.manage");
+  usePeopleNavShortcuts();
+  const { isLoading: permsLoading } = usePermission();
+  // const isExempt = isOwner || can("settings.manage");
+  const isExempt = false;
   const { data: profile, isLoading: profileLoading } = useMyOrgProfile(workspaceId, {
-    enabled: !isAdmin,
+    enabled: !isExempt,
   });
 
-  if (permsLoading || (!isAdmin && profileLoading)) {
+  if (permsLoading || (!isExempt && profileLoading)) {
     return <Loader className="min-h-screen" size="lg" />;
   }
 
-  // Admins created their workspace before there was anyone in HR to approve them — the onboarding wall (which exists to gate non-admins, matching backend `_require_onboarded`) never applies to them.
-  if (isAdmin) {
-    return <Outlet />;
+  if (!isExempt && profile && !profile.job_title) {
+    return <ProfileSetupForm workspaceId={workspaceId} profile={profile} />;
   }
 
-  if (!profile || profile.status === ONBOARDING_STATUS.DRAFT) {
-    return <OnboardingWall workspaceId={workspaceId} profile={profile} />;
-  }
-
-  return (
-    <div className="flex flex-col h-full">
-      {profile.status === ONBOARDING_STATUS.SUBMITTED && <SubmittedBanner />}
-      <Outlet />
-    </div>
-  );
+  return <Outlet />;
 }

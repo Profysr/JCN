@@ -10,15 +10,15 @@ import { Search } from "lucide-react";
  */
 export default function ProjectsHeader() {
   return (
-    <header className="flex-shrink-0 border-b border-border/40 px-4 py-2 flex items-center gap-3">
+    <header className="flex-shrink-0 border-b border-border/40 bg-background/60 backdrop-blur-sm px-4 py-2.5 flex items-center">
       <button
         onClick={() => window.dispatchEvent(new CustomEvent("jcn:open-palette"))}
-        className="flex items-center gap-2.5 rounded-lg px-3 py-1.5 text-xs text-muted-foreground bg-background border border-border/70 hover:border-border hover:text-foreground shadow-sm transition-all active:scale-[0.98] w-full max-w-sm"
+        className="group flex items-center gap-2.5 rounded-full pl-4 pr-2 py-2 text-sm text-muted-foreground bg-muted/40 hover:bg-muted/70 border border-border/40 hover:border-border shadow-sm hover:shadow transition-all duration-150 active:scale-[0.98] w-full max-w-md"
       >
-        <Search className="w-3.5 h-3.5 flex-shrink-0" />
-        <span className="flex-1 text-left">Search…</span>
-        <kbd className="text-[10px] font-semibold bg-muted border border-border rounded px-1 py-0.5 leading-none font-mono">
-          ⌘ + K
+        <Search className="w-4 h-4 flex-shrink-0 text-muted-foreground/70 group-hover:text-foreground transition-colors" />
+        <span className="flex-1 text-left truncate">Search boards, tasks, people…</span>
+        <kbd className="text-[10px] font-semibold bg-background border border-border/70 rounded-md px-1.5 py-1 leading-none font-mono text-muted-foreground/80 group-hover:text-foreground transition-colors">
+          ⌘K
         </kbd>
       </button>
     </header>

@@ -58,12 +58,7 @@ import {
   useUpdateOrgProfile,
   useJobTitles,
 } from "@/apps/people/hooks/useOrg";
-import {
-  ONBOARDING_STATUS,
-  PROFILE_STATUS_CONFIG,
-  getEmploymentLabel,
-  formatDate,
-} from "@/apps/people/constants";
+import { getEmploymentLabel, formatDate } from "@/apps/people/constants";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const DOC_TYPES = [
@@ -276,9 +271,7 @@ function ProfileTab({ workspaceId, memberId, isAdmin }) {
   if (!profile) return null;
 
   const user = profile.member?.user;
-  const statusCfg =
-    PROFILE_STATUS_CONFIG[profile.status] ??
-    PROFILE_STATUS_CONFIG[ONBOARDING_STATUS.DRAFT];
+  const isLocked = profile.locked;
 
   return (
     <div className="space-y-6">
@@ -297,11 +290,25 @@ function ProfileTab({ workspaceId, memberId, isAdmin }) {
               <span
                 className={cn(
                   "px-3 py-1 rounded-full text-xs font-semibold",
-                  statusCfg.className,
+                  isLocked
+                    ? "bg-muted text-muted-foreground"
+                    : "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400 border border-green-200 dark:border-green-800",
                 )}
               >
-                {statusCfg.label}
+                {isLocked ? "Locked" : "Editable"}
               </span>
+              {/* Lock toggle mirrors the Edit button's gating below — both are
+                  org-manager actions on someone else's profile. */}
+              {isAdmin && !editing && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => update.mutate({ locked: !isLocked })}
+                  disabled={update.isPending}
+                >
+                  {isLocked ? "Unlock" : "Lock"}
+                </Button>
+              )}
               {isAdmin && !editing && (
                 <Button variant="outline" size="sm" onClick={startEdit}>
                   <Pencil className="w-3.5 h-3.5 mr-1.5" />

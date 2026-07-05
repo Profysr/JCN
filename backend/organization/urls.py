@@ -18,9 +18,6 @@ from .views import (
     OrgChartView,
     OrgChartReportsView,
     MyOrgProfileView,
-    PendingProfilesView,
-    ApproveProfileView,
-    BulkApproveProfilesView,
 )
 
 _ws = "workspaces/<str:workspace_id>"
@@ -64,11 +61,6 @@ urlpatterns = [
     path(f"{_ws}/org/chart/<str:member_id>/reports/", OrgChartReportsView.as_view()),
     path(f"{_ws}/org/chart/unassigned/", UnassignedChartMembersView.as_view()),
 
-    # Self-service onboarding profile
+    # Self-service profile
     path(f"{_ws}/org/me/profile/", MyOrgProfileView.as_view()),
-
-    # HR review queue
-    path(f"{_ws}/org/profiles/pending/", PendingProfilesView.as_view()),
-    path(f"{_ws}/org/profiles/<str:profile_id>/approve/", ApproveProfileView.as_view()),
-    path(f"{_ws}/org/profiles/bulk-approve/", BulkApproveProfilesView.as_view()),
 ]

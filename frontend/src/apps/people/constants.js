@@ -22,32 +22,6 @@ export const EMPLOYMENT_TYPES = [
   { value: "intern",      label: "Intern" },
 ];
 
-// Onboarding status values — mirrors backend OrgProfile.OnboardingStatus.
-export const ONBOARDING_STATUS = {
-  DRAFT:     "draft",
-  SUBMITTED: "submitted",
-  APPROVED:  "approved",
-};
-
-// Display config for each onboarding status.
-// label      → human-readable text shown in badges / profile views.
-// className  → Tailwind classes for the badge chip.
-// Used by PeopleDirectoryPage, MemberDetailPage, and any future status badges.
-export const PROFILE_STATUS_CONFIG = {
-  [ONBOARDING_STATUS.APPROVED]: {
-    label: "Active",
-    className: "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400 border border-green-200 dark:border-green-800",
-  },
-  [ONBOARDING_STATUS.SUBMITTED]: {
-    label: "Pending review",
-    className: "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-400 border border-amber-200 dark:border-amber-800",
-  },
-  [ONBOARDING_STATUS.DRAFT]: {
-    label: "Incomplete",
-    className: "bg-muted text-muted-foreground border border-border",
-  },
-};
-
 // Returns the human-readable label for an employment type value.
 // Falls back to the raw value so unknown types still render something.
 export function getEmploymentLabel(value) {

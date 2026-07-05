@@ -8,6 +8,8 @@ import { Loader } from "@/shared/components/ui/Loader";
 import { EmptyState } from "@/shared/components/ui/empty-state";
 import { useToast } from "@/shared/components/ui/toast";
 import Modal from "@/shared/components/ui/Modal";
+import { ShortcutTooltip } from "@/shared/components/ui/ShortcutTooltip";
+import { useCreateShortcut } from "@/apps/people/hooks/usePeopleShortcuts";
 import {
   useJobTitles,
   useCreateJobTitle,
@@ -101,6 +103,8 @@ export default function JobTitlesPage() {
   const openEdit = (title) => { setFormKey((k) => k + 1); setModal({ mode: "edit", title }); };
   const closeModal = () => setModal(null);
 
+  useCreateShortcut(openCreate, { disabled: !!modal });
+
   const handleDelete = async () => {
     if (!confirmDelete) return;
     try {
@@ -122,9 +126,11 @@ export default function JobTitlesPage() {
             Define the titles available in your workspace for member profiles.
           </p>
         </div>
-        <Button onClick={openCreate}>
-          <Plus className="w-4 h-4 mr-1.5" /> New Title
-        </Button>
+        <ShortcutTooltip label="New Title" shortcut="n" side="bottom">
+          <Button onClick={openCreate}>
+            <Plus className="w-4 h-4 mr-1.5" /> New Title
+          </Button>
+        </ShortcutTooltip>
       </div>
 
       {isLoading && <Loader className="h-48" />}
@@ -135,9 +141,11 @@ export default function JobTitlesPage() {
           title="No job titles yet"
           description="Add titles so members can select them when setting up their profile."
           action={
-            <Button onClick={openCreate}>
-              <Plus className="w-4 h-4 mr-1.5" /> New Title
-            </Button>
+            <ShortcutTooltip label="New Title" shortcut="n" side="bottom">
+              <Button onClick={openCreate}>
+                <Plus className="w-4 h-4 mr-1.5" /> New Title
+              </Button>
+            </ShortcutTooltip>
           }
         />
       )}

@@ -592,9 +592,11 @@ export default function DepartmentsPage() {
           title="No departments yet"
           description="Add departments to give your workspace a company structure."
           action={
-            <Button onClick={openCreate}>
-              <Plus className="w-4 h-4 mr-1.5" /> New Department
-            </Button>
+            <ShortcutTooltip label="New Department" shortcut="n" side="bottom">
+              <Button onClick={openCreate}>
+                <Plus className="w-4 h-4 mr-1.5" /> New Department
+              </Button>
+            </ShortcutTooltip>
           }
         />
       )}

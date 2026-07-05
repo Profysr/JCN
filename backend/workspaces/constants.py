@@ -63,7 +63,6 @@ PERMISSIONS = {
     "people": {
         "org.view": {"label": "View departments, teams, org chart, and the people directory"},
         "org.manage": {"label": "Create and edit departments, teams, job titles, and reporting lines"},
-        "org.approve_profiles": {"label": "Review and approve member onboarding profiles"},
         "hr.view": {"label": "View the HR dashboard and team leave / attendance overviews"},
         "hr.manage_leave": {"label": "Manage leave policies and approve or reject leave requests"},
         "hr.manage_attendance": {"label": "Manage attendance policies and records"},
@@ -111,7 +110,6 @@ SYSTEM_ROLE_PERMISSIONS = {
             "people": {
                 "org.view": True,
                 "org.manage": False,
-                "org.approve_profiles": False,
                 "hr.view": True,
                 "hr.manage_leave": False,
                 "hr.manage_attendance": False,
@@ -148,7 +146,6 @@ SYSTEM_ROLE_PERMISSIONS = {
             "people": {
                 "org.view": True,
                 "org.manage": False,
-                "org.approve_profiles": False,
                 "hr.view": True,
                 "hr.manage_leave": False,
                 "hr.manage_attendance": False,

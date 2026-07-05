@@ -4,7 +4,6 @@ import {
   Network,
   Users,
   Briefcase,
-  UserCheck,
   BarChart3,
   CalendarDays,
   Timer,
@@ -47,13 +46,6 @@ export const NAV_ITEMS = [
     path: "org/job-titles",
   },
   {
-    key: "hr-queue",
-    icon: UserCheck,
-    label: "HR Queue",
-    desc: "Profiles pending approval",
-    path: "org/pending",
-  },
-  {
     key: "hr-dashboard",
     icon: BarChart3,
     label: "HR Overview",
@@ -80,7 +72,7 @@ export const NAV_ITEMS = [
 export const NAV_GROUPS = [
   {
     label: "Organization",
-    items: ["departments", "teams", "org-chart", "people", "job-titles", "hr-queue"],
+    items: ["departments", "teams", "org-chart", "people", "job-titles"],
   },
   { label: "HR", items: ["hr-dashboard", "hr-leave", "hr-attendance"] },
 ];
