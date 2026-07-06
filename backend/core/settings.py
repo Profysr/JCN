@@ -104,7 +104,7 @@ DATABASES = {
 # ── Message broker (RabbitMQ) ─────────────────────────────────────────────────
 RABBITMQ_URL = env("RABBITMQ_URL", default="amqp://guest:guest@localhost:5672//")
 
-# Redis — caching + rate limiting only (see projects/cache.py, DRF throttling).
+# Redis — caching, rate limiting, and the WebSocket channel layer (see projects/cache.py, DRF throttling).
 REDIS_URL = env("REDIS_URL", default="redis://localhost:6379")
 
 # Django cache framework → Redis. Backs DRF throttling (API-key rate limits) and
@@ -117,12 +117,16 @@ CACHES = {
     }
 }
 
-# Channel layers broadcast messages between consumers. RabbitMQ fans out a WebSocket event to every subscribed consumer across all worker processes.
+# Channel layers broadcast messages between consumers, fanning out a WebSocket
+# event to every subscribed consumer across all worker processes. Redis (not
+# RabbitMQ) because channels_redis' client doesn't require a persistent asyncio
+# event loop, so it can be called from sync Gunicorn/WSGI request threads —
+# channels_rabbitmq's aio-pika client does, and refuses those calls outright.
 CHANNEL_LAYERS = {
     "default": {
-        "BACKEND": "channels_rabbitmq.core.RabbitmqChannelLayer",
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "host": RABBITMQ_URL,
+            "hosts": [REDIS_URL],
         },
     },
 }

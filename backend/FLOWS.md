@@ -18,13 +18,15 @@ Think of the backend as a restaurant:
 | 🧑‍🍳 The kitchen | **Django + DRF** | Handles normal web requests (login, load tasks, create a board) | `core/settings.py`, each app's `views.py` |
 | 🗄️ The pantry | **PostgreSQL** | Stores all the data permanently | `DATABASES` in `core/settings.py` |
 | 📣 The waiter shouting orders | **Django Channels** | Pushes live updates to open browser tabs (WebSockets) | `core/asgi.py`, `workspaces/consumers.py` |
-| 📮 The order queue | **RabbitMQ** | Holds "do this later" jobs and live-update messages | `RABBITMQ_URL` in `core/settings.py` |
+| 📮 The order queue | **RabbitMQ** | Holds "do this later" jobs for Celery | `RABBITMQ_URL`, `CELERY_BROKER_URL` in `core/settings.py` |
 | 👷 The prep cook | **Celery worker** | Picks jobs off the queue and does slow work (emails, imports) | `core/celery.py`, each app's `tasks.py` |
-| 🧊 The sticky-note board | **Redis** | Fast temporary memory: caching + rate-limit counters (NOT a message queue) | `REDIS_URL`, `CACHES` in `core/settings.py` |
+| 🧊 The sticky-note board | **Redis** | Fast temporary memory (caching + rate-limit counters) *and* the WebSocket channel layer | `REDIS_URL`, `CACHES`, `CHANNEL_LAYERS` in `core/settings.py` |
 
-> **One rule to remember:** **RabbitMQ moves messages** (Celery jobs + WebSocket
-> broadcasts). **Redis only remembers things briefly** (cache + rate limits). They
-> never do each other's job.
+> **One rule to remember:** **RabbitMQ only moves Celery jobs.** WebSocket
+> broadcasts go through Redis instead — `channels_rabbitmq`'s client needs a
+> persistent asyncio event loop to talk to RabbitMQ, which the sync Gunicorn/WSGI
+> request threads that call `broadcast()` don't have. `channels_redis` doesn't
+> have that requirement, so it works from those threads.
 
 ---
 
@@ -229,8 +231,8 @@ the view runs → access.authorize(..., scope="read"/"write")
 | An outgoing email | `core/emails.py` (`send_email`) + the app's `emails/*.html` templates |
 | A background job (email, import) | the app's `tasks.py` + `core/celery.py` |
 | Login / signup / password / Google | `accounts/` (`views`, `serializers`, `adapter.py`) + `core/settings.py` |
-| Message broker / queues | RabbitMQ — `RABBITMQ_URL`, `CELERY_*`, `CHANNEL_LAYERS` in `core/settings.py` |
-| Caching / rate-limit config | Redis — `REDIS_URL`, `CACHES` in `core/settings.py`; `projects/cache.py`; `workspaces/throttling.py` |
+| Message broker / queues | RabbitMQ — `RABBITMQ_URL`, `CELERY_*` in `core/settings.py` (Celery jobs only) |
+| Caching / rate-limit / WebSocket channel layer | Redis — `REDIS_URL`, `CACHES`, `CHANNEL_LAYERS` in `core/settings.py`; `projects/cache.py`; `workspaces/throttling.py` |
 | Global config, installed apps | `core/settings.py`; routes in `core/urls.py`; ASGI in `core/asgi.py` |
 
 ---
