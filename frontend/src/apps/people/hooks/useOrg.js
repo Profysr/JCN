@@ -411,6 +411,22 @@ export const useUpdateMyOrgProfile = (workspaceId) => {
   });
 };
 
+// Self-service onboarding submit: profile fields + org placement (manager,
+// departments, teams) + onboarding_completed, applied server-side in one call.
+export const useCompleteOnboarding = (workspaceId) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data) =>
+      api
+        .post(`/api/workspaces/${workspaceId}/org/me/onboarding/`, data)
+        .then((r) => r.data),
+    onSuccess: (updated) => {
+      qc.setQueryData(myProfileKey(workspaceId), updated);
+      qc.invalidateQueries({ queryKey: chartKey(workspaceId) });
+    },
+  });
+};
+
 // ── Reporting Lines ───────────────────────────────────────────────────────────
 export const useDeleteReportingLine = (workspaceId) => {
   const qc = useQueryClient();

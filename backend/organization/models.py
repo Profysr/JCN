@@ -132,6 +132,19 @@ class OrgProfile(models.Model):
         CONTRACTOR = "contractor", "Contractor"
         INTERN = "intern", "Intern"
 
+    class Gender(models.TextChoices):
+        MALE = "male", "Male"
+        FEMALE = "female", "Female"
+        OTHER = "other", "Other"
+        UNDISCLOSED = "undisclosed", "Prefer not to say"
+
+    class MaritalStatus(models.TextChoices):
+        SINGLE = "single", "Single"
+        MARRIED = "married", "Married"
+        DIVORCED = "divorced", "Divorced"
+        WIDOWED = "widowed", "Widowed"
+        OTHER = "other", "Other"
+
     PREFIX = "ogp"
     id = UUIDv7Field()
     member = models.OneToOneField(WorkspaceMember, on_delete=models.CASCADE, related_name="org_profile")
@@ -144,6 +157,41 @@ class OrgProfile(models.Model):
     employee_id = models.CharField(max_length=50, blank=True)
     start_date = models.DateField(null=True, blank=True)
     location = models.CharField(max_length=100, blank=True)
+
+    # ── Personal details (employee onboarding intake) ───────────────────────
+    # All optional at the DB level: onboarding requires only a few (enforced in
+    # the frontend), and the rest can be completed later from the profile page.
+    personal_email = models.EmailField(blank=True)
+    phone = models.CharField(max_length=32, blank=True)
+    date_of_birth = models.DateField(null=True, blank=True)
+    gender = models.CharField(max_length=20, choices=Gender.choices, blank=True)
+    marital_status = models.CharField(max_length=20, choices=MaritalStatus.choices, blank=True)
+    nationality = models.CharField(max_length=2, blank=True)  # ISO 3166-1 alpha-2
+
+    # ── Home address ────────────────────────────────────────────────────────
+    address_line1 = models.CharField(max_length=255, blank=True)
+    address_line2 = models.CharField(max_length=255, blank=True)
+    city = models.CharField(max_length=100, blank=True)
+    state_region = models.CharField(max_length=100, blank=True)
+    postal_code = models.CharField(max_length=20, blank=True)
+    country = models.CharField(max_length=2, blank=True)  # ISO 3166-1 alpha-2
+
+    # ── Emergency contacts ──────────────────────────────────────────────────
+    # A member can list one or more emergency contacts — see the related
+    # EmergencyContact model below (replaces the old single flat set of columns).
+
+    # ── Bank & government IDs (optional; typically filled later, self-service) ─
+    bank_name = models.CharField(max_length=150, blank=True)
+    bank_account_name = models.CharField(max_length=150, blank=True)
+    bank_account_number = models.CharField(max_length=64, blank=True)
+    bank_iban = models.CharField(max_length=64, blank=True)
+    national_id = models.CharField(max_length=64, blank=True)
+    tax_id = models.CharField(max_length=64, blank=True)
+
+    # Set true when the employee finishes the onboarding intake — gates People/HR
+    # access on the frontend (ProfileSetupGate). Distinct from `locked`, which is
+    # an HR override for read-only mode.
+    onboarding_completed = models.BooleanField(default=False)
     # Google Maps share link pasted by the employee/HR. work_latitude/longitude are
     # parsed out of it on save (see organization.geo.parse_maps_url) so attendance
     # geofencing (hr.models.Attendance) doesn't need to re-parse a URL per check.
@@ -160,6 +208,35 @@ class OrgProfile(models.Model):
 
     def __str__(self):
         return f"OrgProfile({self.member})"
+
+
+class EmergencyContact(models.Model):
+    """One emergency contact for a member. A profile can have several; the first
+    (lowest `order`) is treated as primary. Replaces the single set of flat
+    emergency_contact_* columns that used to live on OrgProfile."""
+
+    PREFIX = "emc"
+    id = UUIDv7Field()
+    profile = models.ForeignKey(
+        OrgProfile, on_delete=models.CASCADE, related_name="emergency_contacts"
+    )
+    name = models.CharField(max_length=150)
+    relationship = models.CharField(max_length=50, blank=True)
+    phone = models.CharField(max_length=32)
+    email = models.EmailField(blank=True)
+    # Display/priority order within a profile; 0 is the primary contact.
+    order = models.PositiveSmallIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["order", "created_at"]
+        indexes = [
+            # "all emergency contacts for this profile" — the only access pattern
+            models.Index(fields=["profile", "order"], name="emergcontact_profile_order_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.name} (emergency contact for {self.profile.member})"
 
 
 class ReportingLine(models.Model):

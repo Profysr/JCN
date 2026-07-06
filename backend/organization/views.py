@@ -1,7 +1,7 @@
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 from rest_framework import permissions, status
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -13,6 +13,7 @@ from core.pagination import OrgListPagination
 from .models import (
     Department,
     DepartmentMember,
+    EmergencyContact,
     JobTitle,
     OrgProfile,
     ReportingLine,
@@ -338,26 +339,64 @@ class JobTitleDetailView(APIView):
 
 
 # ── Org Profiles ──────────────────────────────────────────────────────────────
+def _sync_emergency_contacts(profile, contacts):
+    """Replace a profile's emergency contacts with the given list (self-service
+    intake — same replace-the-set semantics as the department/team writes).
+
+    `contacts` is a list of {name, relationship, phone, email} dicts; the first
+    entry becomes the primary (order 0). Blank/nameless rows are dropped. Passing
+    None means "not provided in this request" — leave existing contacts untouched.
+    """
+    if contacts is None:
+        return
+    if not isinstance(contacts, list):
+        raise ValidationError({"emergency_contacts": "Expected a list of contacts."})
+
+    cleaned = []
+    for c in contacts:
+        if not isinstance(c, dict):
+            raise ValidationError({"emergency_contacts": "Each contact must be an object."})
+        name = (c.get("name") or "").strip()
+        if not name:
+            continue
+        cleaned.append(
+            EmergencyContact(
+                profile=profile,
+                name=name,
+                relationship=(c.get("relationship") or "").strip(),
+                phone=(c.get("phone") or "").strip(),
+                email=(c.get("email") or "").strip(),
+                order=len(cleaned),
+            )
+        )
+
+    profile.emergency_contacts.all().delete()
+    if cleaned:
+        EmergencyContact.objects.bulk_create(cleaned)
+
+
 def _apply_profile_patch(profile, data, *, is_manager):
     """Shared PATCH body for OrgProfileView and MyOrgProfileView.
 
-    A member fills their profile once; a successful non-manager save then
-    auto-locks it (read-only until HR unlocks it again). Managers/HR can
-    always edit any field, including toggling `locked` itself — non-managers
-    never can, so `locked` is stripped from their request body up front.
+    Profiles are self-service: a member can edit their own profile any time
+    (onboarding intake, then filling in bank/ID details later) — so there's no
+    auto-lock. `locked` is an explicit HR override: while set, the member can't
+    edit until HR unlocks. Only managers/HR may toggle `locked`, so it's stripped
+    from a non-manager's request body up front.
     """
+    data = {**data}
     if not is_manager:
         if profile.locked:
             raise PermissionDenied("This profile is locked. Ask HR to unlock it before editing.")
-        data = {k: v for k, v in data.items() if k != "locked"}
+        data.pop("locked", None)
+
+    # `emergency_contacts` is a nested write handled outside the serializer.
+    emergency_contacts = data.pop("emergency_contacts", None)
 
     ser = OrgProfileSerializer(profile, data=data, partial=True)
     ser.is_valid(raise_exception=True)
     ser.save()
-
-    if not is_manager:
-        profile.locked = True
-        profile.save(update_fields=["locked"])
+    _sync_emergency_contacts(profile, emergency_contacts)
 
     return profile
 
@@ -599,4 +638,79 @@ class MyOrgProfileView(APIView):
             str(workspace.id), "org.profile.updated",
             {"profile_id": str(profile.id), "member_id": str(member.id)},
         )
+        return Response(OrgProfileSerializer(profile).data)
+
+
+class MyOnboardingView(APIView):
+    """Self-service onboarding submit.
+
+    Applies the member's own profile fields AND their org placement — manager
+    (reporting line), departments and teams — then marks onboarding complete, in
+    one call. This lets a new hire set themselves up during onboarding without
+    needing `org.manage`: the write is scoped to *their own* member (report is
+    always self, memberships add self), and HR can still change any of it later
+    via the admin endpoints. The org-chart drag/assign flows are unchanged.
+    """
+
+    permission_classes = [permissions.IsAuthenticated, access.APIKeyScopePermission]
+
+    def post(self, request, workspace_id):
+        workspace = access.authorize(request, workspace_id, scope="write")
+        member = get_object_or_404(
+            WorkspaceMember.objects.select_related("user"),
+            workspace=workspace, user=request.user,
+        )
+        profile, _ = OrgProfile.objects.get_or_create(member=member)
+        if profile.locked:
+            raise PermissionDenied(
+                "This profile is locked. Ask HR to unlock it before editing."
+            )
+
+        data = {**request.data}
+        manager_id = data.pop("manager_id", None)
+        department_ids = data.pop("department_ids", None) or []
+        team_ids = data.pop("team_ids", None) or []
+        emergency_contacts = data.pop("emergency_contacts", None)
+        data.pop("locked", None)  # self-submit can never toggle the HR lock
+        data["onboarding_completed"] = True
+
+        ser = OrgProfileSerializer(profile, data=data, partial=True)
+        ser.is_valid(raise_exception=True)
+        ser.save()
+        _sync_emergency_contacts(profile, emergency_contacts)
+
+        # Reporting line — self is always the report. Reuse ReportingLineSerializer
+        # validation (rejects self-manager, non-members, cycles). Replace if set.
+        if manager_id:
+            rl = ReportingLineSerializer(
+                data={"manager_id": manager_id, "report_id": str(member.id)},
+                context={"request": request, "workspace": workspace},
+            )
+            rl.is_valid(raise_exception=True)
+            existing = ReportingLine.objects.filter(
+                workspace=workspace, report=member
+            ).first()
+            if existing:
+                existing.manager_id = rl.validated_data["manager_id"]
+                existing.save(update_fields=["manager_id"])
+            else:
+                rl.save()
+
+        # Department / team membership — idempotent, self only, workspace-scoped.
+        for did in department_ids:
+            dept = Department.objects.filter(id=did, workspace=workspace).first()
+            if dept:
+                DepartmentMember.objects.get_or_create(department=dept, member=member)
+        for tid in team_ids:
+            team = Team.objects.filter(id=tid, workspace=workspace).first()
+            if team:
+                TeamMember.objects.get_or_create(team=team, member=member)
+
+        broadcast(
+            str(workspace.id), "org.profile.updated",
+            {"profile_id": str(profile.id), "member_id": str(member.id)},
+        )
+        # Placement may have changed — nudge org-chart/directory consumers.
+        broadcast(str(workspace.id), "org.reporting_line.updated",
+                  {"member_id": str(member.id)})
         return Response(OrgProfileSerializer(profile).data)

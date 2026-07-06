@@ -798,7 +798,9 @@ optionally under a `Department`, with its own `lead`) →
 [TeamsPage.jsx](../frontend/src/apps/people/pages/TeamsPage.jsx). `TeamMember`
 (mirrors `DepartmentMember`; `is_lead` derived from `Team.lead`). `OrgProfile`
 (extends a member with org fields + onboarding `status` draft→submitted→approved;
-non-admins are walled off until approved) → the wall is
+non-admins are walled off until approved). `EmergencyContact` (FK→`OrgProfile`,
+`related_name="emergency_contacts"`; a member can list several, lowest `order` is
+primary — replaced the old single flat `emergency_contact_*` columns) → the wall is
 [OrgOnboardingGate.jsx](../frontend/src/apps/people/components/OrgOnboardingGate.jsx),
 the card is
 [MemberProfilePage.jsx](../frontend/src/apps/people/pages/MemberProfilePage.jsx).
@@ -815,7 +817,11 @@ department's `head` or a profile's `manager` doesn't drag in unneeded fields.
 **validates the referenced row is in the same workspace** (rejects cross-workspace
 IDs). `OrgProfileSerializer` adds computed `departments`/`teams`/`manager`/
 `direct_reports_count` so one request renders a full profile card; only `job_title_id`
-+ freeform fields are writable, and `job_title_id` is workspace-validated.
++ freeform fields are writable, and `job_title_id` is workspace-validated. Emergency
+contacts are exposed as a nested read-only `emergency_contacts` list; writes are a
+replace-the-set operation handled outside the serializer by `_sync_emergency_contacts`
+(the request body's `emergency_contacts` list is popped before the serializer runs,
+mirroring how `manager_id`/`department_ids`/`team_ids` are handled in onboarding).
 `ReportingLineSerializer.validate` rejects self-report, non-members, cycles, and a
 **second manager** for a report (clean 400 instead of a DB IntegrityError).
 

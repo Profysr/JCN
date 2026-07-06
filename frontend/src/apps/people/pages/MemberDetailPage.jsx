@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useMemo } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   ArrowLeft,
@@ -6,25 +6,24 @@ import {
   FileText,
   CalendarDays,
   MessageSquare,
-  Upload,
   Trash2,
-  Download,
   Plus,
   Pencil,
   Check,
   X,
-  AlertTriangle,
   Clock,
   CheckCircle2,
   XCircle,
-  FileIcon,
   Briefcase,
   Building2,
   MapPin,
   Calendar,
-  Hash,
   ChevronRight,
   Users,
+  Phone,
+  Home,
+  ShieldAlert,
+  Landmark,
 } from "lucide-react";
 
 import { Avatar } from "@/shared/components/ui/avatar";
@@ -33,24 +32,29 @@ import { Loader } from "@/shared/components/ui/Loader";
 import Select from "@/shared/components/ui/Select";
 import { EmptyState } from "@/shared/components/ui/empty-state";
 import { SectionCard, DetailRow, Chip } from "@/shared/components/ui/SectionCard";
+import { Tabs, TabsUnderlineList, TabsUnderlineTrigger, TabsContent } from "@/shared/components/ui/Tabs";
 import { cn } from "@/shared/lib/utils";
-import { EMPLOYMENT_TYPES } from "@/shared/lib/constants";
+import { COUNTRIES, flagComponent } from "@/shared/lib/locale";
 import { useMembers } from "@/shared/hooks/useMembers";
 import { usePermission } from "@/contexts/PermissionsContext";
 import { useLeaveRequests } from "@/apps/people/hooks/useLeave";
-import { useEmployeeDocs, useUploadEmployeeDoc, useDeleteEmployeeDoc } from "@/apps/people/hooks/useEmployeeDocs";
 import { useEmployeeNotes, useCreateEmployeeNote, useUpdateEmployeeNote, useDeleteEmployeeNote } from "@/apps/people/hooks/useEmployeeNotes";
 import { useOrgProfile, useUpdateOrgProfile, useJobTitles } from "@/apps/people/hooks/useOrg";
-import { getEmploymentLabel, formatDate } from "@/apps/people/constants";
+import DocumentsPanel from "@/apps/people/components/DocumentsPanel";
+import {
+  EMPLOYMENT_TYPES,
+  GENDERS,
+  MARITAL_STATUSES,
+  getEmploymentLabel,
+  getGenderLabel,
+  getMaritalLabel,
+  formatDate,
+} from "@/apps/people/constants";
+
+const countryName = (code) => COUNTRIES.find((c) => c.code === code)?.name ?? code;
+const emptyContact = () => ({ name: "", relationship: "", phone: "", email: "" });
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const DOC_TYPES = [
-  { value: "contract", label: "Contract" },
-  { value: "id", label: "ID" },
-  { value: "certificate", label: "Certificate" },
-  { value: "other", label: "Other" },
-];
-
 const TABS = [
   { key: "profile", label: "Profile", icon: User },
   { key: "documents", label: "Documents", icon: FileText },
@@ -80,23 +84,6 @@ function BaseInput({ className, ...props }) {
   );
 }
 
-function Tab({ active, onClick, icon: Icon, label }) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors",
-        active
-          ? "border-primary text-primary"
-          : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
-      )}
-    >
-      <Icon className="w-4 h-4" />
-      {label}
-    </button>
-  );
-}
-
 function StatusChip({ status }) {
   const map = {
     pending: { icon: Clock, cls: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300" },
@@ -113,60 +100,73 @@ function StatusChip({ status }) {
   );
 }
 
-function ExpiryBadge({ daysUntilExpiry }) {
-  if (daysUntilExpiry === null || daysUntilExpiry === undefined) return null;
-  if (daysUntilExpiry < 0) return <span className="text-xs font-medium text-rose-500">Expired</span>;
-  if (daysUntilExpiry <= 30) {
-    return (
-      <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600">
-        <AlertTriangle className="w-3 h-3" />
-        {daysUntilExpiry}d left
-      </span>
-    );
-  }
-  return <span className="text-xs text-muted-foreground">{daysUntilExpiry}d left</span>;
+// ── Profile Tab Components ────────────────────────────────────────────────────
+function EditSectionHeading({ icon: Icon, children }) {
+  return (
+    <div className="flex items-center gap-1.5 pt-2 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      <Icon className="w-3.5 h-3.5" /> {children}
+    </div>
+  );
 }
 
-// ── Profile Tab Components ────────────────────────────────────────────────────
+// Full self-service / HR profile editor — mirrors the sections collected during
+// employee onboarding (see EmployeeOnboardingPage) so anything captured there can
+// be viewed and updated later from the same place.
 function ProfileEditForm({ form, setForm, jobTitles, onSave, onCancel, isPending }) {
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
-  
+
+  const contacts = form.emergency_contacts ?? [];
+  const setContact = (i, k, v) =>
+    setForm((f) => ({
+      ...f,
+      emergency_contacts: f.emergency_contacts.map((c, idx) => (idx === i ? { ...c, [k]: v } : c)),
+    }));
+  const addContact = () =>
+    setForm((f) => ({ ...f, emergency_contacts: [...(f.emergency_contacts ?? []), emptyContact()] }));
+  const removeContact = (i) =>
+    setForm((f) => ({ ...f, emergency_contacts: f.emergency_contacts.filter((_, idx) => idx !== i) }));
+
+  const countryOptions = useMemo(
+    () =>
+      COUNTRIES.map((c) => {
+        const Flag = flagComponent(c.code);
+        return {
+          value: c.code,
+          label: c.name,
+          iconNode: Flag ? <Flag className="w-5 h-auto rounded-[2px]" /> : undefined,
+        };
+      }),
+    [],
+  );
+
   return (
     <div className="space-y-4">
+      {/* Employment */}
+      <EditSectionHeading icon={Briefcase}>Employment</EditSectionHeading>
       <div className="grid md:grid-cols-2 gap-4">
         <FormField label="Employment type">
-          <Select
-            className="mt-1"
-            value={form.employment_type}
-            onChange={(v) => set("employment_type", v)}
-            options={EMPLOYMENT_TYPES}
-          />
+          <Select className="mt-1" value={form.employment_type} onChange={(v) => set("employment_type", v)} options={EMPLOYMENT_TYPES} />
         </FormField>
-        
         <FormField label="Job title">
           <Select
             className="mt-1"
             placeholder="— None —"
-            value={form.job_title}
-            onChange={(v) => set("job_title", v)}
+            value={form.job_title_id}
+            onChange={(v) => set("job_title_id", v)}
             options={[{ value: "", label: "— None —" }, ...jobTitles.map((jt) => ({ value: jt.id, label: jt.name }))]}
           />
         </FormField>
-
         <FormField label="Employee ID">
           <BaseInput value={form.employee_id} onChange={(e) => set("employee_id", e.target.value)} />
         </FormField>
-
         <FormField label="Start date">
           <BaseInput type="date" value={form.start_date} onChange={(e) => set("start_date", e.target.value)} />
         </FormField>
-
         <FormField label="Location">
           <BaseInput value={form.location} onChange={(e) => set("location", e.target.value)} />
         </FormField>
       </div>
-
-      <FormField 
+      <FormField
         label="Work location (Google Maps link)"
         hint="Paste a Maps share link — coordinates are derived automatically and used for attendance geofencing."
       >
@@ -178,6 +178,93 @@ function ProfileEditForm({ form, setForm, jobTitles, onSave, onCancel, isPending
         />
       </FormField>
 
+      {/* Personal */}
+      <EditSectionHeading icon={User}>Personal</EditSectionHeading>
+      <div className="grid md:grid-cols-2 gap-4">
+        <FormField label="Personal email">
+          <BaseInput type="email" value={form.personal_email} onChange={(e) => set("personal_email", e.target.value)} />
+        </FormField>
+        <FormField label="Contact number">
+          <BaseInput value={form.phone} onChange={(e) => set("phone", e.target.value)} />
+        </FormField>
+        <FormField label="Date of birth">
+          <BaseInput type="date" value={form.date_of_birth} onChange={(e) => set("date_of_birth", e.target.value)} />
+        </FormField>
+        <FormField label="Gender">
+          <Select className="mt-1" placeholder="Select…" value={form.gender} onChange={(v) => set("gender", v)} options={GENDERS} />
+        </FormField>
+        <FormField label="Marital status">
+          <Select className="mt-1" placeholder="Select…" value={form.marital_status} onChange={(v) => set("marital_status", v)} options={MARITAL_STATUSES} />
+        </FormField>
+        <FormField label="Nationality">
+          <Select className="mt-1" searchable placeholder="Select…" value={form.nationality} onChange={(v) => set("nationality", v)} options={countryOptions} />
+        </FormField>
+      </div>
+
+      {/* Home address */}
+      <EditSectionHeading icon={Home}>Home address</EditSectionHeading>
+      <div className="grid md:grid-cols-2 gap-4">
+        <div className="md:col-span-2">
+          <FormField label="Address line 1">
+            <BaseInput value={form.address_line1} onChange={(e) => set("address_line1", e.target.value)} />
+          </FormField>
+        </div>
+        <div className="md:col-span-2">
+          <FormField label="Address line 2">
+            <BaseInput value={form.address_line2} onChange={(e) => set("address_line2", e.target.value)} />
+          </FormField>
+        </div>
+        <FormField label="City"><BaseInput value={form.city} onChange={(e) => set("city", e.target.value)} /></FormField>
+        <FormField label="State / Region"><BaseInput value={form.state_region} onChange={(e) => set("state_region", e.target.value)} /></FormField>
+        <FormField label="Postal code"><BaseInput value={form.postal_code} onChange={(e) => set("postal_code", e.target.value)} /></FormField>
+        <FormField label="Country">
+          <Select className="mt-1" searchable placeholder="Select…" value={form.country} onChange={(v) => set("country", v)} options={countryOptions} />
+        </FormField>
+      </div>
+
+      {/* Emergency contacts */}
+      <EditSectionHeading icon={ShieldAlert}>Emergency contacts</EditSectionHeading>
+      <div className="space-y-3">
+        {contacts.map((c, i) => (
+          <div key={i} className="rounded-lg border bg-background p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-muted-foreground">
+                {i === 0 ? "Primary contact" : `Contact ${i + 1}`}
+              </span>
+              <button
+                type="button"
+                onClick={() => removeContact(i)}
+                className="text-muted-foreground hover:text-destructive transition-colors"
+                aria-label="Remove contact"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="grid md:grid-cols-2 gap-3">
+              <FormField label="Name"><BaseInput value={c.name} onChange={(e) => setContact(i, "name", e.target.value)} /></FormField>
+              <FormField label="Relationship"><BaseInput value={c.relationship} onChange={(e) => setContact(i, "relationship", e.target.value)} placeholder="e.g. Spouse" /></FormField>
+              <FormField label="Phone"><BaseInput value={c.phone} onChange={(e) => setContact(i, "phone", e.target.value)} /></FormField>
+              <FormField label="Email"><BaseInput type="email" value={c.email} onChange={(e) => setContact(i, "email", e.target.value)} /></FormField>
+            </div>
+          </div>
+        ))}
+        <Button type="button" variant="outline" size="sm" onClick={addContact}>
+          <Plus className="w-4 h-4 mr-1" /> Add contact
+        </Button>
+      </div>
+
+      {/* Bank & IDs */}
+      <EditSectionHeading icon={Landmark}>Bank &amp; IDs</EditSectionHeading>
+      <div className="grid md:grid-cols-2 gap-4">
+        <FormField label="Bank name"><BaseInput value={form.bank_name} onChange={(e) => set("bank_name", e.target.value)} /></FormField>
+        <FormField label="Account holder name"><BaseInput value={form.bank_account_name} onChange={(e) => set("bank_account_name", e.target.value)} /></FormField>
+        <FormField label="Account number"><BaseInput value={form.bank_account_number} onChange={(e) => set("bank_account_number", e.target.value)} /></FormField>
+        <FormField label="IBAN"><BaseInput value={form.bank_iban} onChange={(e) => set("bank_iban", e.target.value)} /></FormField>
+        <FormField label="National ID"><BaseInput value={form.national_id} onChange={(e) => set("national_id", e.target.value)} /></FormField>
+      </div>
+
+      {/* Bio */}
+      <EditSectionHeading icon={FileText}>About</EditSectionHeading>
       <FormField label="Bio">
         <textarea
           className="mt-1 w-full border rounded px-3 py-2 text-sm bg-background resize-none"
@@ -187,7 +274,7 @@ function ProfileEditForm({ form, setForm, jobTitles, onSave, onCancel, isPending
         />
       </FormField>
 
-      <div className="flex gap-2">
+      <div className="flex gap-2 pt-2">
         <Button size="sm" onClick={onSave} disabled={isPending}>
           <Check className="w-4 h-4 mr-1" /> Save
         </Button>
@@ -209,12 +296,40 @@ function ProfileTab({ workspaceId, memberId, isAdmin }) {
 
   function startEdit() {
     setForm({
+      // Employment
       employment_type: profile?.employment_type ?? "full_time",
-      job_title: profile?.job_title?.id ?? "",
+      job_title_id: profile?.job_title?.id ?? "",
       employee_id: profile?.employee_id ?? "",
       start_date: profile?.start_date ?? "",
       location: profile?.location ?? "",
       work_location_url: profile?.work_location_url ?? "",
+      // Personal
+      personal_email: profile?.personal_email ?? "",
+      phone: profile?.phone ?? "",
+      date_of_birth: profile?.date_of_birth ?? "",
+      gender: profile?.gender ?? "",
+      marital_status: profile?.marital_status ?? "",
+      nationality: profile?.nationality ?? "",
+      // Home address
+      address_line1: profile?.address_line1 ?? "",
+      address_line2: profile?.address_line2 ?? "",
+      city: profile?.city ?? "",
+      state_region: profile?.state_region ?? "",
+      postal_code: profile?.postal_code ?? "",
+      country: profile?.country ?? "",
+      // Emergency contacts
+      emergency_contacts: (profile?.emergency_contacts ?? []).map((c) => ({
+        name: c.name ?? "",
+        relationship: c.relationship ?? "",
+        phone: c.phone ?? "",
+        email: c.email ?? "",
+      })),
+      // Bank & IDs
+      bank_name: profile?.bank_name ?? "",
+      bank_account_name: profile?.bank_account_name ?? "",
+      bank_account_number: profile?.bank_account_number ?? "",
+      bank_iban: profile?.bank_iban ?? "",
+      national_id: profile?.national_id ?? "",
       bio: profile?.bio ?? "",
     });
     setEditing(true);
@@ -222,8 +337,13 @@ function ProfileTab({ workspaceId, memberId, isAdmin }) {
 
   function saveEdit() {
     const payload = { ...form };
-    if (!payload.job_title) delete payload.job_title;
+    // Emergency contacts are a replace-the-set write (see backend
+    // _sync_emergency_contacts); drop rows with no name.
+    payload.emergency_contacts = (form.emergency_contacts ?? []).filter((c) => c.name?.trim());
+    // Empty date/FK fields must be omitted rather than sent as "".
+    if (!payload.job_title_id) delete payload.job_title_id;
     if (!payload.start_date) delete payload.start_date;
+    if (!payload.date_of_birth) delete payload.date_of_birth;
     update.mutate(payload, { onSuccess: () => setEditing(false) });
   }
 
@@ -410,111 +530,81 @@ function ProfileTab({ workspaceId, memberId, isAdmin }) {
               )}
             </SectionCard>
 
-            <SectionCard title="Profile Details" icon={Hash}>
-              <DetailRow label="Submitted" value={formatDate(profile.submitted_at)} />
-              <DetailRow label="Approved" value={formatDate(profile.approved_at)} />
-              {profile.approved_by && (
-                <DetailRow label="Approved by" value={profile.approved_by?.user?.full_name || "—"} />
+            <SectionCard title="Personal" icon={User}>
+              <DetailRow label="Personal email" value={profile.personal_email || null} />
+              <DetailRow label="Contact number" value={profile.phone || null} />
+              <DetailRow label="Date of birth" value={formatDate(profile.date_of_birth)} />
+              <DetailRow label="Gender" value={profile.gender ? getGenderLabel(profile.gender) : null} />
+              <DetailRow label="Marital status" value={profile.marital_status ? getMaritalLabel(profile.marital_status) : null} />
+              <DetailRow label="Nationality" value={profile.nationality ? countryName(profile.nationality) : null} />
+              {!profile.personal_email && !profile.phone && !profile.date_of_birth &&
+                !profile.gender && !profile.marital_status && !profile.nationality && (
+                  <p className="text-sm text-muted-foreground italic">No personal details on file</p>
+                )}
+            </SectionCard>
+
+            <SectionCard title="Home address" icon={Home}>
+              {profile.address_line1 || profile.city || profile.country ? (
+                <address className="not-italic text-sm leading-relaxed">
+                  {profile.address_line1 && <div>{profile.address_line1}</div>}
+                  {profile.address_line2 && <div>{profile.address_line2}</div>}
+                  {(profile.city || profile.state_region) && (
+                    <div>{[profile.city, profile.state_region].filter(Boolean).join(", ")}</div>
+                  )}
+                  {(profile.postal_code || profile.country) && (
+                    <div>{[profile.postal_code, countryName(profile.country)].filter(Boolean).join(" ")}</div>
+                  )}
+                </address>
+              ) : (
+                <p className="text-sm text-muted-foreground italic">No address on file</p>
               )}
+            </SectionCard>
+
+            <SectionCard title="Emergency contacts" icon={ShieldAlert}>
+              {profile.emergency_contacts?.length > 0 ? (
+                <div className="divide-y divide-border/40">
+                  {profile.emergency_contacts.map((c, i) => (
+                    <div key={c.id ?? i} className="py-2.5 first:pt-0 last:pb-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">{c.name}</span>
+                        {i === 0 && (
+                          <span className="text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+                            Primary
+                          </span>
+                        )}
+                        {c.relationship && (
+                          <span className="text-xs text-muted-foreground">· {c.relationship}</span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-0.5 text-xs text-muted-foreground">
+                        {c.phone && (
+                          <span className="inline-flex items-center gap-1"><Phone className="w-3 h-3" /> {c.phone}</span>
+                        )}
+                        {c.email && <span>{c.email}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground italic">No emergency contacts</p>
+              )}
+            </SectionCard>
+
+            <SectionCard title="Bank & IDs" icon={Landmark}>
+              <DetailRow label="Bank name" value={profile.bank_name || null} />
+              <DetailRow label="Account holder" value={profile.bank_account_name || null} />
+              <DetailRow label="Account number" value={profile.bank_account_number || null} />
+              <DetailRow label="IBAN" value={profile.bank_iban || null} />
+              <DetailRow label="National ID" value={profile.national_id || null} />
+              {!profile.bank_name && !profile.bank_account_name && !profile.bank_account_number &&
+                !profile.bank_iban && !profile.national_id && (
+                  <p className="text-sm text-muted-foreground italic">No bank or ID details on file</p>
+                )}
             </SectionCard>
           </div>
         </div>
       )}
     </div>
-  );
-}
-
-// ── Documents Tab Component ──────────────────────────────────────────────────
-function DocumentsTab({ workspaceId, memberId }) {
-  const { data: docs = [], isLoading } = useEmployeeDocs(workspaceId, memberId);
-  const upload = useUploadEmployeeDoc(workspaceId, memberId);
-  const remove = useDeleteEmployeeDoc(workspaceId, memberId);
-  const fileRef = useRef(null);
-
-  const [docType, setDocType] = useState("other");
-  const [expiryDate, setExpiryDate] = useState("");
-
-  function handleFileChange(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("doc_type", docType);
-    if (expiryDate) fd.append("expiry_date", expiryDate);
-    
-    upload.mutate(fd, {
-      onSuccess: () => {
-        if (fileRef.current) fileRef.current.value = "";
-        setExpiryDate("");
-      },
-    });
-  }
-
-  if (isLoading) return <Loader className="h-40" />;
-
-  return (
-    <SectionCard title="Documents" icon={FileText}>
-      <div className="space-y-6">
-        <div className="border rounded-lg p-4 bg-muted/30 space-y-3">
-          <p className="text-sm font-medium">Upload document</p>
-          <div className="flex flex-wrap gap-3 items-end">
-            <FormField label="Type">
-              <Select size="sm" className="mt-1 w-44" value={docType} onChange={setDocType} options={DOC_TYPES} />
-            </FormField>
-            
-            <FormField label="Expiry date (optional)">
-              <input
-                type="date"
-                className="mt-1 block border rounded px-2 py-1.5 text-sm bg-background"
-                value={expiryDate}
-                onChange={(e) => setExpiryDate(e.target.value)}
-              />
-            </FormField>
-
-            <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()} disabled={upload.isPending}>
-              <Upload className="w-4 h-4 mr-1.5" />
-              {upload.isPending ? "Uploading…" : "Choose file"}
-            </Button>
-            <input ref={fileRef} type="file" className="hidden" onChange={handleFileChange} />
-          </div>
-        </div>
-
-        {docs.length === 0 ? (
-          <EmptyState title="No documents yet" description="Uploaded employee documents will appear here." />
-        ) : (
-          <div className={LIST_CONTAINER_CLASS}>
-            {docs.map((doc) => (
-              <div key={doc.id} className="flex items-center gap-3 px-4 py-3">
-                <FileIcon className="w-5 h-5 text-muted-foreground flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{doc.original_name}</p>
-                  <p className="text-xs text-muted-foreground capitalize">
-                    {doc.doc_type} {doc.expiry_date && ` · expires ${formatDate(doc.expiry_date)}`}
-                  </p>
-                </div>
-                <ExpiryBadge daysUntilExpiry={doc.days_until_expiry} />
-                <a
-                  href={doc.file}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent"
-                  title="Download"
-                >
-                  <Download className="w-4 h-4" />
-                </a>
-                <button
-                  onClick={() => remove.mutate(doc.id)}
-                  className="p-1.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                  title="Delete"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </SectionCard>
   );
 }
 
@@ -690,38 +780,36 @@ export default function MemberDetailPage() {
         <ArrowLeft className="w-4 h-4" /> Back
       </button>
 
-      {/* Tabs Row */}
-      <div className="border-b flex gap-1 mb-6 overflow-x-auto">
-        {TABS.map((tab) => {
-          if (tab.key === "notes" && !isNotesAdmin) return null;
-          if (tab.key === "documents" && !isDocsAdmin) return null;
-          return (
-            <Tab
-              key={tab.key}
-              active={activeTab === tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              icon={tab.icon}
-              label={tab.label}
-            />
-          );
-        })}
-      </div>
-
-      {/* Primary Routing Core */}
-      <div>
-        {activeTab === "profile" && (
+      <Tabs value={activeTab} onChange={setActiveTab}>
+        <TabsUnderlineList className="mb-6 overflow-x-auto">
+          {TABS.map((tab) => {
+            if (tab.key === "notes" && !isNotesAdmin) return null;
+            if (tab.key === "documents" && !isDocsAdmin) return null;
+            return (
+              <TabsUnderlineTrigger key={tab.key} value={tab.key} icon={tab.icon}>
+                {tab.label}
+              </TabsUnderlineTrigger>
+            );
+          })}
+        </TabsUnderlineList>
+ 
+        <TabsContent value="profile">
           <ProfileTab workspaceId={workspaceId} memberId={memberId} isAdmin={isProfileAdmin} />
+        </TabsContent>
+        {isDocsAdmin && (
+          <TabsContent value="documents">
+            <DocumentsPanel workspaceId={workspaceId} memberId={memberId} />
+          </TabsContent>
         )}
-        {activeTab === "documents" && isDocsAdmin && (
-          <DocumentsTab workspaceId={workspaceId} memberId={memberId} />
-        )}
-        {activeTab === "leave" && (
+        <TabsContent value="leave">
           <LeaveHistoryTab workspaceId={workspaceId} memberId={memberId} />
+        </TabsContent>
+        {isNotesAdmin && (
+          <TabsContent value="notes">
+            <NotesTab workspaceId={workspaceId} memberId={memberId} />
+          </TabsContent>
         )}
-        {activeTab === "notes" && isNotesAdmin && (
-          <NotesTab workspaceId={workspaceId} memberId={memberId} />
-        )}
-      </div>
+      </Tabs>
     </div>
   );
 }

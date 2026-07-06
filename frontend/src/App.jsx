@@ -40,6 +40,9 @@ const ProjectsOnboardingPage = lazy(
 const PeopleOnboardingPage = lazy(
   () => import("@/apps/people/pages/PeopleOnboardingPage"),
 );
+const EmployeeOnboardingPage = lazy(
+  () => import("@/apps/people/pages/EmployeeOnboardingPage"),
+);
 
 // ── Project pages ─────────────────────────────────────────────────────────────
 const BoardsPage = lazy(
@@ -167,6 +170,10 @@ export default function App() {
             <Route
               path="/w/:workspaceId/people/onboarding"
               element={<PeopleOnboardingPage />}
+            />
+            <Route
+              path="/w/:workspaceId/people/welcome"
+              element={<EmployeeOnboardingPage />}
             />
             <Route path="/" element={<WorkspaceRedirect />} />
           </Route>

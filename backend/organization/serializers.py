@@ -3,7 +3,16 @@ from rest_framework import serializers
 from accounts.serializers import MiniUserSerializer
 from workspaces.models import WorkspaceMember
 from .geo import parse_maps_url
-from .models import Department, DepartmentMember, JobTitle, OrgProfile, ReportingLine, Team, TeamMember
+from .models import (
+    Department,
+    DepartmentMember,
+    EmergencyContact,
+    JobTitle,
+    OrgProfile,
+    ReportingLine,
+    Team,
+    TeamMember,
+)
 
 
 class JobTitleSerializer(serializers.ModelSerializer):
@@ -248,6 +257,15 @@ class TeamMemberSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 
+class EmergencyContactSerializer(serializers.ModelSerializer):
+    id = serializers.UUIDField(read_only=True)
+
+    class Meta:
+        model = EmergencyContact
+        fields = ["id", "name", "relationship", "phone", "email", "order"]
+        read_only_fields = ["id", "order"]
+
+
 class OrgProfileSerializer(serializers.ModelSerializer):
     id = serializers.UUIDField(read_only=True)
     member = MiniMemberSerializer(read_only=True)
@@ -257,6 +275,10 @@ class OrgProfileSerializer(serializers.ModelSerializer):
     teams = serializers.SerializerMethodField()
     manager = serializers.SerializerMethodField()
     direct_reports_count = serializers.SerializerMethodField()
+    # Read-only here; writes go through _sync_emergency_contacts in views.py
+    # (the request body's `emergency_contacts` list is popped before this
+    # serializer runs, mirroring how manager_id/department_ids are handled).
+    emergency_contacts = EmergencyContactSerializer(many=True, read_only=True)
 
     class Meta:
         model = OrgProfile
@@ -265,7 +287,18 @@ class OrgProfileSerializer(serializers.ModelSerializer):
             "job_title", "job_title_id", "employment_type",
             "employee_id", "start_date", "location", "bio",
             "work_location_url", "work_latitude", "work_longitude",
-            "locked",
+            "locked", "onboarding_completed",
+            # Personal
+            "personal_email", "phone", "date_of_birth", "gender",
+            "marital_status", "nationality",
+            # Address
+            "address_line1", "address_line2", "city", "state_region",
+            "postal_code", "country",
+            # Emergency contacts (nested; written via _sync_emergency_contacts)
+            "emergency_contacts",
+            # Bank & government IDs (optional)
+            "bank_name", "bank_account_name", "bank_account_number",
+            "bank_iban", "national_id", "tax_id",
             "departments", "teams", "manager", "direct_reports_count",
             "updated_at",
         ]

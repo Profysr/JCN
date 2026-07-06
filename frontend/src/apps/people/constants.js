@@ -28,6 +28,32 @@ export function getEmploymentLabel(value) {
   return EMPLOYMENT_TYPES.find((t) => t.value === value)?.label ?? value;
 }
 
+// Gender options — matches backend OrgProfile.Gender choices.
+export const GENDERS = [
+  { value: "male", label: "Male" },
+  { value: "female", label: "Female" },
+  { value: "other", label: "Other" },
+  { value: "undisclosed", label: "Prefer not to say" },
+];
+
+// Marital status options — matches backend OrgProfile.MaritalStatus choices.
+export const MARITAL_STATUSES = [
+  { value: "single", label: "Single" },
+  { value: "married", label: "Married" },
+  { value: "divorced", label: "Divorced" },
+  { value: "widowed", label: "Widowed" },
+  { value: "other", label: "Other" },
+];
+
+// Label lookups for the choice fields above; fall back to the raw value.
+export function getGenderLabel(value) {
+  return GENDERS.find((g) => g.value === value)?.label ?? value;
+}
+
+export function getMaritalLabel(value) {
+  return MARITAL_STATUSES.find((m) => m.value === value)?.label ?? value;
+}
+
 // Formats an ISO date string to a localised medium date (e.g. "Jul 1, 2026").
 // Returns null for falsy input so callers can conditionally render.
 export function formatDate(dateStr) {

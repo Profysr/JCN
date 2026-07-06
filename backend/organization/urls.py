@@ -18,6 +18,7 @@ from .views import (
     OrgChartView,
     OrgChartReportsView,
     MyOrgProfileView,
+    MyOnboardingView,
 )
 
 _ws = "workspaces/<str:workspace_id>"
@@ -63,4 +64,5 @@ urlpatterns = [
 
     # Self-service profile
     path(f"{_ws}/org/me/profile/", MyOrgProfileView.as_view()),
+    path(f"{_ws}/org/me/onboarding/", MyOnboardingView.as_view()),
 ]
