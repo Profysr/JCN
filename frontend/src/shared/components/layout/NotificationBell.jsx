@@ -232,9 +232,6 @@ export default function NotificationBell() {
   const { data: rawVerbMeta } = useNotificationVerbMeta();
   const verbMeta = useMemo(() => buildVerbMeta(rawVerbMeta), [rawVerbMeta]);
 
-  // Apps the current user actually has access to in this workspace — tabs
-  // only ever show apps the caller could otherwise fetch notifications for,
-  // so a user never sees (or requests) a tab for a module they can't access.
   const { data: permissions } = usePermissions(workspaceId);
   const appTabs = useMemo(
     () =>
@@ -253,9 +250,7 @@ export default function NotificationBell() {
     limit,
     enabled: open && !isAppFilter,
   });
-  // App-scoped fetch — only one app's notifications, via the `app` query
-  // param (InboxItem.app). Selected on demand so a quiet app's items are
-  // never pushed out of the unscoped list's `limit` by a noisier app.
+
   const scoped = useInbox(workspaceId, {
     tab: "for_you",
     limit,
@@ -272,8 +267,7 @@ export default function NotificationBell() {
   const updateItem = useUpdateInboxItem(workspaceId);
   const bulkUpdate = useBulkUpdateInbox(workspaceId);
 
-  // Derive from the fresh items list so the panel header count always matches
-  // what's actually displayed — no extra fetch, items are already loaded on open.
+  // Derive from the fresh items list so the panel header count always matches what's actually displayed — no extra fetch, items are already loaded on open.
   const panelUnreadCount = useMemo(
     () => items.filter((i) => i.status === "unread").length,
     [items],

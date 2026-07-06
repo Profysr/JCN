@@ -8,6 +8,11 @@ class Workspace(models.Model):
     id = UUIDv7Field()
     name = models.CharField(max_length=255)
     logo = models.ImageField(upload_to="workspace_logos/", null=True, blank=True)
+    # ── Locale & operating defaults, captured at workspace creation ──────────
+    # All optional/defaulted so older workspaces and API-created ones stay valid.
+    country = models.CharField(max_length=2, blank=True)   # ISO 3166-1 alpha-2
+    timezone = models.CharField(max_length=64, blank=True)  # IANA tz, e.g. "Europe/London"
+    currency = models.CharField(max_length=3, blank=True)   # ISO 4217, e.g. "USD"
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,

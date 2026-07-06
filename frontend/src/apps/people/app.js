@@ -15,7 +15,7 @@ export const PEOPLE_APP = {
   label: "People & HR",
   shortLabel: "People",
   icon: Users2,
-  landing: "departments",
+  landing: "hr",
   colors: {
     bg: "bg-blue-500/15",
     text: "text-blue-500",

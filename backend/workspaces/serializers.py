@@ -24,6 +24,7 @@ class WorkspaceSerializer(serializers.ModelSerializer):
         model = Workspace
         fields = [
             "id", "name", "logo", "owner",
+            "country", "timezone", "currency",
             "member_count", "my_role", "created_at",
         ]
         read_only_fields = ["owner", "created_at"]

@@ -6,8 +6,21 @@ import {
 } from "@/shared/lib/navLinks";
 import { usePermissions } from "@/shared/hooks/usePermissions";
 import { usePermission } from "@/contexts/PermissionsContext";
+import { useOnboarding } from "@/shared/hooks/useOnboarding";
 import { ArrowUpRight, Sparkles } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
+
+// Per-app onboarding status, derived from the checklist.py completion data.
+function appSetup(onboarding, appKey) {
+  const ob = onboarding?.checklists?.[appKey];
+  if (!onboarding?.user_is_admin || !ob) return null;
+  const values = Object.values(ob.items || {});
+  const total = values.length;
+  if (!total) return null;
+  const done = values.filter(Boolean).length;
+  const complete = done === total;
+  return { done, total, complete, dismissed: !!ob.dismissed };
+}
 
 const _defByKey = Object.fromEntries(APP_DEFS.map((a) => [a.key, a]));
 
@@ -15,12 +28,24 @@ export default function AppLauncherPage() {
   const { workspaceId } = useParams();
   const navigate = useNavigate();
   const { data: registry, isLoading } = usePermissions(workspaceId);
+  const { data: onboarding } = useOnboarding(workspaceId);
   const {
     can,
     isOwner,
     hasAppAccess,
     isLoading: permsLoading,
   } = usePermission();
+
+  // Open an app; route a first-time admin into its guided onboarding until they
+  // skip (dismiss) or finish it.
+  const openApp = (app) => {
+    const setup = appSetup(onboarding, app.key);
+    if (setup && !setup.dismissed && !setup.complete) {
+      navigate(workspaceUrl(workspaceId, `${app.key}/onboarding`));
+    } else {
+      navigate(workspaceUrl(workspaceId, app.landing));
+    }
+  };
 
   // Combine backend app registry (name, description) with frontend APP_DEFS (icon, colors, landing)
   const apps = Object.entries(registry?.apps ?? {})
@@ -72,12 +97,12 @@ export default function AppLauncherPage() {
               ))
             : apps.map((app) => {
                 const Icon = app.icon;
+                const setup = appSetup(onboarding, app.key);
+                const showSetup = setup && !setup.complete;
                 return (
                   <button
                     key={app.key}
-                    onClick={() =>
-                      navigate(workspaceUrl(workspaceId, app.landing))
-                    }
+                    onClick={() => openApp(app)}
                     className="relative group text-left p-5 rounded-md border transition-all duration-150 cursor-pointer border-border/50 bg-card hover:shadow-md hover:-translate-y-0.5 hover:border-border"
                   >
                     <div
@@ -99,6 +124,23 @@ export default function AppLauncherPage() {
                       {app.description}
                     </p>
 
+                    {showSetup && (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(
+                            workspaceUrl(workspaceId, `${app.key}/onboarding`),
+                          );
+                        }}
+                        className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-primary/10 text-primary text-[11px] font-medium px-2 py-0.5 hover:bg-primary/15 transition-colors"
+                      >
+                        <Sparkles className="w-3 h-3" />
+                        Set up · {setup.done}/{setup.total}
+                      </span>
+                    )}
+
                     <ArrowUpRight className="absolute top-5 right-5 w-3.5 h-3.5 text-muted-foreground/0 group-hover:text-muted-foreground transition-colors" />
                   </button>
                 );
@@ -114,7 +156,7 @@ export default function AppLauncherPage() {
                   More on the way
                 </p>
                 <p className="text-xs text-muted-foreground/30 leading-relaxed">
-                  We're actively expanding the platform. Stay tuned.
+                  We&apos;re actively expanding the platform. Stay tuned.
                 </p>
               </div>
             </div>

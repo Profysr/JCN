@@ -18,13 +18,6 @@ export const PEOPLE_SHORTCUT_GROUPS = [
         description: "Go to Teams",
       },
       {
-        id: "nav:org-chart",
-        navKey: "org-chart",
-        keys: ["g", "then", "o"],
-        display: ["g", "o"],
-        description: "Go to Org Chart",
-      },
-      {
         id: "nav:people",
         navKey: "people",
         keys: ["g", "then", "p"],
@@ -43,7 +36,7 @@ export const PEOPLE_SHORTCUT_GROUPS = [
         navKey: "hr-dashboard",
         keys: ["g", "then", "h"],
         display: ["g", "h"],
-        description: "Go to Dashboard",
+        description: "Go to Home",
       },
       {
         id: "nav:hr-leave",

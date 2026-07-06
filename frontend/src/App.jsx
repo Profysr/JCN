@@ -31,8 +31,15 @@ const AcceptInvitePage = lazy(() => import("@/pages/invite/AcceptInvitePage"));
 const PublicFormPage = lazy(() => import("@/pages/forms/PublicFormPage"));
 
 // ── Onboarding / setup ────────────────────────────────────────────────────────
-const OnboardingPage = lazy(() => import("@/pages/onboarding/OnboardingPage"));
-const SetupWizard = lazy(() => import("@/pages/workspace/SetupWizard"));
+const CreateWorkspacePage = lazy(
+  () => import("@/pages/onboarding/CreateWorkspacePage"),
+);
+const ProjectsOnboardingPage = lazy(
+  () => import("@/apps/project-management/pages/ProjectsOnboardingPage"),
+);
+const PeopleOnboardingPage = lazy(
+  () => import("@/apps/people/pages/PeopleOnboardingPage"),
+);
 
 // ── Project pages ─────────────────────────────────────────────────────────────
 const BoardsPage = lazy(
@@ -51,9 +58,6 @@ const DepartmentsPage = lazy(
   () => import("@/apps/people/pages/DepartmentsPage"),
 );
 const TeamsPage = lazy(() => import("@/apps/people/pages/TeamsPage"));
-const OrgChartPage = lazy(
-  () => import("@/apps/people/pages/OrgChartPage"),
-);
 const PeopleDirectoryPage = lazy(
   () => import("@/apps/people/pages/PeopleDirectoryPage"),
 );
@@ -155,8 +159,15 @@ export default function App() {
         {/* Protected */}
         <Route element={<ProtectedRoute />}>
           <Route element={<FullPageSuspense />}>
-            <Route path="/onboarding" element={<OnboardingPage />} />
-            <Route path="/w/:workspaceId/setup" element={<SetupWizard />} />
+            <Route path="/onboarding" element={<CreateWorkspacePage />} />
+            <Route
+              path="/w/:workspaceId/projects/onboarding"
+              element={<ProjectsOnboardingPage />}
+            />
+            <Route
+              path="/w/:workspaceId/people/onboarding"
+              element={<PeopleOnboardingPage />}
+            />
             <Route path="/" element={<WorkspaceRedirect />} />
           </Route>
 
@@ -187,7 +198,6 @@ export default function App() {
                 <Route element={<ProfileSetupGate />}>
                   <Route path="departments" element={<DepartmentsPage />} />
                   <Route path="teams" element={<TeamsPage />} />
-                  <Route path="org-chart" element={<OrgChartPage />} />
                   <Route path="people" element={<PeopleDirectoryPage />} />
                   <Route path="org/job-titles" element={<JobTitlesPage />} />
                   <Route path="hr" element={<HRDashboardPage />} />

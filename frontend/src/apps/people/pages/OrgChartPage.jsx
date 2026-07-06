@@ -34,6 +34,11 @@ import {
   DragOverlay,
 } from "@/apps/people/components/OrgChartNodes";
 
+// The org chart is a read-only *view* — you explore it (pan / zoom / expand) but
+// you don't restructure the company from it. Reporting lines are changed on an
+// employee's profile instead. Flip this to true to re-enable drag-to-reparent.
+const INTERACTIVE = false;
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function OrgChartPage() {
   const { workspaceId } = useParams();
@@ -46,7 +51,7 @@ export default function OrgChartPage() {
   const deleteReportingLine = useDeleteReportingLine(workspaceId);
   const roots = data?.nodes ?? [];
 
-  const isAdmin = isOwner || can("org.manage");
+  const isAdmin = INTERACTIVE && (isOwner || can("org.manage"));
 
   // View mode: "hierarchy" | "department"
   const [viewMode, setViewMode] = useState("hierarchy");

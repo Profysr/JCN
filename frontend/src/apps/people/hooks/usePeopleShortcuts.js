@@ -4,8 +4,8 @@ import { useShortcutBindings } from "@/shared/hooks/useShortcutBindings";
 import { isTypingTarget, matchesBinding } from "@/shared/lib/shortcutMatch";
 
 /**
- * "g e/t/o/p/j/h/l/k" — go to Departments/Teams/Org Chart/People/Job Titles/
- * HR Overview/Leave/Attendance. Mounted once in ProfileSetupGate, which wraps
+ * "g e/t/p/j/h/l/k" — go to Departments/Teams/Employee Hub/Job Titles/
+ * Home/Leave/Attendance. Mounted once in ProfileSetupGate, which wraps
  * every People/HR route — mirrors useProjectsShortcuts' "g"-chord pattern,
  * scoped so these never fire on Projects/Workspace pages.
  */
@@ -22,7 +22,6 @@ export function usePeopleNavShortcuts() {
     const CHORD_MAP = {
       e: () => navigate(ws("departments")),
       t: () => navigate(ws("teams")),
-      o: () => navigate(ws("org-chart")),
       p: () => navigate(ws("people")),
       j: () => navigate(ws("org/job-titles")),
       h: () => navigate(ws("hr")),

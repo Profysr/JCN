@@ -260,10 +260,11 @@ function EmployeesTab({ workspaceId, nodes, isLoading }) {
           <div className="divide-y divide-border/40">
             {filtered.map((node) => (
               <div key={node.id} className="relative grid grid-cols-[2fr_1fr_1fr_1fr] gap-4 px-4 py-3 items-center hover:bg-accent/30 transition-colors group/row">
-                <Link
-                  to={`/w/${workspaceId}/people/${node.id}`}
+                <button
+                  type="button"
+                  onClick={() => setQuickViewNode(node)}
                   className="absolute inset-0"
-                  aria-label={`View profile of ${node.name || node.email}`}
+                  aria-label={`Quick view of ${node.name || node.email}`}
                 />
                 <div className="relative flex items-center gap-3 min-w-0">
                   <Avatar user={node} name={node.name || node.email} size="sm" className="flex-shrink-0" />
@@ -332,7 +333,7 @@ export default function EmployeeHubPage() {
             Employees
           </TabsUnderlineTrigger>
           <TabsUnderlineTrigger value="chart" icon={Network}>
-            Organisational chart
+            Organisational Chart
           </TabsUnderlineTrigger>
         </TabsUnderlineList>
 

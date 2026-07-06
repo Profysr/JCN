@@ -1,10 +1,9 @@
 import {
   Building2,
   Users2,
-  Network,
   Users,
   Briefcase,
-  BarChart3,
+  Home,
   CalendarDays,
   Timer,
 } from "lucide-react";
@@ -25,13 +24,6 @@ export const NAV_ITEMS = [
     path: "teams",
   },
   {
-    key: "org-chart",
-    icon: Network,
-    label: "Org Chart",
-    desc: "Visual company org chart",
-    path: "org-chart",
-  },
-  {
     key: "people",
     icon: Users,
     label: "Employee Hub",
@@ -47,9 +39,9 @@ export const NAV_ITEMS = [
   },
   {
     key: "hr-dashboard",
-    icon: BarChart3,
-    label: "Dashboard",
-    desc: "Your overview, leave & attendance",
+    icon: Home,
+    label: "Home",
+    desc: "Your overview & what's happening",
     path: "hr",
     end: true,
   },
@@ -70,7 +62,8 @@ export const NAV_ITEMS = [
 ];
 
 export const NAV_GROUPS = [
-  { label: "HR", items: ["hr-dashboard", "hr-leave", "hr-attendance"] },
+  { label: "Home", items: ["hr-dashboard"] },
+  { label: "HR", items: ["hr-leave", "hr-attendance"] },
   {
     label: "Organization",
     items: ["departments", "teams", "people", "job-titles"],
