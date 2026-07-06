@@ -29,6 +29,7 @@ from .serializers import (
     WebhookDeliverySerializer,
     WebhookSerializer,
     WorkspaceAPIKeySerializer,
+    WorkspaceBulkInviteSerializer,
     WorkspaceInviteSerializer,
     WorkspaceMemberSerializer,
     WorkspaceSerializer,
@@ -206,6 +207,39 @@ class InviteMemberView(APIView):
         invite = serializer.save()
         # send_invite_email.delay(str(invite.id))
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class BulkInviteMemberView(APIView):
+    """Invite many members in a single request.
+
+    Dedupes, skips already-members / already-invited emails, and creates the
+    survivors with one `bulk_create` — a fixed handful of queries regardless of
+    how many emails are sent, instead of one round trip per invite.
+    """
+
+    permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
+
+    def post(self, request, workspace_id):
+        from .tasks import send_invite_email
+
+        workspace = _get_workspace(workspace_id, request.user)
+        _require_admin(workspace, request.user)
+        serializer = WorkspaceBulkInviteSerializer(
+            data=request.data, context={"request": request, "workspace": workspace}
+        )
+        serializer.is_valid(raise_exception=True)
+        result = serializer.save()
+        # for invite in result["invites"]:
+        #     send_invite_email.delay(str(invite.id))
+        return Response(
+            {
+                "invites": WorkspaceInviteSerializer(
+                    result["invites"], many=True
+                ).data,
+                "skipped": result["skipped"],
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class WorkspaceInviteListView(APIView):

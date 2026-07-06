@@ -13,7 +13,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { useCreateWorkspace, useUpdateWorkspace } from "@/shared/hooks/useWorkspace";
-import { useInviteMember } from "@/shared/hooks/useMembers";
+import { useBulkInviteMembers } from "@/shared/hooks/useMembers";
 import { useRoles } from "@/shared/hooks/useRoles";
 import { useUpdateOnboarding } from "@/shared/hooks/useOnboarding";
 import { useToast } from "@/shared/components/ui/toast";
@@ -404,7 +404,7 @@ export default function CreateWorkspacePage() {
 
   const createWorkspace = useCreateWorkspace();
   const updateWorkspace = useUpdateWorkspace(workspace?.id);
-  const inviteMutation = useInviteMember(workspace?.id);
+  const inviteMutation = useBulkInviteMembers(workspace?.id);
   const updateOnboarding = useUpdateOnboarding(workspace?.id);
   const { data: roles = [] } = useRoles(workspace?.id);
 
@@ -443,24 +443,18 @@ export default function CreateWorkspacePage() {
     setIsSending(true);
     try {
       if (!skip && emails.length > 0) {
-        const results = await Promise.allSettled(
-          emails.map((email) => inviteMutation.mutateAsync({ email, role: inviteRole })),
-        );
-        const failed = results.filter((r) => r.status === "rejected");
-        const succeeded = results.length - failed.length;
-        if (failed.length === results.length) {
+        try {
+          const { invites } = await inviteMutation.mutateAsync({
+            emails,
+            role: inviteRole,
+          });
+          setSentCount(invites.length);
+        } catch (err) {
           toast.error(
             "Invites could not be sent",
-            failed[0]?.reason?.message ?? "Something went wrong. Please try again.",
+            err?.message ?? "Something went wrong. Please try again.",
           );
           return;
-        }
-        setSentCount(succeeded);
-        if (failed.length > 0) {
-          toast.error(
-            `${failed.length} invite${failed.length !== 1 ? "s" : ""} failed`,
-            `${succeeded} sent, ${failed.length} failed.`,
-          );
         }
       }
       await updateOnboarding.mutateAsync({ wizard_completed: true }).catch(() => {});

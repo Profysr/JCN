@@ -5,6 +5,7 @@ from .views import (
     WorkspaceMemberListView,
     WorkspaceMemberDetailView,
     InviteMemberView,
+    BulkInviteMemberView,
     WorkspaceInviteListView,
     WorkspaceInviteCancelView,
     InviteDetailView,
@@ -52,6 +53,7 @@ urlpatterns = [
 
     # Invites — token stays <uuid:> because it's an opaque UUID4 secret, not a prefixed ID
     path(f"{_ws}/invites/", InviteMemberView.as_view()),
+    path(f"{_ws}/invites/bulk/", BulkInviteMemberView.as_view()),
     path(f"{_ws}/invites/pending/", WorkspaceInviteListView.as_view()),
     path(f"{_ws}/invites/<uuid:token>/", WorkspaceInviteCancelView.as_view()),
 

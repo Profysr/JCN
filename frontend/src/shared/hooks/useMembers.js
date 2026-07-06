@@ -15,15 +15,34 @@ export const useMembers = (workspaceId) =>
     staleTime: Infinity, // members only change via mutations — each one already invalidates this key
   });
 
+const invitesKey = (workspaceId) => ["workspace-invites", workspaceId];
+
 export const useInviteMember = (workspaceId) =>
   useInvalidatingMutation(
     (data) =>
       api
         .post(`/api/workspaces/${workspaceId}/invites/`, data)
         .then((r) => r.data),
-    membersKey(workspaceId),
-    ["workspace-invites", workspaceId],
+    invitesKey(workspaceId),
   );
+
+// Bulk invite: one request for the whole list, and we push the created invites straight into the pending-invites cache with setQueryData — no members refetch (inviting doesn't touch the member list) and no invites refetch.
+export const useBulkInviteMembers = (workspaceId) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ emails, role }) =>
+      api
+        .post(`/api/workspaces/${workspaceId}/invites/bulk/`, { emails, role })
+        .then((r) => r.data),
+    onSuccess: ({ invites }) => {
+      if (!invites?.length) return;
+      qc.setQueryData(invitesKey(workspaceId), (prev = []) => [
+        ...invites,
+        ...prev,
+      ]);
+    },
+  });
+};
 
 export const useUpdateMemberRole = (workspaceId) =>
   useInvalidatingMutation(
@@ -70,7 +89,7 @@ export const useInviteDetails = (token) =>
 
 export const usePendingInvites = (workspaceId, { refetchInterval } = {}) =>
   useQuery({
-    queryKey: ["workspace-invites", workspaceId],
+    queryKey: invitesKey(workspaceId),
     queryFn: () =>
       api
         .get(`/api/workspaces/${workspaceId}/invites/pending/`)
@@ -83,5 +102,5 @@ export const usePendingInvites = (workspaceId, { refetchInterval } = {}) =>
 export const useCancelInvite = (workspaceId) =>
   useInvalidatingMutation(
     (token) => api.delete(`/api/workspaces/${workspaceId}/invites/${token}/`),
-    ["workspace-invites", workspaceId],
+    invitesKey(workspaceId),
   );

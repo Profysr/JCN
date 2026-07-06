@@ -2,9 +2,8 @@ import { useState } from "react";
 import { X, Send, CheckCircle2, UserPlus } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { cn } from "@/shared/lib/utils";
-import { useInviteMember } from "@/shared/hooks/useMembers";
+import { useBulkInviteMembers } from "@/shared/hooks/useMembers";
 import { useRoles } from "@/shared/hooks/useRoles";
-import { useQueryClient } from "@tanstack/react-query";
 import Modal from "@/shared/components/ui/Modal";
 
 function EmailChipInput({ emails, onChange }) {
@@ -81,8 +80,7 @@ export default function InviteModal({
   const [role, setRole] = useState("Member");
   const [error, setError] = useState("");
   const [successCount, setSuccessCount] = useState(0);
-  const qc = useQueryClient();
-  const inviteMember = useInviteMember(workspaceId);
+  const inviteMembers = useBulkInviteMembers(workspaceId);
   const { data: allRoles = [], isLoading: rolesLoading } = useRoles(workspaceId);
   // Only system roles are valid invite targets — custom roles can be assigned after joining
   const roles = allRoles.filter((r) => r.is_system);
@@ -91,12 +89,9 @@ export default function InviteModal({
     if (!emails.length) return;
     setError("");
     try {
-      await Promise.all(
-        emails.map((email) => inviteMember.mutateAsync({ email, role })),
-      );
-      setSuccessCount(emails.length);
+      const { invites } = await inviteMembers.mutateAsync({ emails, role });
+      setSuccessCount(invites.length);
       setEmails([]);
-      qc.invalidateQueries({ queryKey: ["workspace-invites", workspaceId] });
       setTimeout(() => {
         setSuccessCount(0);
         onOpenChange(false);
@@ -205,12 +200,12 @@ export default function InviteModal({
               </Button>
               <Button
                 size="sm"
-                disabled={!emails.length || inviteMember.isPending}
+                disabled={!emails.length || inviteMembers.isPending}
                 onClick={handleSend}
                 className="gap-1.5"
               >
                 <Send className="w-3.5 h-3.5" />
-                {inviteMember.isPending
+                {inviteMembers.isPending
                   ? "Sending…"
                   : `Send ${emails.length || ""} invite${emails.length !== 1 ? "s" : ""}`}
               </Button>

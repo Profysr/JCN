@@ -110,6 +110,65 @@ class WorkspaceInviteSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 
+class WorkspaceBulkInviteSerializer(serializers.Serializer):
+    """Validate and create many invites in a single pass.
+
+    Dedupes the incoming list, skips emails that are already active members or
+    already have a pending invite, and creates the survivors with one
+    `bulk_create` — turning N invite requests (each with its own membership/
+    invite lookups) into a fixed handful of queries regardless of list size.
+    """
+
+    emails = serializers.ListField(
+        child=serializers.EmailField(), allow_empty=False, max_length=100
+    )
+    role = serializers.ChoiceField(
+        choices=WorkspaceInvite.INVITE_ROLE_CHOICES, default="Member"
+    )
+
+    def create(self, validated_data):
+        workspace = self.context["workspace"]
+        role = validated_data["role"]
+
+        # Dedupe (case-insensitive) while preserving order.
+        seen, emails = set(), []
+        for email in validated_data["emails"]:
+            key = email.lower()
+            if key not in seen:
+                seen.add(key)
+                emails.append(email)
+
+        # Two set lookups instead of one-per-email round trip.
+        existing_members = set(
+            WorkspaceMember.objects.filter(
+                workspace=workspace, user__email__in=emails, is_active=True
+            ).values_list("user__email", flat=True)
+        )
+        existing_invites = set(
+            workspace.invites.filter(email__in=emails).values_list(
+                "email", flat=True
+            )
+        )
+        skip = {e.lower() for e in existing_members | existing_invites}
+
+        to_create = [e for e in emails if e.lower() not in skip]
+        invites = WorkspaceInvite.objects.bulk_create(
+            [
+                WorkspaceInvite(
+                    workspace=workspace,
+                    email=email,
+                    role=role,
+                    invited_by=self.context["request"].user,
+                )
+                for email in to_create
+            ]
+        )
+        return {
+            "invites": invites,
+            "skipped": [e for e in emails if e.lower() in skip],
+        }
+
+
 # ── v3.7.0 ────────────────────────────────────────────────────────────────────
 class InboxItemSerializer(serializers.ModelSerializer):
 
