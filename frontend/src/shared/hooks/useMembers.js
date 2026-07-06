@@ -40,6 +40,8 @@ export const useBulkInviteMembers = (workspaceId) => {
         ...invites,
         ...prev,
       ]);
+      // Lets the getting-started checklist / guided tour detect completion.
+      qc.invalidateQueries({ queryKey: ["onboarding", workspaceId] });
     },
   });
 };

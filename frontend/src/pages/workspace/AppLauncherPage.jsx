@@ -7,6 +7,7 @@ import {
 import { usePermissions } from "@/shared/hooks/usePermissions";
 import { usePermission } from "@/contexts/PermissionsContext";
 import { useOnboarding } from "@/shared/hooks/useOnboarding";
+import { APP_PARAM } from "@/shared/onboarding/tour/tourSteps";
 import { ArrowUpRight, Sparkles } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 
@@ -19,7 +20,13 @@ function appSetup(onboarding, appKey) {
   if (!total) return null;
   const done = values.filter(Boolean).length;
   const complete = done === total;
-  return { done, total, complete, dismissed: !!ob.dismissed };
+  return {
+    done,
+    total,
+    complete,
+    dismissed: !!ob.dismissed,
+    welcomed: !!ob.welcomed,
+  };
 }
 
 const _defByKey = Object.fromEntries(APP_DEFS.map((a) => [a.key, a]));
@@ -36,15 +43,8 @@ export default function AppLauncherPage() {
     isLoading: permsLoading,
   } = usePermission();
 
-  // Open an app; route a first-time admin into its guided onboarding until they
-  // skip (dismiss) or finish it.
   const openApp = (app) => {
-    const setup = appSetup(onboarding, app.key);
-    if (setup && !setup.dismissed && !setup.complete) {
-      navigate(workspaceUrl(workspaceId, `${app.key}/onboarding`));
-    } else {
-      navigate(workspaceUrl(workspaceId, app.landing));
-    }
+    navigate(`${workspaceUrl(workspaceId, app.landing)}?${APP_PARAM}=${app.key}`);
   };
 
   // Combine backend app registry (name, description) with frontend APP_DEFS (icon, colors, landing)
@@ -130,9 +130,7 @@ export default function AppLauncherPage() {
                         tabIndex={0}
                         onClick={(e) => {
                           e.stopPropagation();
-                          navigate(
-                            workspaceUrl(workspaceId, `${app.key}/onboarding`),
-                          );
+                          openApp(app);
                         }}
                         className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-primary/10 text-primary text-[11px] font-medium px-2 py-0.5 hover:bg-primary/15 transition-colors"
                       >

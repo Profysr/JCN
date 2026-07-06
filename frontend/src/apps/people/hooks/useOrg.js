@@ -55,6 +55,8 @@ export const useCreateDepartment = (workspaceId) => {
       qc.setQueryData(deptsKey(workspaceId), (old) =>
         old ? [...old, created] : old,
       );
+      // Lets the getting-started checklist / guided tour detect completion.
+      qc.invalidateQueries({ queryKey: ["onboarding", workspaceId] });
     },
   });
 };
@@ -170,6 +172,8 @@ export const useCreateTeam = (workspaceId) => {
       qc.setQueryData(teamsKey(workspaceId), (old) =>
         old ? [...old, created] : old,
       );
+      // Lets the getting-started checklist / guided tour detect completion.
+      qc.invalidateQueries({ queryKey: ["onboarding", workspaceId] });
     },
   });
 };

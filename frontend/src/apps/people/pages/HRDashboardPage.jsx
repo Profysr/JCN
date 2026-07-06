@@ -89,7 +89,10 @@ export default function HRDashboardPage() {
   return (
     <div>
       {/* Page header */}
-      <div className="border-b border-border bg-card px-6 py-4 flex items-center gap-2">
+      <div
+        data-tour="hr_overview"
+        className="border-b border-border bg-card px-6 py-4 flex items-center gap-2"
+      >
         <LayoutDashboard className="w-5 h-5 text-muted-foreground" />
         <h1 className="text-lg font-semibold">Dashboard</h1>
       </div>

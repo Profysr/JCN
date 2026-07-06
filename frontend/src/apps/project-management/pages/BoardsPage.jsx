@@ -69,7 +69,10 @@ export default function BoardsPage() {
           </p>
         </div>
         {canCreateBoard && (
-          <Button onClick={() => setShowCreate(true)}>
+          <Button
+            data-tour="create_board"
+            onClick={() => setShowCreate(true)}
+          >
             <Plus className="w-4 h-4 mr-1.5" /> New Board
           </Button>
         )}

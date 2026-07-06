@@ -60,6 +60,8 @@ export const useCreateLeaveRequest = (workspaceId) =>
       api.post(`/api/workspaces/${workspaceId}/hr/leave-requests/`, data).then((r) => r.data),
     requestsKey(workspaceId),
     balancesKey(workspaceId),
+    // Lets the getting-started checklist / guided tour detect completion.
+    ["onboarding", workspaceId],
   );
 
 export const useReviewLeaveRequest = (workspaceId) =>

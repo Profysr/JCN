@@ -34,12 +34,6 @@ const PublicFormPage = lazy(() => import("@/pages/forms/PublicFormPage"));
 const CreateWorkspacePage = lazy(
   () => import("@/pages/onboarding/CreateWorkspacePage"),
 );
-const ProjectsOnboardingPage = lazy(
-  () => import("@/apps/project-management/pages/ProjectsOnboardingPage"),
-);
-const PeopleOnboardingPage = lazy(
-  () => import("@/apps/people/pages/PeopleOnboardingPage"),
-);
 const EmployeeOnboardingPage = lazy(
   () => import("@/apps/people/pages/EmployeeOnboardingPage"),
 );
@@ -163,14 +157,6 @@ export default function App() {
         <Route element={<ProtectedRoute />}>
           <Route element={<FullPageSuspense />}>
             <Route path="/onboarding" element={<CreateWorkspacePage />} />
-            <Route
-              path="/w/:workspaceId/projects/onboarding"
-              element={<ProjectsOnboardingPage />}
-            />
-            <Route
-              path="/w/:workspaceId/people/onboarding"
-              element={<PeopleOnboardingPage />}
-            />
             <Route
               path="/w/:workspaceId/people/welcome"
               element={<EmployeeOnboardingPage />}

@@ -527,7 +527,7 @@ export default function TeamsPage() {
           </p>
         </div>
         <ShortcutTooltip label="New Team" shortcut="n" side="bottom">
-          <Button onClick={openCreate}>
+          <Button data-tour="create_team" onClick={openCreate}>
             <Plus className="w-4 h-4 mr-1.5" /> New Team
           </Button>
         </ShortcutTooltip>

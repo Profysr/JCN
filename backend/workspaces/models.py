@@ -380,10 +380,32 @@ class OnboardingState(models.Model):
         Workspace, on_delete=models.CASCADE, related_name="onboarding"
     )
     wizard_completed = models.BooleanField(default=False)
-    team_type = models.CharField(max_length=50, blank=True)
-    module_dismissed_by_users = models.JSONField(default=dict, blank=True)
+    # Per-user, per-module UI flags in one field so new flags never need a
+    # column. Shape: {"<module_key>": {"<flag>": ["<user_id>", ...]}}
+    # Flags: dismissed (checklist closed), minimized (collapsed), welcomed
+    # (first-open welcome modal shown).
+    module_ui_state = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    UI_FLAGS = ("dismissed", "minimized", "welcomed")
+
+    def has_flag(self, module_key, flag, user_id):
+        module = (self.module_ui_state or {}).get(module_key) or {}
+        return str(user_id) in module.get(flag, [])
+
+    def set_flag(self, module_key, flag, user_id, value):
+        state = dict(self.module_ui_state or {})
+        module = dict(state.get(module_key) or {})
+        users = list(module.get(flag, []))
+        uid = str(user_id)
+        if value and uid not in users:
+            users.append(uid)
+        elif not value and uid in users:
+            users.remove(uid)
+        module[flag] = users
+        state[module_key] = module
+        self.module_ui_state = state
 
     def __str__(self):
         return f"Onboarding: {self.workspace.name}"

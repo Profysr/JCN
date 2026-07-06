@@ -89,6 +89,7 @@ function buildVerbMeta(rawVerbs) {
 function NotificationTrigger({ open, onClick, hasUnread }) {
   return (
     <button
+      data-tour="notification_bell"
       onClick={onClick}
       className={cn(
         "relative p-1.5 rounded-md transition-colors",

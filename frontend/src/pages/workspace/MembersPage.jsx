@@ -335,7 +335,11 @@ export default function MembersPage() {
             </p>
           </div>
           {isAdmin && (
-            <Button onClick={() => setInviteOpen(true)} className="gap-2">
+            <Button
+              data-tour="invite_teammate"
+              onClick={() => setInviteOpen(true)}
+              className="gap-2"
+            >
               <UserPlus className="w-4 h-4" />
               Invite members
             </Button>

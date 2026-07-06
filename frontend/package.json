@@ -55,6 +55,7 @@
     "countries-list": "^3.3.0",
     "country-flag-icons": "^1.6.20",
     "date-fns": "^4.4.0",
+    "driver.js": "^1.6.0",
     "framer-motion": "^12.42.0",
     "lucide-react": "^0.408.0",
     "react": "^18.3.1",

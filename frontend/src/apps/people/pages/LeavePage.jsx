@@ -1455,6 +1455,7 @@ function PoliciesTab({ workspaceId }) {
           </p>
         </div>
         <Button
+          data-tour="create_leave_policy"
           size="sm"
           onClick={() => {
             setEditing(null);
@@ -1628,7 +1629,11 @@ export default function LeavePage() {
             Manage time off requests and balances
           </p>
         </div>
-        <Button size="sm" onClick={() => setRequestOpen(true)}>
+        <Button
+          data-tour="submit_leave_request"
+          size="sm"
+          onClick={() => setRequestOpen(true)}
+        >
           <Plus className="w-3.5 h-3.5 mr-1" />
           Request leave
         </Button>
@@ -1639,6 +1644,7 @@ export default function LeavePage() {
         {visibleTabs.map(({ key, label }) => (
           <button
             key={key}
+            data-tour={key === "policies" ? "leave_policies_tab" : undefined}
             onClick={() => setTab(key)}
             className={cn(
               "px-3 py-1.5 text-sm rounded-t-md border-b-2 -mb-px transition-colors",

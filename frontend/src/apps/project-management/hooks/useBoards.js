@@ -32,6 +32,8 @@ export const useCreateBoard = (workspaceId) =>
         .then((r) => r.data),
     ["boards", workspaceId],
     ["portfolio", workspaceId],
+    // Lets the getting-started checklist / guided tour detect completion.
+    ["onboarding", workspaceId],
   );
 
 export const useUpdateBoard = (workspaceId, boardId) =>

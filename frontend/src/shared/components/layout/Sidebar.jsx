@@ -69,7 +69,10 @@ export default function Sidebar({
     >
       {collapsed ? (
         /* ── Collapsed header — logo navigates home, hover reveals expand button ── */
-        <div className="relative group border-b border-border/40 py-3 flex items-center justify-center">
+        <div
+          data-tour="sidebar_toggle"
+          className="relative group border-b border-border/40 py-3 flex items-center justify-center"
+        >
           <button
             onClick={() => navigate(workspaceUrl(workspaceId, "apps"))}
             title={workspace?.name}
@@ -139,7 +142,7 @@ export default function Sidebar({
             )}
             {navGroups.flatMap((group) =>
               group.items.map(({ to, icon: Icon, label, key, end }) => (
-                <NavLink key={to} to={to} end={end}>
+                <NavLink key={to} to={to} end={end} data-tour={`nav_${key}`}>
                   {({ isActive }) => (
                     <ShortcutTooltip label={label} shortcut={NAV_SHORTCUTS[key]} side="right" delayDuration={100}>
                       <span
@@ -187,6 +190,7 @@ export default function Sidebar({
                       key={to}
                       to={to}
                       end={end}
+                      data-tour={`nav_${key}`}
                       className={({ isActive }) =>
                         cn(
                           "group/nav flex items-center gap-3 rounded px-3 py-2 text-sm transition-colors active:scale-[0.98]",

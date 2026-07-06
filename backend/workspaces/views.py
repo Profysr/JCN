@@ -499,23 +499,29 @@ class InboxBulkUpdateView(APIView):
 class OnboardingStateView(APIView):
     permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
 
+    _FLAG_ACTIONS = {
+        "module_dismiss": ("dismissed", True),
+        "module_minimize": ("minimized", True),
+        "module_unminimize": ("minimized", False),
+        "module_welcome": ("welcomed", True),
+    }
+
     def _build_checklists(self, state, workspace, user_id):
         from workspaces.checklist import CHECKLIST_REGISTRY
 
-        dismissed_map = state.module_dismissed_by_users or {}
         result = {}
         for module_key, compute_fn in CHECKLIST_REGISTRY.items():
             result[module_key] = {
-                "dismissed": user_id in dismissed_map.get(module_key, []),
-                "items": compute_fn(workspace),
+                flag: state.has_flag(module_key, flag, user_id)
+                for flag in OnboardingState.UI_FLAGS
             }
+            result[module_key]["items"] = compute_fn(workspace)
         return result
 
     def _build_response(self, state, workspace, request):
         user_id = str(request.user.id)
         return {
             "wizard_completed": state.wizard_completed,
-            "team_type": state.team_type,
             "user_is_admin": workspace.owner == request.user,
             "checklists": self._build_checklists(state, workspace, user_id),
         }
@@ -529,19 +535,13 @@ class OnboardingStateView(APIView):
         workspace = _get_workspace(workspace_id, request.user)
         state, _ = OnboardingState.objects.get_or_create(workspace=workspace)
 
-        for field in ("wizard_completed", "team_type"):
-            if field in request.data:
-                setattr(state, field, request.data[field])
+        if "wizard_completed" in request.data:
+            state.wizard_completed = request.data["wizard_completed"]
 
-        module_key = request.data.get("module_dismiss")
-        if module_key:
-            dismissed_map = dict(state.module_dismissed_by_users or {})
-            module_list = list(dismissed_map.get(module_key, []))
-            uid = str(request.user.id)
-            if uid not in module_list:
-                module_list.append(uid)
-            dismissed_map[module_key] = module_list
-            state.module_dismissed_by_users = dismissed_map
+        for action, (flag, value) in self._FLAG_ACTIONS.items():
+            module_key = request.data.get(action)
+            if module_key:
+                state.set_flag(module_key, flag, request.user.id, value)
 
         state.save()
         return Response(self._build_response(state, workspace, request))

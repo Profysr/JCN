@@ -390,6 +390,7 @@ export default function UserPanel({
           delayDuration={200}
         >
           <button
+            data-tour="shortcuts_prompt"
             onClick={() => setOpen((v) => !v)}
             className="relative"
             // title={name}
@@ -419,6 +420,7 @@ export default function UserPanel({
     >
       <div className="flex items-center gap-1 px-1.5 py-1.5 rounded-lg hover:bg-accent transition-colors group">
         <button
+          data-tour="shortcuts_prompt"
           onClick={() => setOpen((v) => !v)}
           className="flex-1 flex items-center gap-2.5 min-w-0 text-left"
         >

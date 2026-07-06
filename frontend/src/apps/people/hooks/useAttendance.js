@@ -36,6 +36,8 @@ export const useClockIn = (workspaceId) => {
       qc.invalidateQueries({ queryKey: ["hr-attendance-my", workspaceId] });
       qc.invalidateQueries({ queryKey: ["hr-attendance-list", workspaceId] });
       qc.invalidateQueries({ queryKey: ["hr-attendance-summary", workspaceId] });
+      // Lets the getting-started checklist / guided tour detect completion.
+      qc.invalidateQueries({ queryKey: ["onboarding", workspaceId] });
     },
   });
 };

@@ -853,7 +853,10 @@ export default function AttendancePage() {
             <div className="rounded-xl border bg-card p-6">
               <div className="flex flex-col sm:flex-row items-center gap-6">
                 {/* Big button */}
-                <div className="flex flex-col items-center gap-3 sm:w-48 shrink-0">
+                <div
+                  data-tour="record_attendance"
+                  className="flex flex-col items-center gap-3 sm:w-48 shrink-0"
+                >
                   {!isClockedIn ? (
                     <Button
                       size="lg"

@@ -7,6 +7,10 @@ import { PermissionsProvider } from "@/contexts/PermissionsContext";
 import { useWorkspaceSocket } from "@/shared/hooks/useWorkspaceSocket";
 import { useWorkspaceShortcuts } from "@/shared/hooks/useWorkspaceShortcuts";
 import Sidebar from "@/shared/components/layout/Sidebar";
+import { TourProvider } from "@/shared/onboarding/tour/TourProvider";
+const WelcomeModal = lazy(
+  () => import("@/shared/onboarding/tour/WelcomeModal"),
+);
 const ShortcutOverlay = lazy(
   () => import("@/shared/components/ShortcutOverlay"),
 );
@@ -75,6 +79,7 @@ export default function AppLayout() {
 
   return (
     <PermissionsProvider workspaceId={workspaceId}>
+      <TourProvider>
       <div className="flex h-screen overflow-hidden bg-background">
         <Sidebar
           workspace={workspace}
@@ -111,7 +116,12 @@ export default function AppLayout() {
             />
           )}
         </Suspense>
+
+        <Suspense fallback={null}>
+          <WelcomeModal />
+        </Suspense>
       </div>
+      </TourProvider>
     </PermissionsProvider>
   );
 }

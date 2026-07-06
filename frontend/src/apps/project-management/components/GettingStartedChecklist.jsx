@@ -16,11 +16,11 @@ const ITEMS = [
     cta: "Go to boards",
   },
   {
-    key: "invite_teammate",
-    label: "Invite a teammate",
-    desc: "Collaboration is better together",
-    action: (navigate, ws) => navigate(`/w/${ws}/members`),
-    cta: "Invite members",
+    key: "assign_task",
+    label: "Assign a task",
+    desc: "Assigned tasks show up in that person's My Work",
+    action: (navigate, ws) => navigate(`/w/${ws}/boards`),
+    cta: "Go to boards",
   },
 ];
 

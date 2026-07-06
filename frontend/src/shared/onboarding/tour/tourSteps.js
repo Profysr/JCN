@@ -1,0 +1,186 @@
+
+export const TOUR_REGISTRY = {
+  projects: {
+    appLabel: "Project Management",
+    landingPath: "boards",
+    welcome: {
+      title: "Welcome to Project Management 👋",
+      body: "A 1-minute walkthrough — boards, tasks, notifications, and the shortcuts that make it all fast.",
+    },
+    steps: [
+      {
+        key: "create_board",
+        route: (ws) => `/w/${ws}/boards`,
+        anchor: '[data-tour="create_board"]',
+        title: "Create your first board",
+        body: "Boards organise your work into projects. This is where you'd create one.",
+      },
+      {
+        // Opens whichever board exists (ctx.boardId) — skipped if none yet.
+        key: "add_task",
+        requiresBoard: true,
+        route: (ws, ctx) => `/w/${ws}/boards/${ctx?.boardId}`,
+        anchor: '[data-tour="add_task"]',
+        title: "Add a task",
+        body: "Break work into trackable pieces from inside any board.",
+      },
+      {
+        key: "board_members",
+        requiresBoard: true,
+        route: (ws, ctx) => `/w/${ws}/boards/${ctx?.boardId}`,
+        anchor: '[data-tour="board_members"]',
+        title: "Board members & access",
+        body: "Add people to a board, or make it private so only invited members can see it.",
+      },
+      {
+        key: "board_settings",
+        requiresBoard: true,
+        route: (ws, ctx) => `/w/${ws}/boards/${ctx?.boardId}`,
+        anchor: '[data-tour="board_settings"]',
+        title: "Board settings",
+        body: "Rename the board, change its type, or manage its columns from here.",
+      },
+      {
+        key: "my_work",
+        route: (ws) => `/w/${ws}/boards`,
+        anchor: '[data-tour="nav_my-work"]',
+        title: "Track what's yours",
+        body: "My Work rolls up everything assigned to you across every board in this app — your personal to-do list.",
+      },
+      {
+        key: "sidebar_toggle_prompt",
+        route: (ws) => `/w/${ws}/boards`,
+        anchor: '[data-tour="sidebar_toggle"]',
+        // skipIfPresent: '[data-tour="notification_bell"]',
+        watchFor: '[data-tour="notification_bell"]',
+        title: "Expand the sidebar",
+        body: "Try it — press Ctrl+. (⌘+. on Mac) to expand the sidebar. That's where your notifications live.",
+      },
+      {
+        key: "notifications",
+        route: (ws) => `/w/${ws}/boards`,
+        anchor: '[data-tour="notification_bell"]',
+        title: "Stay in the loop",
+        body: "Mentions, assignments, approvals — they all land here.",
+      },
+      {
+        key: "shortcuts_prompt",
+        route: (ws) => `/w/${ws}/boards`,
+        anchor: '[data-tour="shortcuts_prompt"]',
+        watchFor: '[data-tour="shortcuts_overlay"]',
+        title: "Keyboard shortcuts",
+        body: "This app is fully keyboard-driven. Try it — press ? now to see the full list.",
+      },
+      {
+        key: "shortcuts_overlay",
+        route: (ws) => `/w/${ws}/boards`,
+        anchor: '[data-tour="shortcuts_overlay"]',
+        title: "Always at your fingertips",
+        body: "Press Esc to close this anytime, and ? to bring it back.",
+      },
+    ],
+  },
+
+  people: {
+    appLabel: "People & HR",
+    landingPath: "hr",
+    welcome: {
+      title: "Welcome to People & HR 👋",
+      body: "A 1-minute walkthrough — org structure, leave, attendance, and the shortcuts that make it all fast.",
+    },
+    // Note: `set_reporting_line` is shown in the checklist but omitted here — it's changed from an employee's profile (no single, always-present control to spotlight; see MemberDetailPage's read-only "Reports to").
+    steps: [
+      {
+        key: "create_department",
+        route: (ws) => `/w/${ws}/departments`,
+        anchor: '[data-tour="create_department"]',
+        title: "Create a department",
+        body: "Departments are the top level of your org structure. Create one to continue.",
+      },
+      {
+        key: "create_team",
+        route: (ws) => `/w/${ws}/teams`,
+        anchor: '[data-tour="create_team"]',
+        title: "Create a team",
+        body: "Teams group people within departments. Create your first team to continue.",
+      },
+      {
+        key: "org_directory",
+        route: (ws) => `/w/${ws}/people`,
+        anchor: '[data-tour="nav_people"]',
+        title: "Employee Hub",
+        body: "Browse your org chart and team directory, and open anyone's profile from here.",
+      },
+      {
+        key: "submit_leave_request",
+        route: (ws) => `/w/${ws}/hr/leave`,
+        anchor: '[data-tour="submit_leave_request"]',
+        title: "Request leave",
+        body: "This is how anyone books time off. Submit a request to see the flow.",
+      },
+      {
+        key: "leave_policies_tab",
+        route: (ws) => `/w/${ws}/hr/leave`,
+        anchor: '[data-tour="leave_policies_tab"]',
+        watchFor: '[data-tour="create_leave_policy"]',
+        title: "Leave policies",
+        body: "Click the Policies tab to define how much annual, sick, and other leave your team gets.",
+      },
+      {
+        key: "create_leave_policy",
+        route: (ws) => `/w/${ws}/hr/leave`,
+        anchor: '[data-tour="create_leave_policy"]',
+        title: "Create a policy",
+        body: "Set accrual rules and carry-over here, then assign the policy to employees.",
+      },
+      {
+        key: "record_attendance",
+        route: (ws) => `/w/${ws}/hr/attendance`,
+        anchor: '[data-tour="record_attendance"]',
+        title: "Record attendance",
+        body: "Clock in to log attendance for the day.",
+      },
+      {
+        key: "hr_overview",
+        route: (ws) => `/w/${ws}/hr`,
+        anchor: '[data-tour="hr_overview"]',
+        title: "Your overview",
+        body: "Home rolls up your own leave balance, clock-in status, and team activity in one place.",
+      },
+      {
+        key: "sidebar_toggle_prompt",
+        route: (ws) => `/w/${ws}/hr`,
+        anchor: '[data-tour="sidebar_toggle"]',
+        // Bell only mounts once the sidebar is expanded — nothing to do here if it already is.
+        // skipIfPresent: '[data-tour="notification_bell"]',
+        watchFor: '[data-tour="notification_bell"]',
+        title: "Expand the sidebar",
+        body: "Try it — press Ctrl+. (⌘+. on Mac) to expand the sidebar. That's where your notifications live.",
+      },
+      {
+        key: "notifications",
+        route: (ws) => `/w/${ws}/hr`,
+        anchor: '[data-tour="notification_bell"]',
+        title: "Stay in the loop",
+        body: "Approvals, mentions, leave updates — they all land here.",
+      },
+      {
+        key: "shortcuts_prompt",
+        route: (ws) => `/w/${ws}/hr`,
+        anchor: '[data-tour="shortcuts_prompt"]',
+        watchFor: '[data-tour="shortcuts_overlay"]',
+        title: "Keyboard shortcuts",
+        body: "This app is fully keyboard-driven. Try it — press ? now to see the full list.",
+      },
+      {
+        key: "shortcuts_overlay",
+        route: (ws) => `/w/${ws}/hr`,
+        anchor: '[data-tour="shortcuts_overlay"]',
+        title: "Always at your fingertips",
+        body: "Press Esc to close this anytime, and ? to bring it back.",
+      },
+    ],
+  },
+};
+
+export const APP_PARAM = "app";

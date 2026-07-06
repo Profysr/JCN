@@ -129,6 +129,8 @@ export const useCreateTask = (workspaceId, boardId) => {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tasks", workspaceId, boardId] });
       qc.invalidateQueries({ queryKey: ["sprint", workspaceId, boardId] });
+      // Lets the getting-started checklist / guided tour detect completion.
+      qc.invalidateQueries({ queryKey: ["onboarding", workspaceId] });
     },
     onError: () => toast({ title: "Failed to create task", type: "error" }),
   });

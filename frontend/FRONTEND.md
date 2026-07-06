@@ -1145,9 +1145,8 @@ Key factory filters out falsy `timePeriod`. All mutations (objectives, key resul
   "team_type": "engineering",
   "user_is_admin": true,
   "checklists": {
-    "projects": { "dismissed": false, "items": { "create_board": true, "add_task": false, "invite_teammate": true } },
-    "org":      { "dismissed": false, "items": { "create_department": false, "create_team": false, "set_reporting_line": false } },
-    "hr":       { "dismissed": false, "items": { "create_leave_policy": false, "submit_leave_request": false, "record_attendance": false } }
+    "projects": { "dismissed": false, "items": { "create_board": true, "add_task": false, "assign_task": false } },
+    "people":   { "dismissed": false, "items": { "create_department": false, "create_team": false, "set_reporting_line": false, "create_leave_policy": false, "submit_leave_request": false, "record_attendance": false } }
   }
 }
 ```
@@ -1746,24 +1745,25 @@ Register / Google OAuth (verified)
   → /w/:workspaceId  (main app)
 
 Post-entry — per-module GettingStartedChecklists
-  Visible only to workspace admins. Each module has its own checklist on its landing page:
+  Visible only to workspace admins. Each app has one checklist on its landing page,
+  each row optionally deep-linking straight to the page that completes it:
 
-  Projects  (DashboardsPage)
-    ✓ Create your first board  → /boards
-    ✓ Add a task               → /boards
-    ✓ Invite a teammate        → /members
+  Project Management  (BoardsPage's parent — GettingStartedChecklist mounted on the boards route)
+    ✓ Create your first board  → /boards        (create_board)
+    ✓ Add a task               → /boards        (add_task)
+    ✓ Assign a task            → /boards        (assign_task)
 
-  Org Structure  (DepartmentsPage)
-    ✓ Create a department      → /org/departments
-    ✓ Create a team            → /org/teams
-    ✓ Set up reporting lines   → /org/chart
+  People & HR  (HRDashboardPage — single checklist covers org + HR items)
+    ✓ Create a department      → /departments        (create_department)
+    ✓ Create a team            → /teams               (create_team)
+    ✓ Set up reporting lines   → /people              (set_reporting_line)
+    ✓ Create a leave policy    → /hr/leave            (create_leave_policy)
+    ✓ Submit a leave request   → /hr/leave            (submit_leave_request)
+    ✓ Record attendance        → /hr/attendance       (record_attendance)
 
-  HR Management  (HRDashboardPage)
-    ✓ Create a leave policy    → /hr/leave
-    ✓ Submit a leave request   → /hr/leave
-    ✓ Record attendance        → /hr/attendance
-
-  Each checklist: progress bar, collapse, permanent per-user dismiss.
+  Each checklist: progress bar, collapse, permanent per-user dismiss, and — if the
+  app has a guided tour (see "Guided Product Tour" below) — a "Start guided tour"
+  button once all items are visible.
   PATCH /api/workspaces/:id/onboarding/ { module_dismiss: "<key>" } on dismiss.
   Items computed server-side from workspaces/checklist.py CHECKLIST_REGISTRY.
   Base UI: src/shared/components/onboarding/ModuleChecklist.jsx
@@ -1771,6 +1771,51 @@ Post-entry — per-module GettingStartedChecklists
 ```
 
 **Key invariant:** `can_create_workspace` is `True` by default on signup and flips to `False` the moment the workspace is created. Attempting `POST /api/workspaces/` a second time returns a permission error from the serializer.
+
+---
+
+### Guided Product Tour
+
+A click-through, self-paced walkthrough (driver.js) per app — separate from the GettingStartedChecklist above. It never gates on server state; it just spotlights real UI and advances on "Next" (or, for a couple of "try it yourself" steps, on the real action it's asking for).
+
+**Files:**
+
+| File | Role |
+|---|---|
+| `src/shared/onboarding/tour/tourSteps.js` | `TOUR_REGISTRY` — one entry per app (`projects`, `people`) with `welcome` copy and a `steps` array. Each step: `key`, `route(ws, ctx)`, `anchor` (a `[data-tour="..."]` selector), `title`, `body`, plus optional `requiresBoard`, `skipIfPresent`, `watchFor` (see below). |
+| `src/shared/onboarding/tour/TourProvider.jsx` | Drives one driver.js instance. Mounted once in `AppLayout` (survives route changes). Exposes `useTour() → { startTour(appKey), endTour, isRunning }`. |
+| `src/shared/onboarding/tour/tour.css` | Themes driver.js's popover to the app's CSS variables (light/dark) — reduced border-radius, custom shadow, and a pill-styled step counter (`showProgress`/`progressText`) set apart from the title/body. |
+| `src/shared/onboarding/tour/WelcomeModal.jsx` | First-open-per-app modal (gated by the `welcomed` UI flag). Lists the tour's steps as a read-only preview and offers "Start guided tour" / "Maybe later". |
+| `src/shared/components/onboarding/ModuleChecklist.jsx` | Also renders "Start guided tour" (re-runnable anytime) once `TOUR_REGISTRY[moduleKey]` exists. |
+| `src/shared/components/layout/AppLayout.jsx` | Wraps `<Sidebar>` + `<Outlet>` + `<WelcomeModal>` in `<TourProvider>`. |
+| `src/shared/components/layout/Sidebar.jsx` | Every `NavLink` carries `data-tour="nav_<key>"` generically, so any step can spotlight a nav item without a page-specific anchor. |
+| Per-page anchors | Plain `data-tour="<key>"` attributes dropped on real controls: `BoardsPage` (`create_board`), `KanbanPage` (`add_task`, `board_members`, `board_settings`), `DepartmentsPage` (`create_department`), `TeamsPage` (`create_team`), `LeavePage` (`submit_leave_request`, `leave_policies_tab`, `create_leave_policy`), `AttendancePage` (`record_attendance`), `HRDashboardPage` (`hr_overview`), `UserPanel` (`shortcuts_prompt` on the avatar trigger), `NotificationBell` (`notification_bell`), `ShortcutOverlay` (`shortcuts_overlay`). |
+
+**Flow:**
+```
+startTour(appKey)                          — from WelcomeModal or ModuleChecklist
+  → TourProvider resets stepRef/stepIndex to 0, sets activeApp
+
+Per step (effect keyed on [activeApp, stepIndex]):
+  1. resolveCtx() reads live data the route may need
+     (e.g. ctx.boardId from react-query cache ["portfolio", workspaceId])
+  2. requiresBoard steps with no ctx.boardId  → moveNext() (nothing to spotlight yet)
+  3. skipIfPresent steps whose selector already exists → moveNext()
+     (e.g. skip "expand the sidebar" if it's already expanded)
+  4. navigate(step.route(ws, ctx)) if not already there
+  5. poll up to 6s for step.anchor to mount; not found → moveNext()
+  6. driver.js .highlight() on the anchor: themed popover with
+     showProgress + progressText ("Step X of Y"), Next/Finish, Close
+  7. optional watchFor: background-polls for a DIFFERENT selector and
+     auto-advances the moment it appears — a "try it yourself" step
+     (e.g. press Ctrl+. to expand the sidebar, or "?" to open the
+     shortcuts overlay, or click the Policies tab) that doesn't need
+     an explicit Next click
+
+Finish (last step) or Close (any step) → endTour() destroys the driver.js instance
+```
+
+No step is gated on real completion — that's what GettingStartedChecklist (server-computed, `workspaces/checklist.py`) is for. The tour is purely a walkthrough.
 
 ---
 

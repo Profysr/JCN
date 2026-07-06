@@ -55,7 +55,10 @@ export default function ShortcutOverlay({ onClose }) {
       maxWidth="900px"
       padding="p-5"
     >
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6">
+      <div
+        data-tour="shortcuts_overlay"
+        className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6"
+      >
         {groups.map((group) => (
           <div key={group.id}>
             <h3 className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest mb-2">

@@ -13,12 +13,13 @@ changes needed. Module keys here match APP_REGISTRY app keys ("projects",
 
 def _compute_projects(workspace):
     from projects.models import Board, Task
-    from workspaces.models import WorkspaceMember
 
     return {
         "create_board": Board.objects.filter(workspace=workspace).exists(),
         "add_task": Task.objects.filter(board__workspace=workspace).exists(),
-        "invite_teammate": WorkspaceMember.objects.filter(workspace=workspace).count() > 1,
+        "assign_task": Task.objects.filter(
+            board__workspace=workspace, assignee__isnull=False
+        ).exists(),
     }
 
 

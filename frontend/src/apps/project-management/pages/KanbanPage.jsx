@@ -402,18 +402,21 @@ export default function KanbanPage() {
                 Icon: Users,
                 onClick: () => setMembersModal(true),
                 show: canAdmin,
+                tour: "board_members",
               },
               {
                 label: "Board settings",
                 Icon: Settings2,
                 onClick: () => setBoardSettings(true),
                 show: canAdmin,
+                tour: "board_settings",
               },
             ]
               .filter(({ show }) => show)
-              .map(({ label, Icon, onClick }) => (
+              .map(({ label, Icon, onClick, tour }) => (
                 <Tooltip key={label} content={label}>
                   <button
+                    data-tour={tour}
                     onClick={onClick}
                     className="p-2 rounded-lg bg-accent/60 text-foreground/70 hover:text-foreground hover:bg-accent transition-colors active:scale-[0.97]"
                   >
@@ -425,6 +428,7 @@ export default function KanbanPage() {
             {(canEdit || can("task.create")) && (
               <ShortcutTooltip label="Create task" shortcut={getShortcutDisplay("board:create-task")} side="bottom">
                 <Button
+                  data-tour="add_task"
                   size="sm"
                   onClick={() =>
                     setCreateModal({
