@@ -1,16 +1,3 @@
-/**
- * TourProvider — drives a click-through product tour with driver.js. Mounted
- * once inside AppLayout so it survives route changes.
- *
- * Behaviour:
- *  - Opt-in: nothing auto-starts. `startTour(appKey)` (from the welcome modal or
- *    the checklist "Start guided tour" button) begins at step 1 and always
- *    walks every step (full walkthrough, even completed ones).
- *  - Self-paced: each step spotlights a real control; the user clicks "Next" to
- *    move on. No action is required to moveNext — it's a walkthrough, not a task.
- *  - Cross-page: steps can live on different routes; the provider navigates and
- *    waits for the anchor to mount before highlighting.
- */
 import {
   createContext,
   useCallback,
@@ -31,7 +18,7 @@ const TourContext = createContext(null);
 export const useTour = () => useContext(TourContext);
 
 // Poll for an element that may not be in the DOM yet (route just changed).
-function waitForElement(selector, timeout = 6000) {
+function waitForElement(selector, timeout = 5000) {
   return new Promise((resolve) => {
     const existing = document.querySelector(selector);
     if (existing) return resolve(existing);
@@ -46,6 +33,20 @@ function waitForElement(selector, timeout = 6000) {
   });
 }
 
+// Steps anchor the field's wrapping <div> (label + input), not the input
+// itself, so dig out the actual control to read/flash it.
+function findField(anchorEl) {
+  return anchorEl.querySelector("input, textarea, select") || anchorEl;
+}
+
+function flashInvalid(el) {
+  if (!el) return;
+  el.classList.remove("jcn-tour-shake");
+  // eslint-disable-next-line no-unused-expressions -- restart the animation
+  el.offsetWidth;
+  el.classList.add("jcn-tour-shake");
+}
+
 export function TourProvider({ children }) {
   const { workspaceId } = useParams();
   const navigate = useNavigate();
@@ -53,6 +54,10 @@ export function TourProvider({ children }) {
 
   const driverRef = useRef(null);
   const stepRef = useRef(0);
+  // Which way the effect below should recover if a step's anchor never
+  // shows up: skip the rest of the group going forward, or step back one
+  // more going backward. Set by whichever nav action last fired.
+  const directionRef = useRef("forward");
   const [activeApp, setActiveApp] = useState(null);
   const [stepIndex, setStepIndex] = useState(0);
 
@@ -64,9 +69,21 @@ export function TourProvider({ children }) {
         overlayOpacity: 0.6,
         stagePadding: 6,
         stageRadius: 8,
-        allowClose: true,
+        // Blocks clicking the backdrop (sidebar links, anything outside the spotlighted control) or pressing Escape from dismissing the tour — the popover's own "Close" button is the only sanctioned way out.
+        allowClose: false,
+        // Arrow keys otherwise drive driver.js's own internal step index directly, bypassing our stepRef/stepIndex state and desyncing the tour.
+        allowKeyboardControl: false,
+        allowScroll: false,
         smoothScroll: true,
         animate: true,
+        // driver.js renders "close" as a "×" pinned to the popover's top-right corner. Relocate it into the footer, beside Next, so it reads as a normal secondary action.
+        onPopoverRender: (popover) => {
+          popover.closeButton.textContent = "Skip tour";
+          popover.footerButtons.insertBefore(
+            popover.closeButton,
+            popover.nextButton,
+          );
+        },
       });
     }
     return driverRef.current;
@@ -78,17 +95,54 @@ export function TourProvider({ children }) {
     setActiveApp(null);
   }, []);
 
-  const moveNext = useCallback(() => {
+  const advanceSteps = useCallback(
+    (count) => {
+      const tour = TOUR_REGISTRY[activeApp];
+      if (!tour) return;
+      const next = stepRef.current + count;
+      if (next >= tour.steps.length) {
+        endTour();
+        return;
+      }
+      directionRef.current = "forward";
+      stepRef.current = next;
+      setStepIndex(next);
+    },
+    [activeApp, endTour],
+  );
+
+  const moveNext = useCallback(() => advanceSteps(1), [advanceSteps]);
+
+  // Step back one — the anchor from a step already visited may be gone
+  // (its modal closed, its form submitted), so retreatStep below keeps
+  // walking backward past dead steps instead of getting stuck on one.
+  const retreatStep = useCallback(() => {
+    if (stepRef.current === 0) return;
+    directionRef.current = "backward";
+    const prev = stepRef.current - 1;
+    stepRef.current = prev;
+    setStepIndex(prev);
+  }, []);
+
+  const movePrevious = useCallback(() => retreatStep(), [retreatStep]);
+
+  // Abandonment path: the current step (or its whole modal/flow) is no
+  // longer reachable — e.g. the user cancelled the form, hit Enter and
+  // submitted early, or the anchor never showed up. Jump past every
+  // remaining step that shares this step's `group` in one go instead of
+  // limping forward one dead step at a time, each eating its own timeout.
+  const skipGroup = useCallback(() => {
     const tour = TOUR_REGISTRY[activeApp];
     if (!tour) return;
-    const next = stepRef.current + 1;
-    if (next >= tour.steps.length) {
-      endTour();
+    const group = tour.steps[stepRef.current]?.group;
+    if (!group) {
+      advanceSteps(1);
       return;
     }
-    stepRef.current = next;
-    setStepIndex(next);
-  }, [activeApp, endTour]);
+    let i = stepRef.current + 1;
+    while (i < tour.steps.length && tour.steps[i].group === group) i++;
+    advanceSteps(i - stepRef.current);
+  }, [activeApp, advanceSteps]);
 
   const startTour = useCallback((appKey) => {
     if (!TOUR_REGISTRY[appKey]) return;
@@ -113,18 +167,19 @@ export function TourProvider({ children }) {
     if (!step) return;
     let cancelled = false;
     let watchId = null;
+    let presenceId = null;
 
     (async () => {
       const ctx = resolveCtx();
-      // if step has dependency and it's not present in the context, skip to the next step
+      // if step has dependency and it's not present in the context, skip the whole group
       if (step.requiresBoard && !ctx.boardId) {
-        moveNext();
+        skipGroup();
         return;
       }
 
       // Already true (e.g. sidebar already expanded) — nothing to demo here.
       if (step.skipIfPresent && document.querySelector(step.skipIfPresent)) {
-        moveNext();
+        skipGroup();
         return;
       }
 
@@ -134,38 +189,69 @@ export function TourProvider({ children }) {
       const el = await waitForElement(step.anchor);
       if (cancelled) return;
       if (!el) {
-        moveNext();
+        // Going backward, a dead anchor means that step's modal/flow has
+        // since closed — keep stepping back instead of skipping forward.
+        if (directionRef.current === "backward") retreatStep();
+        else skipGroup();
         return;
       }
 
       const isLast = stepIndex === tour.steps.length - 1;
+      const buttons = ["next", "close"];
+      if (stepIndex > 0) buttons.unshift("previous");
       ensureDriver().highlight({
         element: el,
+        // Purely descriptive steps (no watchFor, nothing this step wants the user to click) shouldn't let a stray click on the real control fire an unrelated action — e.g. navigating away or opening a form this step never accounts for.
+        disableActiveInteraction: !!step.disableActiveInteraction,
         popover: {
           title: step.title,
           description: step.body,
-          showButtons: ["next", "close"],
+          showButtons: buttons,
           showProgress: true,
           progressText: `Step ${stepIndex + 1} of ${tour.steps.length}`,
           nextBtnText: isLast ? "Finish" : "Next",
-          onNextClick: () => moveNext(),
+          onNextClick: () => {
+            if (step.requiresValue) {
+              const field = findField(el);
+              if (!field.value?.trim()) {
+                field.focus?.();
+                flashInvalid(field);
+                return;
+              }
+            }
+            moveNext();
+          },
+          onPrevClick: () => movePrevious(),
           onCloseClick: () => endTour(),
         },
       });
 
       if (step.watchFor) {
         watchId = setInterval(() => {
+          if (cancelled) return;
           if (document.querySelector(step.watchFor)) {
             clearInterval(watchId);
+            if (presenceId) clearInterval(presenceId);
             moveNext();
           }
         }, 200);
       }
+
+      // The highlighted control can vanish without a Next click — e.g. the user hits Enter inside a modal field (submits and closes it), clicks Cancel, or hits Escape. Once that happens there's nothing left to point at, so bail out of the whole group automatically instead of leaving the popover stuck on a removed element.
+      presenceId = setInterval(() => {
+        if (cancelled) return;
+        if (!document.body.contains(el)) {
+          clearInterval(presenceId);
+          if (watchId) clearInterval(watchId);
+          skipGroup();
+        }
+      }, 200);
     })();
 
     return () => {
       cancelled = true;
       if (watchId) clearInterval(watchId);
+      if (presenceId) clearInterval(presenceId);
     };
   }, [activeApp, stepIndex]);
 

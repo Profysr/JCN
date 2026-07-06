@@ -342,7 +342,10 @@ export default function NotificationBell() {
       />
 
       {open && (
-        <div className="absolute left-0 bottom-full mb-2 z-50 w-[360px] bg-popover border border-border rounded-md shadow-popover overflow-hidden animate-scale-in origin-bottom-left">
+        <div
+          data-tour="notification_panel"
+          className="absolute left-0 bottom-full mb-2 z-50 w-[360px] bg-popover border border-border rounded-md shadow-popover overflow-hidden animate-scale-in origin-bottom-left"
+        >
           <NotificationHeader
             unreadCount={panelUnreadCount}
             onMarkAllRead={handleMarkAllRead}

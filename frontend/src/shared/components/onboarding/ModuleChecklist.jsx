@@ -30,6 +30,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { cn } from "@/shared/lib/utils";
 import { TOUR_REGISTRY } from "@/shared/onboarding/tour/tourSteps";
 import { useTour } from "@/shared/onboarding/tour/TourProvider";
+import { Tooltip } from "@/shared/components/ui/tooltip";
 
 export default function ModuleChecklist({ moduleKey, items }) {
   const { workspaceId } = useParams();
@@ -80,6 +81,18 @@ export default function ModuleChecklist({ moduleKey, items }) {
               style={{ width: `${progress}%` }}
             />
           </div>
+
+          {/* Tour trigger — kept in the always-visible header so it's reachable while minimized, not just when the checklist is expanded. */}
+          {hasTour && (
+            <Tooltip content="Start guided tour">
+              <button
+                onClick={() => startTour?.(moduleKey)}
+                className="text-muted-foreground hover:text-primary p-1 rounded transition-colors"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+              </button>
+            </Tooltip>
+          )}
 
           {/* Collapse / expand */}
           <button
@@ -170,17 +183,15 @@ export default function ModuleChecklist({ moduleKey, items }) {
               </p>
             </div>
           ) : (
-            hasTour && (
-              <div className="px-5 py-3 border-t flex justify-center">
-                <button
-                  onClick={() => startTour?.(moduleKey)}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 text-primary text-xs font-medium px-3 py-1.5 hover:bg-primary/15 transition-colors"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  Start guided tour
-                </button>
-              </div>
-            )
+            <div className="px-5 py-3 border-t flex justify-center">
+              <button
+                onClick={() => startTour?.(moduleKey)}
+                className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 text-primary text-xs font-medium px-3 py-1.5 hover:bg-primary/15 transition-colors"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                Start guided tour
+              </button>
+            </div>
           )}
         </div>
       )}

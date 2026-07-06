@@ -424,7 +424,8 @@ export default function Select({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             transition={{ duration: 0.13, ease: [0.16, 1, 0.3, 1] }}
             className={cn(
-              "fixed z-[1100] left-0 top-0 flex flex-col overflow-hidden rounded-xl border border-border/60 bg-popover shadow-2xl outline-none",
+              // select-portal-menu: this menu is portaled to document.body, outside the trigger's DOM subtree — driver.js's tour overlay (tour.css) targets this class to keep it clickable while a tour is active.
+              "select-portal-menu fixed z-[1100] left-0 top-0 flex flex-col overflow-hidden rounded-xl border border-border/60 bg-popover shadow-2xl outline-none",
               menuClassName,
             )}
             style={{ minWidth: "11rem" }}

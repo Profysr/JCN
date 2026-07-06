@@ -7,7 +7,6 @@ import {
 import { usePermissions } from "@/shared/hooks/usePermissions";
 import { usePermission } from "@/contexts/PermissionsContext";
 import { useOnboarding } from "@/shared/hooks/useOnboarding";
-import { APP_PARAM } from "@/shared/onboarding/tour/tourSteps";
 import { ArrowUpRight, Sparkles } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 
@@ -44,7 +43,7 @@ export default function AppLauncherPage() {
   } = usePermission();
 
   const openApp = (app) => {
-    navigate(`${workspaceUrl(workspaceId, app.landing)}?${APP_PARAM}=${app.key}`);
+    navigate(workspaceUrl(workspaceId, app.landing));
   };
 
   // Combine backend app registry (name, description) with frontend APP_DEFS (icon, colors, landing)

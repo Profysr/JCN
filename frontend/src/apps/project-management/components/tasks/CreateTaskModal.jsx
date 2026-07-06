@@ -136,7 +136,7 @@ export default function CreateTaskModal({
           </div>
 
           {/* Title */}
-          <div>
+          <div data-tour="task_title_input">
             <Label htmlFor="task-title" className="text-xs font-medium">
               Title
             </Label>
@@ -151,88 +151,91 @@ export default function CreateTaskModal({
             />
           </div>
 
-          {/* Description */}
-          <div>
-            <Label className="text-xs font-medium">Description</Label>
-            <textarea
-              className="mt-1 w-full text-sm border rounded-md px-3 py-2 bg-background outline-none focus:ring-1 focus:ring-ring resize-none placeholder:text-muted-foreground"
-              rows={2}
-              placeholder="Optional description…"
-              value={desc}
-              onChange={(e) => setDesc(e.target.value)}
-            />
-          </div>
-
-          {/* Row: status + priority */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* Description, status/priority, assignee/due — all optional, tour highlights them as one group */}
+          <div data-tour="task_optional_fields" className="space-y-3">
+            {/* Description */}
             <div>
-              <Label className="text-xs font-medium">Status</Label>
-              <Select
-                className="mt-1"
-                value={statusId || defaultStatusId || ""}
-                onChange={setStatusId}
-                placeholder="Select status"
-                options={statuses.map((s) => ({
-                  value: s.id,
-                  label: s.name,
-                  color: s.color,
-                }))}
+              <Label className="text-xs font-medium">Description</Label>
+              <textarea
+                className="mt-1 w-full text-sm border rounded-md px-3 py-2 bg-background outline-none focus:ring-1 focus:ring-ring resize-none placeholder:text-muted-foreground"
+                rows={2}
+                placeholder="Optional description…"
+                value={desc}
+                onChange={(e) => setDesc(e.target.value)}
               />
             </div>
-            <div>
-              <Label className="text-xs font-medium">Priority</Label>
-              <div className="mt-1 flex flex-wrap gap-1">
-                {PRIORITIES.map((p) => (
-                  <button
-                    key={p.value}
-                    type="button"
-                    onClick={() => setPriority(p.value)}
-                    className={cn(
-                      "px-2 py-0.5 rounded text-xs font-medium border transition-colors",
-                      priority === p.value
-                        ? p.modalBtnCls
-                        : "border-input text-muted-foreground hover:bg-accent",
-                    )}
-                  >
-                    {p.label}
-                  </button>
-                ))}
+
+            {/* Row: status + priority */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs font-medium">Status</Label>
+                <Select
+                  className="mt-1"
+                  value={statusId || defaultStatusId || ""}
+                  onChange={setStatusId}
+                  placeholder="Select status"
+                  options={statuses.map((s) => ({
+                    value: s.id,
+                    label: s.name,
+                    color: s.color,
+                  }))}
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-medium">Priority</Label>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {PRIORITIES.map((p) => (
+                    <button
+                      key={p.value}
+                      type="button"
+                      onClick={() => setPriority(p.value)}
+                      className={cn(
+                        "px-2 py-0.5 rounded text-xs font-medium border transition-colors",
+                        priority === p.value
+                          ? p.modalBtnCls
+                          : "border-input text-muted-foreground hover:bg-accent",
+                      )}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Row: assignee + due date */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label className="text-xs font-medium">Assignee</Label>
-              <Select
-                className="mt-1"
-                value={assigneeId}
-                onChange={setAssigneeId}
-                searchable
-                placeholder="Unassigned"
-                options={[
-                  { value: "", label: "Unassigned" },
-                  ...members.map((m) => ({
-                    value: m.user?.id,
-                    label: m.user?.full_name || m.user?.email,
-                    avatar: {
-                      name: m.user?.full_name || m.user?.email,
-                      src: m.user?.avatar,
-                    },
-                  })),
-                ]}
-              />
-            </div>
-            <div>
-              <Label className="text-xs font-medium">Due Date</Label>
-              <input
-                type="date"
-                min={startDate || undefined}
-                className="mt-1 w-full h-9 rounded-md border border-input bg-background px-2.5 text-sm outline-none focus:ring-1 focus:ring-ring"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-              />
+            {/* Row: assignee + due date */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs font-medium">Assignee</Label>
+                <Select
+                  className="mt-1"
+                  value={assigneeId}
+                  onChange={setAssigneeId}
+                  searchable
+                  placeholder="Unassigned"
+                  options={[
+                    { value: "", label: "Unassigned" },
+                    ...members.map((m) => ({
+                      value: m.user?.id,
+                      label: m.user?.full_name || m.user?.email,
+                      avatar: {
+                        name: m.user?.full_name || m.user?.email,
+                        src: m.user?.avatar,
+                      },
+                    })),
+                  ]}
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-medium">Due Date</Label>
+                <input
+                  type="date"
+                  min={startDate || undefined}
+                  className="mt-1 w-full h-9 rounded-md border border-input bg-background px-2.5 text-sm outline-none focus:ring-1 focus:ring-ring"
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                />
+              </div>
             </div>
           </div>
 
@@ -307,6 +310,7 @@ export default function CreateTaskModal({
               Cancel
             </Button>
             <Button
+              data-tour="task_submit"
               type="submit"
               size="sm"
               disabled={isPending || !title.trim()}

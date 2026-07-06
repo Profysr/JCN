@@ -143,7 +143,7 @@ export default function CreateBoardModal({ workspaceId, open, onClose }) {
             )}
 
             {/* Board type picker */}
-            <div className="space-y-2">
+            <div data-tour="board_type_picker" className="space-y-2">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
                 Board Type
               </p>
@@ -174,7 +174,7 @@ export default function CreateBoardModal({ workspaceId, open, onClose }) {
 
             {/* Name + Description */}
             <div className="space-y-3">
-              <div className="space-y-1.5">
+              <div data-tour="board_name_input" className="space-y-1.5">
                 <Label htmlFor="board-name" className="text-xs font-medium">
                   Board name
                 </Label>
@@ -204,7 +204,10 @@ export default function CreateBoardModal({ workspaceId, open, onClose }) {
             </div>
 
             {/* Private toggle */}
-            <div className="flex items-center justify-between px-3 py-2.5 rounded-lg border border-border bg-muted/30">
+            <div
+              data-tour="board_private_toggle"
+              className="flex items-center justify-between px-3 py-2.5 rounded-lg border border-border bg-muted/30"
+            >
               <div className="flex items-center gap-2.5">
                 <div className="p-1.5 rounded-md bg-muted">
                   <Lock className="w-3.5 h-3.5 text-muted-foreground" />
@@ -236,7 +239,10 @@ export default function CreateBoardModal({ workspaceId, open, onClose }) {
             </div>
 
             {/* Actions */}
-            <div className="flex justify-end gap-2 pt-0.5">
+            <div
+              className="flex justify-end gap-2 pt-0.5"
+              data-tour="board_submit"
+            >
               <Button
                 type="button"
                 variant="outline"

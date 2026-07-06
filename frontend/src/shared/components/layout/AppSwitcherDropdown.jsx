@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { cn } from "@/shared/lib/utils";
 import { LayoutGrid, Home } from "lucide-react";
 import { APP_DEFS, workspaceUrl } from "@/shared/lib/navLinks";
-import { APP_PARAM } from "@/shared/onboarding/tour/tourSteps";
 import { usePermission } from "@/contexts/PermissionsContext";
 import { useActiveApp } from "@/shared/hooks/useActiveApp";
 import { useUnreadNotificationsByApp } from "@/shared/hooks/useInbox";
@@ -92,7 +91,7 @@ export default function AppSwitcherDropdown({ workspaceId, collapsed }) {
   }, [open]);
 
   const handleNavigate = (app) => {
-    navigate(`${workspaceUrl(workspaceId, app.landing)}?${APP_PARAM}=${app.key}`);
+    navigate(workspaceUrl(workspaceId, app.landing));
     setOpen(false);
   };
 

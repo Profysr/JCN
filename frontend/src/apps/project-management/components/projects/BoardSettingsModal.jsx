@@ -164,6 +164,7 @@ export default function BoardSettingsModal({
           <Droppable droppableId="board-statuses">
             {(provided) => (
               <div
+                data-tour="board_statuses_list"
                 ref={provided.innerRef}
                 {...provided.droppableProps}
                 className="space-y-1.5"
@@ -276,6 +277,7 @@ export default function BoardSettingsModal({
           </form>
         ) : (
           <button
+            data-tour="board_add_status"
             onClick={() => setAdding(true)}
             className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mt-3 pt-2 border-t w-full transition-colors"
           >
@@ -283,9 +285,11 @@ export default function BoardSettingsModal({
           </button>
         )}
       </div>
-
       {/* Footer */}
-      <div className="flex items-center justify-end gap-2 px-5 py-2.5 border-t">
+      <div
+        className="flex items-center justify-end gap-2 px-5 py-2.5 border-t"
+        data-tour="board_settings_save"
+      >
         <Button
           variant="outline"
           onClick={onClose}

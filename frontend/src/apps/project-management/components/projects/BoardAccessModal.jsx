@@ -151,7 +151,10 @@ export default function BoardAccessModal({
 
 function PrivateProjectToggle({ isPrivate, onToggle }) {
   return (
-    <div className="flex items-center justify-between p-3 rounded-lg border bg-background">
+    <div
+      data-tour="board_access_private_toggle"
+      className="flex items-center justify-between p-3 rounded-lg border bg-background"
+    >
       <div className="flex items-center gap-2.5">
         {isPrivate ? (
           <Lock className="w-4 h-4 text-amber-500" />
@@ -292,6 +295,7 @@ function BulkMemberPicker({
     return (
       <div className="border-t pt-3 mt-1">
         <button
+          data-tour="board_add_members"
           onClick={handleOpenPicker}
           disabled={addableMembers.length === 0}
           className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
@@ -321,7 +325,7 @@ function BulkMemberPicker({
         </button>
       </div>
 
-      <div className="relative">
+      <div data-tour="board_member_search" className="relative">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
         <input
           autoFocus

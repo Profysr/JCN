@@ -67,6 +67,16 @@
   background-color: hsl(var(--primary) / 0.9);
 }
 
+/* Secondary "Previous" button */
+.driver-popover.jcn-tour .driver-popover-prev-btn {
+  background-color: transparent;
+  color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--border));
+}
+.driver-popover.jcn-tour .driver-popover-prev-btn:hover {
+  background-color: hsl(var(--accent));
+}
+
 /* Close ("Exit tour") button */
 .driver-popover.jcn-tour .driver-popover-close-btn {
   color: hsl(var(--muted-foreground));
@@ -78,6 +88,38 @@
 }
 .driver-popover.jcn-tour .driver-popover-close-btn:hover {
   color: hsl(var(--foreground));
+}
+
+/* driver.js's dark scrim is an SVG whose fill <path> carries an inline
+   pointer-events:auto (can't be beaten by any class rule) at z-index:10000
+   — see driver.js.mjs. The "hole" cut into it for the spotlight is a static
+   snapshot of the anchor's bounds taken when the step highlights, so it
+   never accounts for a Select menu that opens later and grows past that
+   boundary. Wherever the portaled menu (rendered straight onto
+   document.body, outside the anchor's DOM subtree) extends past that hole,
+   the scrim physically paints over it and eats the click first. Lifting
+   the menu's z-index above the scrim — not just re-enabling pointer-events
+   — is what actually fixes it. */
+.driver-active .select-portal-menu,
+.driver-active .select-portal-menu * {
+  pointer-events: auto;
+}
+.driver-active .select-portal-menu {
+  z-index: 1000000001;
+}
+
+/* Required-field nudge — Next refuses to advance past an empty required
+   field (see requiresValue in tourSteps.js); this flashes the field itself. */
+@keyframes jcn-tour-shake {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-3px); }
+  40%, 60% { transform: translateX(3px); }
+}
+.jcn-tour-shake {
+  animation: jcn-tour-shake 0.4s ease-in-out;
+  outline: 2px solid hsl(var(--destructive)) !important;
+  outline-offset: 1px;
 }
 
 /* Arrow matches the popover surface */

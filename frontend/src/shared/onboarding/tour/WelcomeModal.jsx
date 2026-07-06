@@ -7,7 +7,7 @@
  * reappear. The tour itself is also re-runnable later from the checklist widget.
  */
 import { useEffect, useState } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { Check, Sparkles } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import Modal from "@/shared/components/ui/Modal";
@@ -16,18 +16,17 @@ import {
   useOnboarding,
   useUpdateOnboarding,
 } from "@/shared/hooks/useOnboarding";
-import { TOUR_REGISTRY, APP_PARAM } from "./tourSteps";
+import { useActiveApp } from "@/shared/hooks/useActiveApp";
+import { TOUR_REGISTRY } from "./tourSteps";
 import { useTour } from "./TourProvider";
 
 export default function WelcomeModal() {
   const { workspaceId } = useParams();
-  const [searchParams] = useSearchParams();
   const { data: onboarding } = useOnboarding(workspaceId);
   const updateOnboarding = useUpdateOnboarding(workspaceId);
   const { startTour, isRunning } = useTour() || {};
   const [open, setOpen] = useState(false);
-
-  const appKey = searchParams.get(APP_PARAM);
+  const appKey = useActiveApp();
   const tour = appKey ? TOUR_REGISTRY[appKey] : null;
   const module = appKey ? onboarding?.checklists?.[appKey] : null;
   const items = module?.items || {};
