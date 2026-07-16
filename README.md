@@ -72,7 +72,7 @@ Uses [Resend](https://resend.com). Free tier: 3,000 emails/month.
 
 ```env
 RESEND_API_KEY=re_xxxxxxx
-FROM_EMAIL=onboarding@resend.dev
+FROM_EMAIL=test@resend.dev
 FRONTEND_URL=http://localhost:5173
 ```
 
@@ -82,7 +82,7 @@ FRONTEND_URL=http://localhost:5173
 3. You'll be prompted to create your first workspace
 4. Invite teammates via the Members section
 
-## API Endpoints
+## Basic API Endpoints
 | Method | URL | Description |
 |--------|-----|-------------|
 | POST | /api/auth/registration/ | Register with email + password |
