@@ -71,7 +71,6 @@ def _require_admin(workspace, user):
 
 class WorkspaceListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated, APIKeyScopePermission]
-
     def get(self, request):
         workspaces = (
             Workspace.objects.filter(members__user=request.user)

@@ -89,17 +89,16 @@ export default function HRDashboardPage() {
   return (
     <div>
       {/* Page header */}
-      <div
-        data-tour="hr_overview"
+      {/* <div
         className="border-b border-border bg-card px-6 py-4 flex items-center gap-2"
-      >
+        >
         <LayoutDashboard className="w-5 h-5 text-muted-foreground" />
         <h1 className="text-lg font-semibold">Dashboard</h1>
-      </div>
+        </div> */}
 
       <div className="p-6 px-3 space-y-2.5">
         {/* Greeting */}
-        <div>
+        <div data-tour="hr_overview" className="space-y-1">
           <h2 className="text-xl font-bold">
             {greetingFor(user?.full_name || user?.email)}
           </h2>
@@ -107,6 +106,7 @@ export default function HRDashboardPage() {
             Here&apos;s your leave, attendance & team overview.
           </p>
         </div>
+        <GettingStartedChecklist />
 
         <MyOverview />
 
@@ -135,8 +135,6 @@ function AdminOverview({ data, workspaceId }) {
 
   return (
     <div className="space-y-4">
-      <GettingStartedChecklist />
-
       <div>
         <h2 className="text-base font-bold">Workspace Overview</h2>
         <p className="text-sm text-muted-foreground mt-0.5">

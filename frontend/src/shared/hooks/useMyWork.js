@@ -8,7 +8,7 @@ export const useMyWork = () =>
     queryKey: ["my-work"],
     queryFn: () => api.get("/api/my-work/").then((r) => r.data),
     staleTime: Infinity,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
   });
 
 export const usePortfolio = (workspaceId) =>

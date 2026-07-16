@@ -112,7 +112,6 @@ export default function AnalyticsPage() {
     setRefreshing(false);
   }, [queryClient]);
 
-  
   const filters = { workspaceId, boardId, startDate, endDate, filterParams };
 
   return (
@@ -128,60 +127,63 @@ export default function AnalyticsPage() {
         </p>
       </div>
 
-      <FilterBar
-        activeDays={activeDays}
-        startDate={startDate}
-        endDate={endDate}
-        boardId={boardId}
-        projects={projects}
-        refreshing={refreshing}
-        kfilters={kfilters}
-        onKFiltersChange={setKFilters}
-        members={members}
-        labels={labels}
-        onPresetClick={handlePresetClick}
-        onStartDateChange={handleStartDateChange}
-        onEndDateChange={handleEndDateChange}
-        onBoardChange={setBoardId}
-        onRefresh={handleRefresh}
-      />
-
-      {/* Body */}
       <div className="flex-1 overflow-auto py-6 px-4">
         <div className="max-w-7xl mx-auto space-y-8">
-        {/* <KpiSection workspaceId={workspaceId} filterParams={filterParams} /> */}
+        <FilterBar
+          activeDays={activeDays}
+          startDate={startDate}
+          endDate={endDate}
+          boardId={boardId}
+          projects={projects}
+          refreshing={refreshing}
+          kfilters={kfilters}
+          onKFiltersChange={setKFilters}
+          members={members}
+          labels={labels}
+          onPresetClick={handlePresetClick}
+          onStartDateChange={handleStartDateChange}
+          onEndDateChange={handleEndDateChange}
+          onBoardChange={setBoardId}
+          onRefresh={handleRefresh}
+        />
 
-        <div className="space-y-3">
-          <SectionHeader
-            label="Overdue Tasks"
-            description="Tasks past their due date that are still open — needs immediate attention"
-          />
-          <OverdueSection workspaceId={workspaceId} filterParams={filterParams} />
-        </div>
+        {/* Body */}
+          {/* <KpiSection workspaceId={workspaceId} filterParams={filterParams} /> */}
 
-        <div className="space-y-4">
-          <SectionHeader label="Deep Dive" />
+          <div className="space-y-3">
+            <SectionHeader
+              label="Overdue Tasks"
+              description="Tasks past their due date that are still open — needs immediate attention"
+            />
+            <OverdueSection
+              workspaceId={workspaceId}
+              filterParams={filterParams}
+            />
+          </div>
 
-          <Tabs value={activeTab} onChange={setActiveTab}>
-            <TabsList className="w-fit">
-              {TABS.map(({ id, label, icon }) => (
-                <TabsTrigger key={id} value={id} icon={icon}>
-                  {label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
+          <div className="space-y-4">
+            <SectionHeader label="Deep Dive" />
 
-            <TabsContent value="board" className="mt-4">
-              <BoardTab {...filters} />
-            </TabsContent>
-            <TabsContent value="sprints" className="mt-4">
-              <SprintsTab {...filters} />
-            </TabsContent>
-            <TabsContent value="teams" className="mt-4">
-              <TeamsTab {...filters} />
-            </TabsContent>
-          </Tabs>
-        </div>
+            <Tabs value={activeTab} onChange={setActiveTab}>
+              <TabsList className="w-fit">
+                {TABS.map(({ id, label, icon }) => (
+                  <TabsTrigger key={id} value={id} icon={icon}>
+                    {label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+
+              <TabsContent value="board" className="mt-4">
+                <BoardTab {...filters} />
+              </TabsContent>
+              <TabsContent value="sprints" className="mt-4">
+                <SprintsTab {...filters} />
+              </TabsContent>
+              <TabsContent value="teams" className="mt-4">
+                <TeamsTab {...filters} />
+              </TabsContent>
+            </Tabs>
+          </div>
         </div>
       </div>
     </div>

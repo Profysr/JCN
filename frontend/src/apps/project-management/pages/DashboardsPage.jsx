@@ -620,10 +620,10 @@ export default function DashboardsPage() {
   return (
     <div className="flex-1 flex flex-col overflow-auto">
       {/* Page header */}
-      <div className="border-b border-border bg-card px-6 py-4 flex items-center gap-2 flex-shrink-0">
+      {/* <div className="border-b border-border bg-card px-6 py-4 flex items-center gap-2 flex-shrink-0">
         <LayoutDashboard className="w-5 h-5 text-muted-foreground" />
         <h1 className="text-lg font-semibold">Dashboard</h1>
-      </div>
+      </div> */}
 
       <div className="p-6 px-3 space-y-2.5">
         {/* Greeting */}
