@@ -78,6 +78,6 @@
     "eslint-plugin-react-hooks": "^4.6.2",
     "postcss": "^8.4.40",
     "tailwindcss": "^3.4.6",
-    "vite": "^5.3.4"
+    "vite": "^8.1.5"
   }
 }
