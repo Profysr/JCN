@@ -1,0 +1,125 @@
+<svg viewBox="0 0 1280 320" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0a0f"/>
+      <stop offset="100%" stop-color="#13131c"/>
+    </linearGradient>
+
+    <linearGradient id="cubeTop1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8b7bff"/>
+      <stop offset="100%" stop-color="#6b5bff"/>
+    </linearGradient>
+    <linearGradient id="cubeLeft1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#5b4bd6"/>
+      <stop offset="100%" stop-color="#463aad"/>
+    </linearGradient>
+    <linearGradient id="cubeRight1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4a3ec2"/>
+      <stop offset="100%" stop-color="#372e8f"/>
+    </linearGradient>
+
+    <linearGradient id="cubeTop2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4dd0e1"/>
+      <stop offset="100%" stop-color="#26a6c9"/>
+    </linearGradient>
+    <linearGradient id="cubeLeft2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1f8fae"/>
+      <stop offset="100%" stop-color="#15697e"/>
+    </linearGradient>
+    <linearGradient id="cubeRight2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#197a92"/>
+      <stop offset="100%" stop-color="#10505f"/>
+    </linearGradient>
+
+    <linearGradient id="cubeTop3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff9d7b"/>
+      <stop offset="100%" stop-color="#ff7b54"/>
+    </linearGradient>
+    <linearGradient id="cubeLeft3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#d9613f"/>
+      <stop offset="100%" stop-color="#b04c30"/>
+    </linearGradient>
+    <linearGradient id="cubeRight3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#c05339"/>
+      <stop offset="100%" stop-color="#933d29"/>
+    </linearGradient>
+
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#6b5bff" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#6b5bff" stop-opacity="0"/>
+    </radialGradient>
+
+    <filter id="softShadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000000" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+
+  <rect width="1280" height="320" fill="url(#bg)"/>
+
+  <!-- ambient glow -->
+  <circle cx="1000" cy="160" r="260" fill="url(#glow)"/>
+
+  <!-- faint grid dots -->
+  <g opacity="0.08">
+    <circle cx="60" cy="40" r="1.5" fill="#ffffff"/>
+    <circle cx="120" cy="90" r="1.5" fill="#ffffff"/>
+    <circle cx="200" cy="50" r="1.5" fill="#ffffff"/>
+    <circle cx="90" cy="200" r="1.5" fill="#ffffff"/>
+    <circle cx="1150" cy="60" r="1.5" fill="#ffffff"/>
+    <circle cx="1200" cy="230" r="1.5" fill="#ffffff"/>
+    <circle cx="1100" cy="280" r="1.5" fill="#ffffff"/>
+  </g>
+
+  <!-- floating isometric cube 1 (purple - Projects) -->
+  <g transform="translate(860,120)" filter="url(#softShadow)">
+    <animateTransform attributeName="transform" type="translate"
+      values="860,120; 860,104; 860,120" dur="4.5s" repeatCount="indefinite" additive="sum"/>
+    <polygon points="0,-40 40,-20 0,0 -40,-20" fill="url(#cubeTop1)"/>
+    <polygon points="-40,-20 0,0 0,40 -40,20" fill="url(#cubeLeft1)"/>
+    <polygon points="40,-20 0,0 0,40 40,20" fill="url(#cubeRight1)"/>
+  </g>
+
+  <!-- floating isometric cube 2 (teal - People) -->
+  <g transform="translate(970,190)" filter="url(#softShadow)">
+    <animateTransform attributeName="transform" type="translate"
+      values="970,190; 970,172; 970,190" dur="3.6s" begin="0.4s" repeatCount="indefinite" additive="sum"/>
+    <polygon points="0,-30 30,-15 0,0 -30,-15" fill="url(#cubeTop2)"/>
+    <polygon points="-30,-15 0,0 0,30 -30,15" fill="url(#cubeLeft2)"/>
+    <polygon points="30,-15 0,0 0,30 30,15" fill="url(#cubeRight2)"/>
+  </g>
+
+  <!-- floating isometric cube 3 (coral - HR) -->
+  <g transform="translate(1090,110)" filter="url(#softShadow)">
+    <animateTransform attributeName="transform" type="translate"
+      values="1090,110; 1090,128; 1090,110" dur="5s" begin="0.9s" repeatCount="indefinite" additive="sum"/>
+    <polygon points="0,-26 26,-13 0,0 -26,-13" fill="url(#cubeTop3)"/>
+    <polygon points="-26,-13 0,0 0,26 -26,13" fill="url(#cubeLeft3)"/>
+    <polygon points="26,-13 0,0 0,26 26,13" fill="url(#cubeRight3)"/>
+  </g>
+
+  <!-- thin connecting lines suggesting "one workspace" -->
+  <g stroke="#ffffff" stroke-opacity="0.15" stroke-width="1.5" stroke-dasharray="3 5">
+    <line x1="860" y1="120" x2="970" y2="190"/>
+    <line x1="970" y1="190" x2="1090" y2="110"/>
+    <line x1="860" y1="120" x2="1090" y2="110"/>
+  </g>
+
+  <!-- wordmark -->
+  <text x="80" y="150" font-family="Arial, Helvetica, sans-serif" font-size="88" font-weight="800" fill="#ffffff" letter-spacing="2">
+    JCN
+  </text>
+
+  <!-- accent underline -->
+  <rect x="83" y="168" width="120" height="5" rx="2.5" fill="#6b5bff">
+    <animate attributeName="width" values="0;120;120" dur="1.4s" fill="freeze"/>
+  </rect>
+
+  <!-- tagline -->
+  <text x="80" y="210" font-family="Arial, Helvetica, sans-serif" font-size="24" fill="#b8b8c8" font-weight="400">
+    One workspace. Every tool your team actually uses.
+  </text>
+
+  <text x="80" y="245" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#6f6f82" font-weight="400" letter-spacing="1">
+    PROJECTS · PEOPLE · HR
+  </text>
+</svg>

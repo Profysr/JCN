@@ -1,7 +1,10 @@
 
+## vG.0 — Minor Fix (Week 27)
+- At the moment, my-work api is being used by dashboard and work page. and has slateTime infinity with refectch on window focus false. It requires a manual reload, or refresh to get the latest information. We need to create a websocket event and replace the existing configs in useMyWork.js
+
 ## vG.1 — Mobile PWA (Week 27)
 
-> Status: Complete ✅
+> Status: PLANNED 📋
 > **Scope:** The highest-value mobile flows only — not full feature parity. Full feature parity is a separate milestone.
 
 **What ships**

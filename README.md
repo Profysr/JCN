@@ -1,18 +1,19 @@
 <div align="center">
 
-<img src="https://via.placeholder.com/1280x320/0f0f0f/ffffff?text=JCN" alt="JCN Banner" width="100%" />
+<img src="docs/imgs/JCN.png" alt="JCN Banner" width="100%" />
 
 # JCN — Project Management, for teams that outgrew spreadsheets but not budgets
 
 **One workspace. Every tool your team actually uses.**
 
-[![License: BSL 1.1](https://img.shields.io/badge/license-BSL%201.1-blue.svg)](./LICENSE.md)
+[![License: Elastic License 2.0](https://img.shields.io/badge/license-Elastic%202.0-blue.svg)](./LICENSE.md)
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](#)
-[![Contributors](https://img.shields.io/github/contributors/your-org/jcn)](https://github.com/your-org/jcn/graphs/contributors)
-[![Stars](https://img.shields.io/github/stars/your-org/jcn?style=social)](https://github.com/your-org/jcn/stargazers)
-[![Discord](https://img.shields.io/discord/000000000000000000?label=discord&logo=discord)](https://discord.gg/your-invite)
+[![Contributors](https://img.shields.io/github/contributors/Profysr/JCN)](https://github.com/Profysr/JCN/graphs/contributors)
+[![Stars](https://img.shields.io/github/stars/Profysr/JCN?style=social)](https://github.com/Profysr/JCN/stargazers)
+<!-- [![Discord](https://img.shields.io/discord/000000000000000000?label=discord&logo=discord)](https://discord.gg/your-invite) -->
 
-[Live Demo](https://demo.jcn.example.com) · [Documentation](https://docs.jcn.example.com) · [Report Bug](https://github.com/your-org/jcn/issues) · [Request Feature](https://github.com/your-org/jcn/issues)
+<!-- [Live Demo](https://demo.jcn.example.com) · [Documentation](https://docs.jcn.example.com) ·  -->
+[Report Bug](https://github.com/Profysr/JCN/issues) · [Request Feature](https://github.com/Profysr/JCN/issues)
 
 </div>
 
@@ -20,7 +21,7 @@
 
 ## About
 
-**JCN** is a management ecosystem for growing businesses — not a single app, but a suite of purpose-built modules that share a common workspace, identity, and permission layer. Projects. People. HR. All in one place.
+**JCN** is a management ecosystem for growing startups. It's not a single app, but a suite of purpose-built modules that share a common workspace, identity, and permission layer. Projects. People. HR. All in one place.
 
 **Target:** Teams of 10–200 people who are tired of paying enterprise prices for tools that treat them like an afterthought.
 
@@ -40,8 +41,33 @@
 ## Screenshots
 
 <div align="center">
-<img src="https://via.placeholder.com/800x450?text=Dashboard+Screenshot" width="45%" />
-<img src="https://via.placeholder.com/800x450?text=Workspace+Screenshot" width="45%" />
+
+<img src="docs/imgs/pm-dashboard.jpeg" alt="Project dashboard" width="90%" />
+<p><em>Home dashboard — overdue tasks, assigned work, and boards at a glance</em></p>
+
+<br/>
+
+<img src="docs/imgs/launcher-page.png" alt="App launcher" width="90%" />
+<p><em>One workspace, every module — switch between Project Management and People & HR instantly</em></p>
+
+<br/>
+
+<table>
+<tr>
+<td width="50%">
+<img src="docs/imgs/kanban-page.png" alt="Kanban board" width="100%" />
+<p align="center"><em>Kanban boards for task tracking</em></p>
+</td>
+<td width="50%">
+<img src="docs/imgs/hr-dashboard.png" alt="HR dashboard" width="100%" />
+<p align="center"><em>People & HR — departments, teams, leave, attendance</em></p>
+</td>
+</tr>
+</table>
+
+<img src="docs/imgs/analytics-2.png" alt="Analytics dashboard" width="90%" />
+<p><em>Built-in analytics — status distribution, priority breakdown, and team workload</em></p>
+
 </div>
 
 ## Features
@@ -49,9 +75,12 @@
 - 🗂️ **Unified workspaces** — one identity and permission layer across every module
 - ✅ **Project & task tracking** without the enterprise bloat
 - 👥 **People / HR management** built for teams without a dedicated HR department
+- 📊 **Built-in analytics** — status, priority, and workload breakdowns out of the box
 - 🔐 **Google OAuth** + email/password auth out of the box
 - ⚡ **Real-time updates** via WebSockets (Daphne/ASGI)
 - 📧 **Transactional email** for invites and password resets
+- 🔌 **Integrations & Webhooks** — Microsoft Teams, Google Chat, and custom webhooks
+- 🔑 **API Keys** for programmatic access to your workspace
 - 🐳 **One-command local setup** with Docker Compose
 
 ## Tech Stack
@@ -63,28 +92,9 @@
 
 ## Architecture
 
-```
-                     ┌────────────┐
-        HTTP/WS ───▶ │   Nginx    │
-                     └─────┬──────┘
-                ┌──────────┴──────────┐
-                ▼                     ▼
-        ┌───────────────┐    ┌────────────────┐
-        │ Gunicorn (REST)│    │ Daphne (WS)    │
-        │  backend       │    │ backend-ws     │
-        └───────┬────────┘    └───────┬────────┘
-                │                     │
-                └──────────┬──────────┘
-                            ▼
-        ┌─────────┐   ┌─────────┐   ┌───────────┐
-        │ Postgres│   │  Redis  │   │ RabbitMQ  │
-        └─────────┘   └─────────┘   └─────┬─────┘
-                                           ▼
-                                  ┌────────────────┐
-                                  │ Celery worker  │
-                                  │ Celery beat    │
-                                  └────────────────┘
-```
+<div align="center">
+<img src="docs/imgs/architecture-diagram.svg" alt="JCN architecture diagram" width="90%" />
+</div>
 
 REST traffic and WebSocket traffic are served by separate processes on purpose — a slow WebSocket connection never blocks a REST worker thread, and vice versa. See `nginx.conf` for routing and inline comments in `docker-compose.yml` for worker sizing rationale.
 
@@ -93,7 +103,7 @@ REST traffic and WebSocket traffic are served by separate processes on purpose �
 ### Option A: Docker (recommended)
 
 ```bash
-git clone https://github.com/your-org/jcn.git
+git clone https://github.com/Profysr/JCN.git
 cd jcn
 docker-compose up --build
 ```
@@ -230,7 +240,7 @@ Contributions are what make the open source community amazing. Any contributions
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for coding standards, dev setup, and PR guidelines. Check issues tagged [`good first issue`](https://github.com/your-org/jcn/labels/good%20first%20issue) to get started.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for coding standards, dev setup, and PR guidelines. Check issues tagged [`good first issue`](https://github.com/Profysr/JCN/labels/good%20first%20issue) to get started.
 
 ## Security
 
@@ -238,15 +248,15 @@ Found a vulnerability? Please **do not** open a public issue — see [SECURITY.m
 
 ## License
 
-Distributed under the Business Source License 1.1. See [LICENSE.md](./LICENSE.md) for full terms — converts to Apache 2.0 on the change date specified within.
+Distributed under the [Elastic License 2.0](https://www.elastic.co/licensing/elastic-license). Copyright (C) 2026 AZSsolutions. See [LICENSE.md](./LICENSE.md) for full terms. In short: you're free to use, copy, modify, and self-host JCN — you just can't offer it as a competing hosted/managed service to third parties.
 
-## Community
+## Community & Social Links
 
 - [LinkedIn](https://www.linkedin.com/in/bilalahmad072/)
-- [Discussions](https://github.com/your-org/jcn/discussions)
+- [Discussions](https://github.com/Profysr/JCN/discussions)
 
 ---
 
 <div align="center">
-Built with ❤️
+Built with ❤️ by 🌏
 </div>
