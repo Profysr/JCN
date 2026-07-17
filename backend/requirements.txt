@@ -16,5 +16,5 @@ django-environ==0.14.0
 Pillow==12.2.0
 drf-spectacular==0.29.0
 django-filter==25.2
-requests==2.32.3
+requests==2.33.0
 holidays==0.99
