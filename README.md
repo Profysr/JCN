@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/imgs/JCN.png" alt="JCN Banner" width="100%" />
+<img src="imgs/banner.png" alt="JCN Banner" width="100%" />
 
 # JCN — Project Management, for teams that outgrew spreadsheets but not budgets
 
@@ -13,7 +13,10 @@
 <!-- [![Discord](https://img.shields.io/discord/000000000000000000?label=discord&logo=discord)](https://discord.gg/your-invite) -->
 
 <!-- [Live Demo](https://demo.jcn.example.com) · [Documentation](https://docs.jcn.example.com) ·  -->
-[Report Bug](https://github.com/Profysr/JCN/issues) · [Request Feature](https://github.com/Profysr/JCN/issues)
+[Report Bug](https://github.com/Profysr/JCN/issues) · [Request Feature](https://github.com/Profysr/JCN/issues) · [Contribute](./CONTRIBUTING.md)
+
+[![Share on LinkedIn](https://img.shields.io/badge/Share-LinkedIn-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/sharing/share-offsite/?url=https://github.com/Profysr/JCN)
+[![Share on X](https://img.shields.io/badge/Share-X-000000?logo=x&logoColor=white)](https://twitter.com/intent/tweet?text=Check%20out%20JCN%20%E2%80%94%20an%20open-source%20workspace%20that%20combines%20Project%20Management%20and%20HR%20in%20one%20place%3A&url=https://github.com/Profysr/JCN)
 
 </div>
 
@@ -38,16 +41,28 @@
 
 **JCN wins by:** one workspace, every tool your team actually uses, fast, beautiful, and priced for real businesses.
 
+### Why this matters
+
+Every growing team hits the same wall: Slack for chat, Jira or Asana for tasks, BambooHR for leave requests, a spreadsheet for the org chart, and a separate tool for attendance — five logins, five sources of truth, and nobody actually knows where the real status of anything lives.
+
+JCN exists to collapse that into one place. Not by cramming every feature into one bloated app, but by sharing one identity layer, one permission model, and one workspace across purpose-built modules — so your PM tool actually knows who reports to whom, and your HR tool actually knows what people are working on.
+
+**Use it effectively by:**
+- Starting with **one module** (Projects or HR) rather than migrating everything on day one — get your team comfortable, then expand
+- Using **workspaces** to cleanly separate departments or client accounts if you manage more than one team
+- Connecting **integrations/webhooks** (Teams, Google Chat) early so task updates reach people where they already work, instead of relying on people to check JCN directly
+- Generating an **API key** if you want to pull JCN data into your own dashboards or automate task creation from your CI/CD pipeline
+
 ## Screenshots
 
 <div align="center">
 
-<img src="docs/imgs/pm-dashboard.jpeg" alt="Project dashboard" width="90%" />
+<img src="imgs/pm-dashboard.jpeg" alt="Project dashboard" width="90%" />
 <p><em>Home dashboard — overdue tasks, assigned work, and boards at a glance</em></p>
 
 <br/>
 
-<img src="docs/imgs/launcher-page.png" alt="App launcher" width="90%" />
+<img src="imgs/launcher-page.png" alt="App launcher" width="90%" />
 <p><em>One workspace, every module — switch between Project Management and People & HR instantly</em></p>
 
 <br/>
@@ -55,17 +70,17 @@
 <table>
 <tr>
 <td width="50%">
-<img src="docs/imgs/kanban-page.png" alt="Kanban board" width="100%" />
+<img src="imgs/kanban-page.png" alt="Kanban board" width="100%" />
 <p align="center"><em>Kanban boards for task tracking</em></p>
 </td>
 <td width="50%">
-<img src="docs/imgs/hr-dashboard.png" alt="HR dashboard" width="100%" />
+<img src="imgs/hr-dashboard.png" alt="HR dashboard" width="100%" />
 <p align="center"><em>People & HR — departments, teams, leave, attendance</em></p>
 </td>
 </tr>
 </table>
 
-<img src="docs/imgs/analytics-2.png" alt="Analytics dashboard" width="90%" />
+<img src="imgs/analytics-2.png" alt="Analytics dashboard" width="90%" />
 <p><em>Built-in analytics — status distribution, priority breakdown, and team workload</em></p>
 
 </div>
@@ -93,7 +108,7 @@
 ## Architecture
 
 <div align="center">
-<img src="docs/imgs/architecture-diagram.svg" alt="JCN architecture diagram" width="90%" />
+<img src="imgs/architecture-diagram.svg" alt="JCN architecture diagram" width="90%" />
 </div>
 
 REST traffic and WebSocket traffic are served by separate processes on purpose — a slow WebSocket connection never blocks a REST worker thread, and vice versa. See `nginx.conf` for routing and inline comments in `docker-compose.yml` for worker sizing rationale.
@@ -234,6 +249,33 @@ See [ROADMAP.md](./ROADMAP.md) for the full plan. Highlights:
 
 Contributions are what make the open source community amazing. Any contributions you make are **greatly appreciated**.
 
+### Get the code
+
+**Option 1 — Fork & clone (for contributing changes back):**
+
+1. Click **Fork** at the top right of [github.com/Profysr/JCN](https://github.com/Profysr/JCN) to create your own copy
+2. Clone your fork locally:
+   ```bash
+   git clone https://github.com/YOUR-USERNAME/JCN.git
+   cd JCN
+   ```
+3. Add the original repo as `upstream` so you can pull future updates:
+   ```bash
+   git remote add upstream https://github.com/Profysr/JCN.git
+   ```
+4. Create a branch, make your changes, and open a Pull Request — see [CONTRIBUTING.md](./CONTRIBUTING.md) for full guidelines.
+
+**Option 2 — Clone directly (for local use, no intent to contribute back):**
+
+```bash
+git clone https://github.com/Profysr/JCN.git
+cd JCN
+```
+
+Then jump to [Quick Start](#quick-start) above to get it running.
+
+### Making changes
+
 1. Fork the repo
 2. Create your feature branch (`git checkout -b feature/amazing-feature`)
 3. Commit your changes (`git commit -m 'Add some amazing feature'`)
@@ -254,6 +296,20 @@ Distributed under the [Elastic License 2.0](https://www.elastic.co/licensing/ela
 
 - [LinkedIn](https://www.linkedin.com/in/bilalahmad072/)
 - [Discussions](https://github.com/Profysr/JCN/discussions)
+
+## Spread the Word
+
+If JCN is useful to you, the single highest-impact thing you can do besides contributing code is **let other people know it exists**:
+
+<div align="center">
+
+[![Star on GitHub](https://img.shields.io/badge/⭐_Star_this_repo-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Profysr/JCN/stargazers)
+[![Share on LinkedIn](https://img.shields.io/badge/Share_on_LinkedIn-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/sharing/share-offsite/?url=https://github.com/Profysr/JCN)
+[![Share on X](https://img.shields.io/badge/Share_on_X-000000?style=for-the-badge&logo=x&logoColor=white)](https://twitter.com/intent/tweet?text=Check%20out%20JCN%20%E2%80%94%20an%20open-source%20workspace%20that%20combines%20Project%20Management%20and%20HR%20in%20one%20place%3A&url=https://github.com/Profysr/JCN)
+
+</div>
+
+Stars help other teams discover JCN through GitHub's trending and search rankings — it costs nothing and takes two seconds.
 
 ---
 
