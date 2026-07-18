@@ -11,6 +11,8 @@ This guide covers everything you need to go from "I want to help" to your first 
 - [Development Setup](#development-setup)
 - [Branching & Commit Conventions](#branching--commit-conventions)
 - [Coding Standards](#coding-standards)
+- [Documentation Map](#documentation-map)
+- [Documentation-Only Contributions](#documentation-only-contributions)
 - [Submitting a Pull Request](#submitting-a-pull-request)
 - [Reporting Bugs](#reporting-bugs)
 - [Suggesting Features](#suggesting-features)
@@ -107,6 +109,25 @@ Keep commits focused — one logical change per commit is easier to review than 
 - No secrets, API keys, or `.env` files committed — double check with `git diff` before pushing
 - Update relevant documentation (README, docstrings, API docs) if your change affects it
 
+## Documentation Map
+
+Docs live in [`docs/`](./docs) and are split by concern, not by file type. If your change affects any of the below, update the matching file in the same PR — don't leave it for later.
+
+| If your change touches... | Update this file |
+|---|---|
+| Roles, permissions, who-can-access-what logic | [`docs/backend/ACCESS.md`](./docs/backend/ACCESS.md) |
+| API request/response flows, endpoint behavior, sequence of calls | [`docs/backend/FLOWS.md`](./docs/backend/FLOWS.md) |
+| Backend architecture, models, services, general backend design | [`docs/backend/BACKEND.md`](./docs/backend/BACKEND.md) |
+| Frontend structure, components, state management, routing | [`docs/FRONTEND.md`](./docs/FRONTEND.md) |
+| Setup steps, env vars, quick start, deployment | [`README.md`](./README.md) |
+| API endpoint list/reference | [`README.md`](./README.md#api-reference) — the source of truth for live schema is always `/api/docs/` and `/api/schema/`, keep the README table roughly in sync |
+
+**Rule of thumb:** if a reviewer would need to ask "wait, how does this work now?" after reading your diff, the answer belongs in one of these files, not just in your PR description.
+
+## Documentation-Only Contributions
+
+Docs improvements are just as valuable as code — typo fixes, clarifying a confusing setup step, adding a missing flow diagram. These follow the same PR process but skip the testing requirements below.
+
 ## Submitting a Pull Request
 
 1. Create your branch from the latest `main`:
@@ -131,7 +152,7 @@ Keep commits focused — one logical change per commit is easier to review than 
 - [ ] Code follows the style guidelines above
 - [ ] Tests added/updated for the change (backend)
 - [ ] `npm run lint` / `flake8` pass with no errors
-- [ ] Docs updated if behavior or setup steps changed
+- [ ] Relevant doc file updated per the [Documentation Map](#documentation-map) above, if applicable
 - [ ] PR description explains the change and links any related issue
 
 ## Reporting Bugs

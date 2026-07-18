@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="imgs/banner.png" alt="JCN Banner" width="100%" />
+<img src="imgs/JCN.png" alt="JCN Banner" width="100%" />
 
 # JCN — Project Management, for teams that outgrew spreadsheets but not budgets
 
@@ -10,9 +10,11 @@
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](#)
 [![Contributors](https://img.shields.io/github/contributors/Profysr/JCN)](https://github.com/Profysr/JCN/graphs/contributors)
 [![Stars](https://img.shields.io/github/stars/Profysr/JCN?style=social)](https://github.com/Profysr/JCN/stargazers)
+
 <!-- [![Discord](https://img.shields.io/discord/000000000000000000?label=discord&logo=discord)](https://discord.gg/your-invite) -->
 
 <!-- [Live Demo](https://demo.jcn.example.com) · [Documentation](https://docs.jcn.example.com) ·  -->
+
 [Report Bug](https://github.com/Profysr/JCN/issues) · [Request Feature](https://github.com/Profysr/JCN/issues) · [Contribute](./CONTRIBUTING.md)
 
 [![Share on LinkedIn](https://img.shields.io/badge/Share-LinkedIn-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/sharing/share-offsite/?url=https://github.com/Profysr/JCN)
@@ -30,13 +32,13 @@
 
 ### Why existing tools fail small businesses
 
-| Tool | The problem |
-|---|---|
-| Jira | Built for enterprise, feels like filing taxes |
-| ClickUp | So many features it becomes paralysing |
-| Notion | Great docs, weak structured project tracking |
-| Linear | Beautiful but too opinionated, no people management |
-| Asana / Monday | Dated UX, expensive seats, weak developer experience |
+| Tool               | The problem                                                    |
+| ------------------ | -------------------------------------------------------------- |
+| Jira               | Built for enterprise, feels like filing taxes                  |
+| ClickUp            | So many features it becomes paralysing                         |
+| Notion             | Great docs, weak structured project tracking                   |
+| Linear             | Beautiful but too opinionated, no people management            |
+| Asana / Monday     | Dated UX, expensive seats, weak developer experience           |
 | BambooHR / Workday | HR tools that assume you have a full HR department to run them |
 
 **JCN wins by:** one workspace, every tool your team actually uses, fast, beautiful, and priced for real businesses.
@@ -48,6 +50,7 @@ Every growing team hits the same wall: Slack for chat, Jira or Asana for tasks, 
 JCN exists to collapse that into one place. Not by cramming every feature into one bloated app, but by sharing one identity layer, one permission model, and one workspace across purpose-built modules — so your PM tool actually knows who reports to whom, and your HR tool actually knows what people are working on.
 
 **Use it effectively by:**
+
 - Starting with **one module** (Projects or HR) rather than migrating everything on day one — get your team comfortable, then expand
 - Using **workspaces** to cleanly separate departments or client accounts if you manage more than one team
 - Connecting **integrations/webhooks** (Teams, Google Chat) early so task updates reach people where they already work, instead of relying on people to check JCN directly
@@ -123,12 +126,12 @@ cd jcn
 docker-compose up --build
 ```
 
-| Service | URL |
-|---|---|
-| Frontend | http://localhost:5173 |
-| Backend API | http://localhost:8000 |
-| API Docs (Swagger) | http://localhost:8000/api/docs/ |
-| Django Admin | http://localhost:8000/admin/ |
+| Service             | URL                                  |
+| ------------------- | ------------------------------------ |
+| Frontend            | http://localhost:5173                |
+| Backend API         | http://localhost:8000                |
+| API Docs (Swagger)  | http://localhost:8000/api/docs/      |
+| Django Admin        | http://localhost:8000/admin/         |
 | RabbitMQ Management | http://localhost:15672 (guest/guest) |
 
 > **Note:** `docker-compose.yml` uses dev-appropriate sizing (2 Gunicorn workers × 2 threads) tuned for an 8GB machine running the full stack side by side. Recompute worker counts against actual vCPU count before deploying to production — see inline comments in the compose file.
@@ -220,21 +223,21 @@ FRONTEND_URL=http://localhost:5173
 
 Full interactive docs: `http://localhost:8000/api/docs/` (Swagger) and `http://localhost:8000/api/schema/` (raw OpenAPI schema).
 
-| Method | URL | Description |
-|---|---|---|
-| POST | `/api/auth/registration/` | Register with email + password |
-| POST | `/api/auth/login/` | Login (returns JWT) |
-| POST | `/api/auth/logout/` | Logout |
-| POST | `/api/auth/google/` | Login or register with Google (returns JWT) |
-| GET/PATCH | `/api/users/me/` | Current user profile |
-| GET/POST | `/api/workspaces/` | List / create workspaces |
-| GET/PATCH/DELETE | `/api/workspaces/:slug/` | Workspace detail |
-| GET | `/api/workspaces/:slug/members/` | List members |
-| POST | `/api/workspaces/:slug/invites/` | Invite by email (sends invite email) |
-| GET | `/api/workspaces/:slug/invites/pending/` | List pending invites |
-| DELETE | `/api/workspaces/:slug/invites/:token/` | Cancel invite |
-| GET | `/api/invites/:token/` | Public invite detail (workspace + inviter info) |
-| POST | `/api/invites/:token/accept/` | Accept invite |
+| Method           | URL                                      | Description                                     |
+| ---------------- | ---------------------------------------- | ----------------------------------------------- |
+| POST             | `/api/auth/registration/`                | Register with email + password                  |
+| POST             | `/api/auth/login/`                       | Login (returns JWT)                             |
+| POST             | `/api/auth/logout/`                      | Logout                                          |
+| POST             | `/api/auth/google/`                      | Login or register with Google (returns JWT)     |
+| GET/PATCH        | `/api/users/me/`                         | Current user profile                            |
+| GET/POST         | `/api/workspaces/`                       | List / create workspaces                        |
+| GET/PATCH/DELETE | `/api/workspaces/:slug/`                 | Workspace detail                                |
+| GET              | `/api/workspaces/:slug/members/`         | List members                                    |
+| POST             | `/api/workspaces/:slug/invites/`         | Invite by email (sends invite email)            |
+| GET              | `/api/workspaces/:slug/invites/pending/` | List pending invites                            |
+| DELETE           | `/api/workspaces/:slug/invites/:token/`  | Cancel invite                                   |
+| GET              | `/api/invites/:token/`                   | Public invite detail (workspace + inviter info) |
+| POST             | `/api/invites/:token/accept/`            | Accept invite                                   |
 
 ## Roadmap
 
