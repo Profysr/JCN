@@ -56,7 +56,7 @@ Closes #
 - [ ] My code follows the project's coding standards (see [CONTRIBUTING.md](../CONTRIBUTING.md))
 - [ ] I have performed a self-review of my own code
 - [ ] I have commented my code where necessary, particularly in hard-to-understand areas
-- [ ] I have made corresponding changes to the documentation (README, docs/, docstrings)
+- [ ] I have made corresponding changes to the documentation (README, docs/, docstrings) — see the [Documentation Map](../CONTRIBUTING.md#documentation-map) to find the right file for your change
 - [ ] My changes generate no new warnings or linter errors
 - [ ] I have added tests that prove my fix is effective or that my feature works
 - [ ] New and existing unit tests pass locally with my changes
@@ -66,4 +66,3 @@ Closes #
 ## Additional Notes
 
 <!-- Anything else reviewers should know — trade-offs made, follow-up work planned, areas you'd like specific feedback on. -->
-
