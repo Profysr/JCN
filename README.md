@@ -103,8 +103,8 @@ JCN exists to collapse that into one place. Not by cramming every feature into o
 
 ## Tech Stack
 
-**Backend:** Django, Django REST Framework, Celery, Channels (ASGI/Daphne), Gunicorn
-**Frontend:** React (Vite)
+**Backend:** Django, Django REST Framework, Celery, Channels (ASGI/Daphne), Gunicorn, Websockets, Django Channels
+**Frontend:** React + Vite, TailwindCSS + shadcn/ui, TanStack Query v5, Zustand, Axios with JWT auto-refresh
 **Data layer:** PostgreSQL, Redis, RabbitMQ
 **Infra:** Docker, Docker Compose, Nginx
 
