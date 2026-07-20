@@ -44,7 +44,7 @@
     "@tiptap/react": "^3.24.0",
     "@tiptap/starter-kit": "^3.24.0",
     "@tiptap/suggestion": "^3.26.0",
-    "axios": "^1.7.2",
+    "axios": "^1.18.0",
     "canvas-confetti": "^1.9.4",
     "chart.js": "^4.5.1",
     "chartjs-adapter-date-fns": "^3.0.0",
